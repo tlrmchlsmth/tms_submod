@@ -4,6 +4,12 @@
 #include "mkl.h"
 #include <assert.h>
 
+template<class DT> class Matrix;
+
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 template<class DT>
 class Vector {
 
@@ -33,9 +39,18 @@ public:
         }
     }
 
-    Vector<DT> subvector(int64_t start, int64_t length)
+    Vector<DT> subvector(int64_t start, int64_t blksz)
     {
-        assert(start + length <= _len && "Subvector too long.");
+        assert(start < _len && "Vector index out of bounds.");
+        auto length = std::min(blksz, _len - start);
+
+        return Vector(_values + start*_stride, length, _stride, false);
+    }
+    const Vector<DT> subvector(int64_t start, int64_t blksz) const
+    {
+        assert(start < _len && "Vector index out of bounds.");
+        auto length = std::min(blksz, _len - start);
+
         return Vector(_values + start*_stride, length, _stride, false);
     }
 
@@ -64,6 +79,13 @@ public:
     void zero_out() 
     {
         set_all(0.0);
+    }
+
+    template<class RNG, class DIST>
+    void fill_rand(RNG &gen, DIST &dist) {
+        for(int64_t i = 0; i < _len; i++) {
+            (*this)(i) = dist(gen);
+        }
     }
 
     void print() const
@@ -128,36 +150,126 @@ public:
         }
     }
 
+    DT house_gen() {
+        DT chi1 = (*this)(0);
+        DT nrm_x2_sqr = 0.0;
+        
+        for(int64_t i = 1; i < _len; i++){
+            nrm_x2_sqr += (*this)(i) * (*this)(i);
+        }
+        DT nrm_x  = sqrt(chi1*chi1 + nrm_x2_sqr);
+
+        double tau = 0.5;
+        if(nrm_x2_sqr == 0) {
+            (*this)(0) = -chi1;
+            return tau;
+        }
+
+        DT alpha = -sgn(chi1) * nrm_x;
+        DT mult = 1.0 / (chi1 - alpha);
+        
+        for(int64_t i = 1; i < _len; i++) {
+            (*this)(i) *= mult;
+        }
+
+        tau = 1.0 /  (0.5 + 0.5 * nrm_x2_sqr * mult * mult);
+        (*this)(0) = alpha;
+        return tau;
+    }
+
+    //Apply this householder transform to another vector.
+    //Need to perform x - tau * v * (v'*x)
+    //v[0] is implicitly 1.
+    void house_apply(double tau, Vector<DT>& x) const 
+    {
+        //First perform v'*x
+        DT vt_x = x(0);
+        for(int i = 1; i < _len; i++) {
+            vt_x += (*this)(i) * x(i);
+        }
+
+        DT alpha = tau * vt_x;
+        x(0) -= alpha;
+        for(int i = 1; i < _len, i++) {
+            x(i) -= alpha * (*this)(i);
+        }
+    }
+
+    inline void house_apply(DT tau, Matrix<DT>& X) const 
+    {
+        _Pragma("omp parallel for")
+        for(int j = 0; j < X.width(); j++) {
+            //First perform v'*x
+            DT vt_x = X(0, j);
+            for(int i = 1; i < _len; i++) {
+                vt_x += (*this)(i) * X(i, j);
+            }
+
+            DT alpha = tau * vt_x;
+            X(0, j) -= alpha;
+            for(int i = 1; i < _len; i++) {
+                X(i,j) -= alpha * (*this)(i);
+            }
+        }
+    }
+
 };
 
+#include "matrix.h"
+#include "immintrin.h"
+#include "ipps.h"
+
 template<>
-double Vector<double>::norm2() const
+inline double Vector<double>::norm2() const
 {
    return cblas_dnrm2( _len, _values, _stride);
 }
 template<>
-double Vector<double>::dot(const Vector<double>& other) const
+inline double Vector<double>::dot(const Vector<double>& other) const
 {
    return cblas_ddot( _len, _values, _stride, other._values, other._stride);
 }
 template<>
-void Vector<double>::scale(const double alpha)
+inline void Vector<double>::scale(const double alpha)
 {
     cblas_dscal(_len, alpha, _values, _stride);
 }
 template<>
-void Vector<double>::axpy(const double alpha, const Vector<double>& other)
+inline void Vector<double>::axpy(const double alpha, const Vector<double>& other)
 {
     cblas_daxpy(_len, alpha, other._values, other._stride, _values, _stride);
 }
 template<>
-void Vector<double>::axpby(const double alpha, const Vector<double>& other, const double beta)
+inline void Vector<double>::axpby(const double alpha, const Vector<double>& other, const double beta)
 {
     cblas_daxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
 }
 template<>
 void Vector<double>::copy(const Vector<double> from) {
     cblas_dcopy(_len, from._values, from._stride, _values, _stride);
+}
+
+template<>
+inline void Vector<double>::house_apply(double tau, Matrix<double>& X) const {
+    #pragma omp parallel for
+    for(int j = 0; j < X.width(); j++) {
+        //BLAS VERSION
+//#define BLAS_HOUSE        
+#ifdef BLAS_HOUSE
+        double vt_x = X(0,j) + cblas_ddot(_len-1, &_values[1], _stride, &X._values[X._rs + j*X._cs], X._rs);
+        double alpha = tau * vt_x;
+        X(0, j) -= alpha;
+        cblas_daxpy(_len-1, -alpha, &_values[1], _stride, &X._values[X._rs + j*X._cs], X._rs);
+#else
+        //IPP version
+        double vt_x;
+        ippsDotProd_64f(&_values[1], &X._values[1 + j*X._cs], _len-1, &vt_x);
+        vt_x += X(0,j);
+        double alpha = tau * vt_x;
+        X(0, j) -= alpha;
+        ippsAddProductC_64f(&_values[1], -alpha, &X._values[1 + j*X._cs], _len-1);
+#endif
+    }
 }
 
 #endif

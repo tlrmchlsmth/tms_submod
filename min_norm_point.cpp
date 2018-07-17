@@ -10,6 +10,7 @@
 #include "matrix.h"
 #include "submodular_fn.h"
 #include "perf/perf.h"
+#include "test/validate/validate.h"
 
 void polyhedron_greedy(FV2toR& F, std::vector<int64_t>& V, vector<int64_t> permutation,
         double alpha, Vector<double>& weights, Vector<double>& xout) 
@@ -36,61 +37,6 @@ void polyhedron_greedy(FV2toR& F, std::vector<int64_t>& V, vector<int64_t> permu
     }
 }
 
-void delete_cols_incremental_QR(Matrix<double>& S, Matrix<double>& R, list<int64_t>& cols_to_remove, Vector<double>& t)
-{
-    int64_t n_cols_to_remove = cols_to_remove.size();
-
-    //Do this so there's always at least one element in the list when we iterate over it.
-    cols_to_remove.push_back(S.width());
-
-    //First pass.
-    //Get rid of deleted columns in S and R
-    auto iter = cols_to_remove.begin();
-    int first_col = *iter;
-    std::advance(iter, 1);
-    int64_t i = first_col;
-    for(int64_t j = first_col+1; j < S.width(); j++) {
-        if(j == *iter) {
-            std::advance(iter, 1);
-        } else {
-            auto s_to_delete = S.subcol(i);
-            const auto s_to_copy = S.subcol(j);
-            s_to_delete.copy(s_to_copy);
-
-            auto r_to_delete = R.subcol(0, i, j+1);
-            const auto r_to_copy = R.subcol(0, j, j+1);
-            
-            r_to_delete.copy(r_to_copy);
-            i++;
-        }
-    }
-
-    S.enlarge_n(-n_cols_to_remove);
-    R.enlarge_n(-n_cols_to_remove);
-
-    //Second pass.
-    //Use little QR factorizations to clean up elements of R below the diagonal
-    iter = cols_to_remove.begin();
-    std::advance(iter, 1);
-    i = first_col;
-    for(int64_t j = first_col+1; j < R.height(); j++) {
-        if(j == *iter){
-            std::advance(iter, 1);
-        } else {
-            auto R11 = R.submatrix(i, i, j-i+1, R.width() - i);
-            R11.qr(t);
-
-    /*        //only when debugging, clear lower triangle
-            for(int64_t jj = 0; jj < j-i+1; jj++) {
-                for(int64_t ii = jj+1; ii < j-i+1; ii++) {
-                    R11(ii, jj) = 0.0;
-                }
-            }*/
-            i++;
-        }
-    }
-    R.enlarge_m(-n_cols_to_remove);
-}
 
 //At the end, y is equal to the new value of x_hat
 //mu is a tmp vector with a length = m
@@ -107,7 +53,7 @@ void min_norm_point_update_xhat(Vector<double>& x_hat, Vector<double>& y,
         R.transpose(); R.trsv(CblasLower, mu); R.transpose();
         R.trsv(CblasUpper, mu);
         mu.scale(1.0 / mu.sum());
-        S.gemv(1.0, mu, 0.0, y);
+        S.mvm(1.0, mu, 0.0, y);
 
         //Check to see if y is written as positive convex combination of S
         if(mu.min() >= -tolerance)
@@ -119,7 +65,7 @@ void min_norm_point_update_xhat(Vector<double>& x_hat, Vector<double>& y,
         
         // Get representation of xhat in terms of S; enforce that we get
         // affine combination (i.e., sum(lambda)==1)
-        S.transpose(); S.gemv(1.0, x_hat, 0.0, lambda); S.transpose();
+        S.transpose(); S.mvm(1.0, x_hat, 0.0, lambda); S.transpose();
         R.transpose(); R.trsv(CblasLower, lambda); R.transpose();
         R.trsv(CblasUpper, lambda);
         lambda.scale(1.0 / lambda.sum());
@@ -141,7 +87,8 @@ void min_norm_point_update_xhat(Vector<double>& x_hat, Vector<double>& y,
         }
 
         //Remove unnecessary columns from S and fixup R so that S = QR for some Q
-        delete_cols_incremental_QR(S, R, toRemove, mu);
+        S.remove_cols(toRemove);
+        R.remove_cols_incremental_qr(toRemove, mu);
     }
 }
 
@@ -204,7 +151,7 @@ void min_norm_point(FV2toR& F, std::vector<int64_t>& V)
         // Update R to account for modifying S.
         // r0 = R' \ (S' * p_hat)
         Vector<double> r0 = R_base.subcol(0, R.width(), R.height());
-        S.transpose(); S.gemv(1.0, p_hat, 0.0, r0); S.transpose();
+        S.transpose(); S.mvm(1.0, p_hat, 0.0, r0); S.transpose();
         R.transpose(); R.trsv(CblasLower, r0); R.transpose();
 
         // rho1 = sqrt(p_hat' * p_hat - r0' * r0);
@@ -275,20 +222,22 @@ list<int64_t> get_cols_to_delete(int64_t m, double percent_to_delete, RNG &gen, 
 
 void benchmark_delete_cols()
 {
-    int64_t start = 64;
-    int64_t end = 2048;
-    int64_t inc = 64;
+    int64_t start = 256;
+    int64_t end = 4096;
+    int64_t inc = 256;
     int64_t n_reps = 10;
     double percent_to_delete = 0.1; 
-
 
     std::random_device rd;
     std::mt19937 gen{rd()};
     std::normal_distribution<> normal(0.0, 10);
 
-    std::cout << "m\tn\tmean (s)\tstdev (s)\tm*n per mean s / 1e9" << std::endl;
-    for(int64_t n = start; n <= end; n += inc) {
-        int64_t m = n;
+//    std::cout << "m\tn\tmean (s)\tstdev (s)\tCompulsory GB/s" << std::endl;
+    std::cout << "m\tn\tnb\tmean (s)\tstdev (s)\tBW" << std::endl;
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+        int64_t m = i;
+        int64_t nb = 208;
 
         std::uniform_int_distribution<> dist(0,n-1);
         std::vector<double> cycles;
@@ -302,15 +251,21 @@ void benchmark_delete_cols()
             S.fill_rand(gen, normal);
 
             //2. Perform a QR factorization of S
+//            Matrix<double> RT(n,m);
+//            auto R = RT.transposed();
             Matrix<double> R(m,n);
             Vector<double> t(n);
+
             R.copy(S);
             R.qr(t);
+            
             auto R0 = R.submatrix(0,0,n,n);
 
             //3. Call delete_cols_incremental_QR, timing it.
             cycles_count_start();
-            delete_cols_incremental_QR(S, R0, cols_to_delete, t);
+        //    S.remove_cols(cols_to_delete);
+            R0.blocked_remove_cols_incremental_qr(cols_to_delete, t, nb);
+            //R.remove_cols_incremental_qr(cols_to_delete, t);
             cycles.push_back(cycles_count_stop().time);
         }
 
@@ -319,13 +274,14 @@ void benchmark_delete_cols()
         std::transform(cycles.begin(), cycles.end(), diff.begin(), [mean](double x) { return x - mean; });
         double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
         double stdev = std::sqrt(sq_sum / cycles.size());
-        std::cout << m << "\t" << n << "\t" << mean << "\t" << stdev << "\t" << m * n / mean / 1e9 << std::endl;
+        std::cout << m << "\t" << n << "\t" << nb << "\t" << mean << "\t" << stdev << "\t" << sizeof(double) * (2*n*n) / mean / 1e6  << " MB/s" << std::endl;
     }
-
 }
 
 
 int main() {
+    run_validation_suite();
+/*
     std::vector<int64_t> V;
     V.reserve(500);
     for(int i = 0; i < 500; i++){
@@ -333,6 +289,6 @@ int main() {
     }
     IDivSqrtSize a;
     min_norm_point(a, V); 
-
+*/
     benchmark_delete_cols();
 }
