@@ -126,6 +126,12 @@ public:
             }
         }
     }
+    void fill_rand() {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::normal_distribution<> normal(0.0, 10);
+        this->fill_rand(gen, normal);
+    }
 
     void set_subdiagonal(DT alpha) {
         for(int64_t i = 0; i < _m; i++) {
@@ -181,8 +187,8 @@ public:
         return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false);
     }
 
-    inline int64_t height() { return _m; }
-    inline int64_t width() { return _n; }
+    inline int64_t height() const { return _m; }
+    inline int64_t width() const { return _n; }
 
     inline 
     DT& operator() (int64_t row, int64_t col)
@@ -198,11 +204,11 @@ public:
         return _values[row * _rs + col * _cs];
     }
 
-    void print() 
+    void print() const
     {
         for(int i = 0; i < _m; i++) {
             for(int j = 0; j < _n; j++) {
-                std::cout << std::left << std::setw(12) << (*this)(i,j);
+                std::cout << std::left << std::setprecision(5) << std::setw(12) << (*this)(i,j);
             }
             std::cout << std::endl;
         }
@@ -252,6 +258,18 @@ public:
         exit(1);
     }
 
+    void tpqr(Matrix<DT>& V, Matrix<DT>& T, int64_t l, int64_t nb, Matrix<DT>& ws)
+    {
+        std::cout << "TPQR factorization not implemented for datatype" << std::endl;
+        exit(1);
+    }
+
+    void apply_tpq(Matrix<DT>& A, Matrix<DT>& B, const Matrix<DT>& T, int64_t l, int64_t nb, Matrix<DT>& ws) const
+    {
+        std::cout << "Applying TPQ not implemented for datatype" << std::endl;
+        exit(1);
+    }
+    
     //
     // Routines that should be LAPACK routines but are not.
     //
@@ -363,7 +381,31 @@ public:
         this->enlarge_m(-cols_to_remove.size());
     }
 
-    inline void shift_trapezoid(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t x_dist) 
+    inline void shift_trapezoid_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t y_dist) 
+    {
+        if(_rs == 1) {
+            int64_t end_n = std::min(_n, dest_n_coord + nc);
+            for(int64_t j = dest_n_coord; j < end_n; j++) {
+                int64_t end_m = std::min(_m - y_dist, dest_m_coord + j + h);
+                #pragma omp parallel for
+                for(int64_t i = dest_m_coord; i < end_m; i++) {
+                    _values[i*_rs + j*_cs] = _values[(i+y_dist)*_rs + j*_cs];
+                }
+            }
+        } else {
+            int64_t end_m = std::min(_m - y_dist, dest_m_coord + nc + h);
+            int64_t end_n = std::min(_n, dest_n_coord + nc);
+            #pragma omp parallel for
+            for(int64_t i = dest_m_coord; i < end_m; i++) {
+                int64_t start_n = std::min(i - dest_m_coord - h, (int64_t) 0);
+                for(int64_t j = dest_n_coord + start_n; j < end_n; j++) {
+                    _values[i*_rs + j*_cs] = _values[(i + y_dist)*_rs + j*_cs];
+                }
+            }
+        }
+    }
+
+    inline void shift_trapezoid_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t x_dist) 
     {
         if(_rs == 1) {
             int64_t end_n = std::min(_n - x_dist, dest_n_coord + nc);
@@ -387,7 +429,65 @@ public:
         }
     }
 
-    inline void shift_dense(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t x_dist) 
+    inline void shift_triangle_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t x_dist) 
+    {
+        DT* src =  &_values[dest_m_coord * _rs + (dest_n_coord + x_dist) * _cs];
+        DT* dest = &_values[dest_m_coord * _rs + dest_n_coord * _cs];
+
+        if(_rs == 1) {
+            int64_t N = std::min(nc, _n - x_dist - dest_n_coord);
+            for(int64_t j = 0; j < N; j++) {
+                int64_t M = std::min(j+1, _m - dest_m_coord);
+                #pragma omp parallel for
+                for(int64_t i = 0; i < M; i++) {
+                    dest[i*_rs + j*_cs] = src[i*_rs + j*_cs];
+                    src[i*_rs + j*_cs] = 0.0;
+                }
+            }
+        } else {
+            int64_t M = std::min(nc, _m - dest_m_coord);
+            #pragma omp parallel for
+            for(int64_t i = 0; i < M; i++) {
+                int64_t N = std::min(nc, _n - dest_n_coord - x_dist);
+                for(int64_t j = i; j < N; j++) {
+                    dest[i*_rs + j*_cs] = src[i*_rs + j*_cs];
+                }
+            }
+        }
+    }
+
+    inline void shift_triangle_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t y_dist) 
+    {
+
+        DT* src =  &_values[(dest_m_coord + y_dist) * _rs + dest_n_coord * _cs];
+        DT* dest = &_values[dest_m_coord * _rs + dest_n_coord * _cs];
+
+        if(_rs == 1) {
+            int64_t N = std::min(nc, _n - dest_n_coord);
+
+            #pragma omp parallel for
+            for(int64_t j = 0; j < N; j++) {
+                int64_t M = std::min(j+1, _m - dest_m_coord - y_dist);
+                for(int64_t i = 0; i < M; i++) {
+                    dest[i*_rs + j*_cs] = src[i*_rs + j*_cs];
+
+                    //if(i+y_dist >= M) src[i*_rs + j*_cs] = 0.0;
+                    src[i*_rs + j*_cs] = 0.0;
+                }
+            }
+        } else {
+            int64_t M = std::min(nc, _m - dest_m_coord - y_dist);
+            for(int64_t i = 0; i < M; i++) {
+                int64_t N = std::min(nc, _n - dest_n_coord);
+                #pragma omp parallel for
+                for(int64_t j = i; j < N; j++) {
+                    dest[i*_rs + j*_cs] = src[i*_rs + j*_cs];
+                }
+            }
+        }
+    }
+
+    inline void shift_dense_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t x_dist) 
     {
         int64_t end_n = std::min(_n - x_dist, dest_n_coord + nc);
         int64_t end_m = std::min(_m, dest_m_coord + mc);
@@ -396,6 +496,8 @@ public:
                 #pragma omp parallel for
                 for(int64_t i = dest_m_coord; i < end_m; i++) {
                     _values[i*_rs + j*_cs] = _values[i*_rs + (j + x_dist)*_cs];
+
+                    _values[i*_rs + (j + x_dist)*_cs] = 0;
                 }
             }
         } else {
@@ -406,6 +508,106 @@ public:
                 }
             }
         }
+    }
+
+    inline void shift_dense_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t y_dist) 
+    {
+        int64_t end_n = std::min(_n, dest_n_coord + nc);
+        int64_t end_m = std::min(_m - y_dist, dest_m_coord + mc);
+        if(_rs == 1) {
+            #pragma omp parallel for
+            for(int64_t j = dest_n_coord; j < end_n; j++) {
+                for(int64_t i = dest_m_coord; i < end_m; i++) {
+                    _values[i*_rs + j*_cs] = _values[(i+y_dist)*_rs + j*_cs];
+
+                    _values[(i+ y_dist)*_rs + j*_cs] = 0;
+                }
+            }
+        } else {
+            for(int64_t i = dest_m_coord; i < end_m; i++) {
+                #pragma omp parallel for
+                for(int64_t j = dest_n_coord; j < end_n; j++) {
+                    _values[i*_rs + j*_cs] = _values[(i + y_dist)*_rs + j*_cs];
+                }
+            }
+        }
+    }
+
+    void kressner_remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
+    {
+        /*
+        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
+            auto x = this->subcol(*iter); 
+            x.set_all(0.0);
+        }
+        */
+
+        //Use tpqr to remove columns in a way that is condusive to applying compact WY transformations
+        
+        //First partition the matrix according to the positions of the columns to be removed
+        int64_t n_removed = 1;
+        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
+            //trap_begin and trap_end represent the start and end of the trapezoid after shifting it.
+            int64_t source_begin = *iter + 1;
+            if(source_begin == _n) break;
+
+            int64_t source_end = _n;
+            if(std::next(iter,1) != cols_to_remove.end()) {
+                source_end = *std::next(iter,1);
+            }
+            int64_t dest_begin = source_begin - n_removed;
+            int64_t dest_end = source_end - n_removed;
+
+            //Size of the triangular matrix
+            int64_t trap_n = source_end - source_begin;
+
+
+            //First shift the dense block above the trapezoid to the left
+            this->shift_dense_left(0, dest_begin, dest_begin, trap_n, n_removed);
+
+            //Shift the row to annihilate into the V matrix
+            auto r = this->subrow(source_begin-1, source_begin, _n - source_begin);
+            auto v = V.subrow(n_removed-1, source_begin, _n - source_begin);
+            v.copy(r);
+            r.set_all(0.0);
+
+            //Early exit conditions
+            if(source_begin == source_end) {
+                n_removed++;
+                continue;
+            }
+
+            //Vectors to annihilate
+            auto V1 = V.submatrix(0, source_begin, n_removed, trap_n);
+
+            //Get the upper triangular portion of the current trapezoid
+            auto R11 = this->submatrix(source_begin, source_begin, trap_n, trap_n);
+
+            //Perform a QR factorization annihilating V1
+            auto T1 = T.submatrix(0, source_begin, T.height(), trap_n);
+            R11.tpqr(V1, T1, 0, nb, ws);
+            
+            //Shift triangle up and to the left
+            this->shift_triangle_up(dest_begin, dest_begin + n_removed, trap_n, n_removed);
+            this->shift_triangle_left(dest_begin, dest_begin, trap_n, n_removed);
+            
+            int64_t trail_begin = source_end+1;
+            if (trail_begin < _n) {
+                //Apply Q to the rest of matrix
+                auto R12 = this->submatrix(source_begin, trail_begin, trap_n, _n - trail_begin);
+                auto V2 = V.submatrix(0, trail_begin, n_removed,  _n - trail_begin);
+
+                V1.apply_tpq(R12, V2, T1, 0, nb, ws);
+                
+                //Shift trailing block of the matrix upwards
+                this->shift_dense_up(dest_begin, trail_begin, trap_n, _n - trail_begin, n_removed);
+            }
+
+            n_removed++;
+        }
+
+        this->enlarge_n(-cols_to_remove.size());
+        this->enlarge_m(-cols_to_remove.size());
     }
 
     void blocked_remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Vector<DT>& t, int64_t nb)
@@ -429,12 +631,11 @@ public:
             int64_t dest_end = source_end - n_removed;
             
             //Dimensions of the trapezoidal matrix
-            int64_t trap_m = source_end;
             int64_t trap_n = source_end - source_begin;
             int64_t trap_h = n_removed + 1;
 
-            //Need to shift the dense block above the diagonal for this trapezoid.
-            this->shift_dense(0, dest_begin, dest_begin + trap_h-1, trap_n, n_removed);
+            //First shift the dense block above and including the diagonal for this trapezoid.
+            this->shift_dense_left(0, dest_begin, dest_begin + trap_h-1, trap_n, n_removed);
 
             //Here we have a trapezoidal matrix.
             //Perform blocked trapezoidal QR factorization on the current matrix.
@@ -443,9 +644,9 @@ public:
                 int64_t block_m = std::min(nb + trap_h - 1, trap_n - i + trap_h - 1);
                 int64_t block_n = std::min(nb, trap_n - i);
 
-                //Shift this trapezoidal block to the left by n_removed blocks
+                //Shift the part of the current trapezoidal block that we haven't already shifted to the left by n_removed blocks
                 int64_t offset = trap_h - 1;
-                this->shift_trapezoid(dest_begin + i + offset, dest_begin + i, block_n, trap_h, n_removed);
+                this->shift_trapezoid_left(dest_begin + i + offset, dest_begin + i, block_n, trap_h, n_removed);
 
                 //Perform a trapezoidal QR facorization on the first block along the diagonal.
                 auto R11 = this->submatrix(dest_begin + i, dest_begin + i, block_m, block_n);
@@ -456,7 +657,7 @@ public:
                 for(int64_t j = i + nb; j < trap_n; j += nb) {
                     block_n = std::min(nb, trap_n - j);
                     //Shift this dense block to the left by n_removed blocks
-                    this->shift_dense(dest_begin + i + offset, dest_begin + j, block_m - offset, block_n, n_removed);
+                    this->shift_dense_left(dest_begin + i + offset, dest_begin + j, block_m - offset, block_n, n_removed);
 
                     //Apply Q to this block
                     auto R12 = this->submatrix(dest_begin + i, dest_begin + j, block_m, block_n);
@@ -478,6 +679,7 @@ public:
         this->enlarge_n(-cols_to_remove.size());
         this->enlarge_m(-cols_to_remove.size());
     }
+
 };
 
 template<>
@@ -551,20 +753,90 @@ void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<dou
 }
 
 template<>
-void Matrix<double>::qr(Vector<double>& tau)
+void Matrix<double>::qr(Vector<double>& t)
 {
-    assert(tau._stride == 1 && tau._len >= std::min(_m, _n) && "Cannot perform qr.");
+    assert(t._stride == 1 && t._len >= std::min(_m, _n) && "Cannot perform qr.");
     assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
 
     if(_rs == 1) {
-        LAPACKE_dgeqrf(LAPACK_COL_MAJOR, _m, _n, _values, _cs, tau._values);
+        LAPACKE_dgeqrf(LAPACK_COL_MAJOR, _m, _n, _values, _cs, t._values);
     } else /*if(_cs == 1)*/ {
-        LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, _m, _n, _values, _rs, tau._values);
+        LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, _m, _n, _values, _rs, t._values);
     } 
 }
 
 
+//Use tpqrt to annihilate rectangle above the triangle.
+//Then stores the reflectors in that block
+template<>
+void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws)
+{
+    assert(_m == _n && _n == B.width() && _n == T.width() && T.height() == nb_in && "Nonconformal tpqrt");
+    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
+
+    int m = B.height();
+    int n = B.width();
+    int l = l_in;
+    int nb = std::min(B.width(), nb_in);
+    int lda = this->_cs;
+    int ldt = T._cs;
+    int ldb = B._cs;
+    int info;
+
+    dtpqrt_(&m, &n, &l, &nb,
+            _values, &lda, B._values, &ldb, T._values, &ldt,
+            ws._values, &info);
+/*
+    if(_rs == 1) {
+        assert(T._rs == 1 && V._rs == 1);
+        LAPACKE_dtpqrt(LAPACK_COL_MAJOR, V.height(), V.width(), l, std::min(V.width(), nb),
+                _values, _cs,
+                V._values, V._cs,
+                T._values, T._cs);
+    } else {
+        assert(T._cs == 1 && V._cs == 1);
+        LAPACKE_dtpqrt(LAPACK_ROW_MAJOR, V.height(), V.width(), l, std::min(V.width(), nb),
+                _values, _rs,
+                V._values, V._rs,
+                T._values, T._rs);
+    }*/
+}
+
+template<>
+void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws) const
+{
+    int m = B.height();
+    int n = B.width();
+    int k = A.height();
+    int l = l_in;
+    
+    // A is k-by-n, B is m-by-n and V is m-by-k.
+    assert(_m == m && _n == k && A.width() == n && T.height() == nb_in && T.width() == k && "Nonconformal apply tpq");
+    assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
 
 
+    //Apply from the left
+    int nb = std::min(nb_in, A.height());
+   
+    //TODO: make sure ws has enough size 
+    //TODO 2: handle row stride
+    assert(_rs == 1); 
+
+
+    char side = 'L';
+    char trans = 'T'; //WHY??
+    int ldv = _cs;
+    int ldt = T._cs;
+    int lda = A._cs;
+    int ldb = B._cs;
+    int info;
+
+    dtpmqrt_(&side, &trans, &m, &n, &k, &l, &nb,
+            _values, &ldv, T._values, &ldt,
+            A._values, &lda, B._values, &ldb,
+            ws._values, &info);
+
+
+}
 
 #endif

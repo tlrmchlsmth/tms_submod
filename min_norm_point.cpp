@@ -222,9 +222,9 @@ list<int64_t> get_cols_to_delete(int64_t m, double percent_to_delete, RNG &gen, 
 
 void benchmark_delete_cols()
 {
-    int64_t start = 256;
-    int64_t end = 4096;
-    int64_t inc = 256;
+    int64_t start = 16;
+    int64_t end = 256;
+    int64_t inc = 16;
     int64_t n_reps = 10;
     double percent_to_delete = 0.1; 
 
@@ -235,9 +235,9 @@ void benchmark_delete_cols()
 //    std::cout << "m\tn\tmean (s)\tstdev (s)\tCompulsory GB/s" << std::endl;
     std::cout << "m\tn\tnb\tmean (s)\tstdev (s)\tBW" << std::endl;
     for(int64_t i = start; i <= end; i += inc) {
-        int64_t n = i;
-        int64_t m = i;
-        int64_t nb = 208;
+        int64_t n = 4096;
+        int64_t m = 4096;
+        int64_t nb = i;
 
         std::uniform_int_distribution<> dist(0,n-1);
         std::vector<double> cycles;
@@ -255,6 +255,9 @@ void benchmark_delete_cols()
 //            auto R = RT.transposed();
             Matrix<double> R(m,n);
             Vector<double> t(n);
+            Matrix<double> T(nb,n);
+            Matrix<double> V(cols_to_delete.size(),n);
+            Matrix<double> ws(nb, n);
 
             R.copy(S);
             R.qr(t);
@@ -264,7 +267,8 @@ void benchmark_delete_cols()
             //3. Call delete_cols_incremental_QR, timing it.
             cycles_count_start();
         //    S.remove_cols(cols_to_delete);
-            R0.blocked_remove_cols_incremental_qr(cols_to_delete, t, nb);
+        //    R0.blocked_remove_cols_incremental_qr(cols_to_delete, t, nb);
+            R0.kressner_remove_cols_incremental_qr(cols_to_delete, T, V, nb, ws);
             //R.remove_cols_incremental_qr(cols_to_delete, t);
             cycles.push_back(cycles_count_stop().time);
         }
