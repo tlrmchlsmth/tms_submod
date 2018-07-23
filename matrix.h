@@ -141,11 +141,26 @@ public:
         }
     }
 
+    //TODO: optimize maybe using mkl_?omatcopy
     void copy(const Matrix<DT>& other) 
     {
         assert(_m == other._m && _n == other._n);
-        for(int i = 0; i < _m; i++) {
-            for(int j = 0; j < _n; j++) {
+        #pragma omp parallel for
+        for(int j = 0; j < _n; j++) {
+            for(int i = 0; i < _m; i++) {
+                (*this)(i,j) = other(i,j);
+            }
+        }
+    }
+
+    void copy_upper_tri(const Matrix<DT>& other) 
+    {
+        assert(_m == other._m && _n == other._n);
+        assert(_m == _n);
+
+        #pragma omp parallel for
+        for(int j = 0; j < _n; j++) {
+            for(int i = 0; i <= j; i++) {
                 (*this)(i,j) = other(i,j);
             }
         }
@@ -533,15 +548,172 @@ public:
         }
     }
 
+    //Delete columns of the matrix and permute rows (to be annihilated) into V
+    void remove_cols_permute_rows_in_place(std::list<int64_t>& cols_to_remove, Matrix<DT>& V)
+    {
+        int64_t cols_removed = 1;
+        for(auto j_iter = cols_to_remove.begin(); j_iter != cols_to_remove.end(); j_iter++) {
+            //trap_begin and trap_end represent the start and end of the trapezoid after shifting it.
+            int64_t source_j_begin = *j_iter + 1;
+            if(source_j_begin == _n) break;
+
+            int64_t source_j_end = _n;
+            if(std::next(j_iter,1) != cols_to_remove.end()) {
+                source_j_end = *std::next(j_iter,1);
+            }
+            int64_t dest_j_begin = source_j_begin - cols_removed;
+
+            //Size of the triangular matrix along diagonal
+            int64_t trap_n = source_j_end - source_j_begin;
+
+            //Early exit conditions
+            if(source_j_begin == source_j_end) {
+                cols_removed++;
+                continue;
+            }
+
+            //Copy blocks above diagonal, copy rows to annihilate
+            int64_t rows_permuted = 0;
+            int64_t source_i_begin = 0;
+            
+            for(auto i_iter = cols_to_remove.begin(); i_iter != std::next(j_iter,1); i_iter++) {
+                int64_t dest_i_begin = source_i_begin - rows_permuted;
+
+                //Copy the row to annihilate into the V matrix
+                auto r = this->subrow(*i_iter, source_j_begin, trap_n);
+                auto v = V.subrow(rows_permuted, dest_j_begin, trap_n);
+                v.copy(r);
+                
+                //Shift block up and to the left                
+                this->shift_dense_left(source_i_begin, dest_j_begin, *i_iter - source_i_begin, trap_n, cols_removed);
+                if(rows_permuted > 0)
+                    this->shift_dense_up(dest_i_begin, dest_j_begin, *i_iter - source_i_begin, trap_n, rows_permuted);
+
+                source_i_begin = *i_iter + 1;
+                rows_permuted++;
+            }
+
+            //Shift triangle along diagonal up and to the left
+            this->shift_triangle_up(dest_j_begin, source_j_begin, trap_n, cols_removed);
+            this->shift_triangle_left(dest_j_begin, dest_j_begin, trap_n, cols_removed);
+
+            cols_removed++;
+        }
+
+        this->enlarge_n(-cols_to_remove.size());
+        this->enlarge_m(-cols_to_remove.size());
+    }
+
+    void remove_cols_permute_rows_out_of_place(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& V) const
+    {
+        //Copy initial triangle
+        auto src_tri = this->submatrix(0, 0, cols_to_remove.front(), cols_to_remove.front());
+        auto dest_tri = dest.submatrix(0, 0, cols_to_remove.front(), cols_to_remove.front());
+        dest_tri.copy_upper_tri(src_tri);
+
+        int64_t cols_removed = 1;
+        for(auto j_iter = cols_to_remove.begin(); j_iter != cols_to_remove.end(); j_iter++) {
+            int64_t source_j_begin = *j_iter + 1;
+            if(source_j_begin == _n) break;
+
+            int64_t source_j_end = _n;
+            if(std::next(j_iter,1) != cols_to_remove.end()) {
+                source_j_end = *std::next(j_iter,1);
+            }
+            int64_t dest_j_begin = source_j_begin - cols_removed;
+
+            //Size of the triangular matrix along diagonal
+            int64_t trap_n = source_j_end - source_j_begin;
+
+            //Early exit conditions
+            if(source_j_begin == source_j_end) {
+                cols_removed++;
+                continue;
+            }
+
+            //Copy blocks above diagonal, copy rows to annihilate
+            int64_t rows_permuted = 0;
+            int64_t source_i_begin = 0;
+            
+            for(auto i_iter = cols_to_remove.begin(); i_iter != std::next(j_iter,1); i_iter++) {
+                int64_t dest_i_begin = source_i_begin - rows_permuted;
+
+                //Copy the row to annihilate into the V matrix
+                auto r = this->subrow(*i_iter, source_j_begin, trap_n);
+                auto v = V.subrow(rows_permuted, dest_j_begin, trap_n);
+                v.copy(r);
+                
+                //Copy block
+                auto src_blk = this->submatrix(source_i_begin, source_j_begin, *i_iter - source_i_begin, trap_n);
+                auto dest_blk = dest.submatrix(dest_i_begin, dest_j_begin, *i_iter - source_i_begin, trap_n);
+                dest_blk.copy(src_blk);
+
+                source_i_begin = *i_iter + 1;
+                rows_permuted++;
+            }
+
+            //Copy triangle along diagonal
+            auto src_tri = this->submatrix(source_j_begin, source_j_begin, trap_n, trap_n);
+            auto dest_tri = dest.submatrix(dest_j_begin, dest_j_begin, trap_n, trap_n);
+            dest_tri.copy_upper_tri(src_tri);
+
+            cols_removed++;
+        }
+
+        dest.enlarge_n(-cols_to_remove.size());
+        dest.enlarge_m(-cols_to_remove.size());
+    }
+/*
+    void remove_cols_permute_rows_out_of_place(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& V)
+    {
+        int64_t n_removed = 1;
+        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
+            //trap_begin and trap_end represent the start and end of the trapezoid after shifting it.
+            int64_t source_begin = *iter + 1;
+            if(source_begin == _n) break;
+
+            int64_t source_end = _n;
+            if(std::next(iter,1) != cols_to_remove.end()) {
+                source_end = *std::next(iter,1);
+            }
+            int64_t dest_begin = source_begin - n_removed;
+
+            //Size of the triangular matrix
+            int64_t trap_n = source_end - source_begin;
+
+            //First shift the dense block above the trapezoid to the left
+            this->shift_dense_left(0, dest_begin, dest_begin, trap_n, n_removed);
+
+            //Copy the row to annihilate into the V matrix
+            auto r = this->subrow(source_begin-1, source_begin, _n - source_begin);
+            auto v = V.subrow(n_removed-1, source_begin, _n - source_begin);
+            v.copy(r);
+
+            //Early exit conditions
+            if(source_begin == source_end) {
+                n_removed++;
+                continue;
+            }
+
+            //Shift triangle up and to the left
+            this->shift_triangle_up(dest_begin, dest_begin + n_removed, trap_n, n_removed);
+            this->shift_triangle_left(dest_begin, dest_begin, trap_n, n_removed);
+            
+            int64_t trail_begin = source_end+1;
+            if (trail_begin < _n) {
+                //Shift trailing block of the matrix upwards
+                this->shift_dense_up(dest_begin, trail_begin, trap_n, _n - trail_begin, n_removed);
+            }
+
+            n_removed++;
+        }
+
+        this->enlarge_n(-cols_to_remove.size());
+        this->enlarge_m(-cols_to_remove.size());
+    }*/
+
     void kressner_remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
     {
-        /*
-        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
-            auto x = this->subcol(*iter); 
-            x.set_all(0.0);
-        }
-        */
-
         //Use tpqr to remove columns in a way that is condusive to applying compact WY transformations
         
         //First partition the matrix according to the positions of the columns to be removed
@@ -556,7 +728,6 @@ public:
                 source_end = *std::next(iter,1);
             }
             int64_t dest_begin = source_begin - n_removed;
-            int64_t dest_end = source_end - n_removed;
 
             //Size of the triangular matrix
             int64_t trap_n = source_end - source_begin;
@@ -569,7 +740,6 @@ public:
             auto r = this->subrow(source_begin-1, source_begin, _n - source_begin);
             auto v = V.subrow(n_removed-1, source_begin, _n - source_begin);
             v.copy(r);
-            r.set_all(0.0);
 
             //Early exit conditions
             if(source_begin == source_end) {
@@ -628,7 +798,6 @@ public:
                 source_end = *std::next(iter,1);
             }
             int64_t dest_begin = source_begin - n_removed;
-            int64_t dest_end = source_end - n_removed;
             
             //Dimensions of the trapezoidal matrix
             int64_t trap_n = source_end - source_begin;
@@ -786,20 +955,6 @@ void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, in
     dtpqrt_(&m, &n, &l, &nb,
             _values, &lda, B._values, &ldb, T._values, &ldt,
             ws._values, &info);
-/*
-    if(_rs == 1) {
-        assert(T._rs == 1 && V._rs == 1);
-        LAPACKE_dtpqrt(LAPACK_COL_MAJOR, V.height(), V.width(), l, std::min(V.width(), nb),
-                _values, _cs,
-                V._values, V._cs,
-                T._values, T._cs);
-    } else {
-        assert(T._cs == 1 && V._cs == 1);
-        LAPACKE_dtpqrt(LAPACK_ROW_MAJOR, V.height(), V.width(), l, std::min(V.width(), nb),
-                _values, _rs,
-                V._values, V._rs,
-                T._values, T._rs);
-    }*/
 }
 
 template<>
@@ -835,8 +990,6 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
             _values, &ldv, T._values, &ldt,
             A._values, &lda, B._values, &ldb,
             ws._values, &info);
-
-
 }
 
 #endif
