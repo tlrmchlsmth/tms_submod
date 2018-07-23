@@ -233,11 +233,13 @@ void benchmark_delete_cols()
     std::normal_distribution<> normal(0.0, 10);
 
 //    std::cout << "m\tn\tmean (s)\tstdev (s)\tCompulsory GB/s" << std::endl;
-    std::cout << "m\tn\tnb\tmean (s)\tstdev (s)\tBW" << std::endl;
+
+    int fw = 10;
+    std::cout << std::setw(fw) << "m" << std::setw(fw) << "n" << std::setw(fw) << "nb" << std::setw(fw) << "nb2" << std::setw(2*fw) << "mean (s)" << std::setw(2*fw) <<  "stdev (s)" << std::setw(2*fw) << "BW" << std::endl;
     for(int64_t i = start; i <= end; i += inc) {
         int64_t n = 4096;
         int64_t m = 4096;
-        int64_t nb = i;
+        int64_t nb = i; 
 
         std::uniform_int_distribution<> dist(0,n-1);
         std::vector<double> cycles;
@@ -258,17 +260,20 @@ void benchmark_delete_cols()
             Matrix<double> T(nb,n);
             Matrix<double> V(cols_to_delete.size(),n);
             Matrix<double> ws(nb, n);
-
+            Matrix<double> Rinit(m,n);
             R.copy(S);
             R.qr(t);
+            Rinit.copy(R);
             
             auto R0 = R.submatrix(0,0,n,n);
+            auto Rinit0 = Rinit.submatrix(0,0,n,n);
 
             //3. Call delete_cols_incremental_QR, timing it.
             cycles_count_start();
         //    S.remove_cols(cols_to_delete);
         //    R0.blocked_remove_cols_incremental_qr(cols_to_delete, t, nb);
-            R0.kressner_remove_cols_incremental_qr(cols_to_delete, T, V, nb, ws);
+            Rinit0.blocked_kressner_remove_cols_incremental_qr(R0, cols_to_delete, T, V, nb, 32, ws);
+            //R0.kressner_remove_cols_incremental_qr(cols_to_delete, T, V, nb, ws);
             //R.remove_cols_incremental_qr(cols_to_delete, t);
             cycles.push_back(cycles_count_stop().time);
         }
@@ -278,7 +283,13 @@ void benchmark_delete_cols()
         std::transform(cycles.begin(), cycles.end(), diff.begin(), [mean](double x) { return x - mean; });
         double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
         double stdev = std::sqrt(sq_sum / cycles.size());
-        std::cout << m << "\t" << n << "\t" << nb << "\t" << mean << "\t" << stdev << "\t" << sizeof(double) * (2*n*n) / mean / 1e6  << " MB/s" << std::endl;
+        std::cout << std::setw(fw) << m;
+        std::cout << std::setw(fw) << n;
+        std::cout << std::setw(fw) << nb;
+        std::cout << std::setw(fw) << 32;
+        std::cout << std::setw(2*fw) << mean;
+        std::cout << std::setw(2*fw) << stdev;
+        std::cout << std::setw(2*fw) << sizeof(double) * (2*n*n) / mean / 1e6  << " MB/s" << std::endl;
     }
 }
 

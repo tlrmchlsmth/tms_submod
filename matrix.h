@@ -663,54 +663,64 @@ public:
         dest.enlarge_n(-cols_to_remove.size());
         dest.enlarge_m(-cols_to_remove.size());
     }
-/*
-    void remove_cols_permute_rows_out_of_place(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& V)
+
+    //Use tpqr to remove columns in a way that is condusive to applying compact WY transformations
+    void blocked_kressner_remove_cols_incremental_qr(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t task_size, int64_t nb, Matrix<DT>& ws) const
     {
+        //Delete columns and permute rows into the V matrix
+        this->remove_cols_permute_rows_out_of_place(dest, cols_to_remove, V);
+
+        //Partition the matrix according to the positions of the columns to be removed
         int64_t n_removed = 1;
         for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
             //trap_begin and trap_end represent the start and end of the trapezoid after shifting it.
-            int64_t source_begin = *iter + 1;
-            if(source_begin == _n) break;
-
-            int64_t source_end = _n;
-            if(std::next(iter,1) != cols_to_remove.end()) {
-                source_end = *std::next(iter,1);
-            }
-            int64_t dest_begin = source_begin - n_removed;
-
-            //Size of the triangular matrix
-            int64_t trap_n = source_end - source_begin;
-
-            //First shift the dense block above the trapezoid to the left
-            this->shift_dense_left(0, dest_begin, dest_begin, trap_n, n_removed);
-
-            //Copy the row to annihilate into the V matrix
-            auto r = this->subrow(source_begin-1, source_begin, _n - source_begin);
-            auto v = V.subrow(n_removed-1, source_begin, _n - source_begin);
-            v.copy(r);
+            int64_t trap_begin = *iter + 1 - n_removed;
+            int64_t trap_end = dest.width();
+            if(std::next(iter,1) != cols_to_remove.end())
+                trap_end = *std::next(iter,1) - n_removed;
+            int64_t trap_n = trap_end - trap_begin;
 
             //Early exit conditions
-            if(source_begin == source_end) {
+            if(trap_begin == trap_end) {
                 n_removed++;
                 continue;
             }
-
-            //Shift triangle up and to the left
-            this->shift_triangle_up(dest_begin, dest_begin + n_removed, trap_n, n_removed);
-            this->shift_triangle_left(dest_begin, dest_begin, trap_n, n_removed);
             
-            int64_t trail_begin = source_end+1;
-            if (trail_begin < _n) {
-                //Shift trailing block of the matrix upwards
-                this->shift_dense_up(dest_begin, trail_begin, trap_n, _n - trail_begin, n_removed);
-            }
+            #pragma omp parallel
+            #pragma omp single
+            {
+                for(int64_t i = 0; i < trap_n; i += task_size) {
+                    int64_t block_m = std::min(task_size, trap_n - i);
+                    int64_t block_begin = trap_begin + i;
 
+                    auto V1 = V.submatrix(0, block_begin, n_removed, block_m);
+                    auto T1 = T.submatrix(0, block_begin, T.height(), block_m);
+
+                    //Factorization
+                    #pragma omp task depend(inout: i)
+                    {
+                        auto R11 = dest.submatrix(block_begin, block_begin, block_m, block_m);
+                        auto ws1 = ws.submatrix(0, block_begin, ws.height(), block_m);
+                        R11.tpqr(V1, T1, 0, nb, ws1);
+                    }
+
+                    //Apply Q to the rest of the matrix
+                    for(int64_t j = block_begin + block_m; j < dest.width(); j += task_size) {
+                        int64_t block_n = std::min(task_size, dest.width() - j);
+                        
+                        #pragma omp task depend(in:i) //depend(inout:j)
+                        {
+                            auto R12 = dest.submatrix(block_begin, j, block_m, block_n);
+                            auto V2 = V.submatrix(0, j, n_removed, block_n);
+                            auto ws2 = ws.submatrix(0, j, ws.height(), block_n);
+                            V1.apply_tpq(R12, V2, T1, 0, nb, ws2);
+                        }
+                    }
+                }
+            }
             n_removed++;
         }
-
-        this->enlarge_n(-cols_to_remove.size());
-        this->enlarge_m(-cols_to_remove.size());
-    }*/
+    }
 
     void kressner_remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
     {
@@ -755,8 +765,9 @@ public:
 
             //Perform a QR factorization annihilating V1
             auto T1 = T.submatrix(0, source_begin, T.height(), trap_n);
+
             R11.tpqr(V1, T1, 0, nb, ws);
-            
+
             //Shift triangle up and to the left
             this->shift_triangle_up(dest_begin, dest_begin + n_removed, trap_n, n_removed);
             this->shift_triangle_left(dest_begin, dest_begin, trap_n, n_removed);

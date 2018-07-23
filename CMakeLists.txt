@@ -4,7 +4,7 @@ project(tms_submodular)
 
 #    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_LIST_DIR}
 if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mkl=parallel -ipp -qopenmp -O3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused -mkl=parallel -ipp -qopenmp -O3")
 endif()
 
 include_directories( ${MY_SOURCE_DIR} )

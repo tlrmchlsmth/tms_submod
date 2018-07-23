@@ -6,6 +6,8 @@
 #include "../../vector.h"
 #include "../../matrix.h"
 
+//#define DEBUGGING
+
 template<class RNG, class DIST>
 std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove, RNG &gen, DIST& dist)
 {
@@ -27,7 +29,7 @@ std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove, RNG &
 void val_incremental_qr_remove_cols()
 {
     int64_t start = 16;
-    int64_t end = 256;
+    int64_t end = 1024;
     int64_t inc = 16;
     double percent_to_remove = 0.2; 
 
@@ -41,18 +43,20 @@ void val_incremental_qr_remove_cols()
     std::cout << "m\tn\terror" << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         int64_t m = n;
-        int64_t nb = 128;
+        int64_t nb = 16;
 
         std::uniform_int_distribution<> dist(0,n-1);
         std::vector<double> cycles;
 
         std::list<int64_t> cols_to_remove = get_cols_to_remove(n, percent_to_remove, gen, dist);
 
-        /*        std::cout << "Removing columns ";
+#ifdef DEBUGGING        
+        std::cout << "Removing columns ";
         for(auto a : cols_to_remove) {
             std::cout << a << ", ";
         }
-        std::cout << std::endl;*/
+        std::cout << std::endl;
+#endif
 
         //1. Create random S
         Matrix<double> S(m,n);
@@ -65,7 +69,6 @@ void val_incremental_qr_remove_cols()
         Vector<double> t(n);
         Matrix<double> T(nb, n);
         Matrix<double> ws(nb, n);
-//        Matrix<double> V_ws(std::min(cols_to_remove.size() , 64), n);
         Matrix<double> V_ws(cols_to_remove.size(), n);
         R.copy(S);
         R.qr(t);
@@ -76,14 +79,14 @@ void val_incremental_qr_remove_cols()
         //3. Delete Cols.
         S.remove_cols(cols_to_remove);
 //        R.blocked_remove_cols_incremental_qr(cols_to_remove, t, nb);
-        R.kressner_remove_cols_incremental_qr(cols_to_remove, T, V_ws, nb, ws);
-        //R.set_subdiagonal(0.0);
-        //
- 
-
+        Rinit.blocked_kressner_remove_cols_incremental_qr(R, cols_to_remove, T, V_ws, nb, 4, ws);
+//        Runb.kressner_remove_cols_incremental_qr(cols_to_remove, T, V_ws, nb, ws);
+        R.set_subdiagonal(0.0);
+//        Runb.set_subdiagonal(0.0);
  
   //     Uncomment these, and comment out qr and updates to see if kressner remove cols_incremental_qr is shifting properly.
-/*        std::cout << "*********" << std::endl;
+/*
+        std::cout << "*********" << std::endl;
         Rinit.print();
         std::cout << "*********" << std::endl;
         Rinit.remove_cols(cols_to_remove);
@@ -94,35 +97,15 @@ void val_incremental_qr_remove_cols()
         std::cout << "*********" << std::endl;
 
         std::cout << "*********" << std::endl;
-        R.print();
+        D.print();
         std::cout << "*********" << std::endl;
 
         std::cout << "*********" << std::endl;
-        std::cout << "*********" << std::endl;
-        std::cout << "*********" << std::endl;
-        std::cout << "*********" << std::endl;
-        Rinit.axpby(1.0, R, -1.0);
+        Rinit.axpby(1.0, D, -1.0);
         Rinit.print();
         std::cout << "*********" << std::endl;
-        std::cout << "*********" << std::endl;
-        std::cout << "*********" << std::endl;
-        std::cout << "*********" << std::endl;*/
 
-
-
-
-/*        Runb.enlarge_n(R._n - Runb._n);
-        Runb.enlarge_m(R._m - Runb._m);
-        Runb.axpby(1.0, R, -1.0);
-        Runb.print();*/
-
-/*        std::cout << "Correct R minus blocked R" << std::endl;
-        Vector<double> tcorrect(S.width());
-        Runb.remove_cols_incremental_qr(cols_to_remove, tcorrect);
-        Runb.axpby(1.0, R, -1.0);
-        Runb.set_subdiagonal(0.0);
-        Runb.print();*/
-
+*/
         //4. Do some checksum MVMs
         Vector<double> y(S.width());
         y.fill_rand(gen, normal);
@@ -143,7 +126,7 @@ void val_incremental_qr_remove_cols()
         double error = STSy.norm2();
         
         //Print off error 
-        /*
+       /* 
         Matrix<double> STS(S.width(),S.width());
         std::cout << "S m " << S.height() << " n " << S.width() << std::endl;
         STS.mmm(1.0, ST, S, 0.0);
@@ -164,7 +147,9 @@ void val_incremental_qr_remove_cols()
         std::cout<< std::endl;
 */
         std::cout << m << "\t" << n << "\t" << error << std::endl;
-//        exit(1);
+#ifdef DEBUGGING        
+        exit(1);
+#endif
     }
 
 }

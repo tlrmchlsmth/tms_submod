@@ -23,8 +23,11 @@ public:
 //public:
     Vector(int64_t s) : _len(s), _stride(1), _mem_manage(true)
     {
-        const int ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
-        assert(ret == 0 && "Could not allocate memory");
+        auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
+        if(ret != 0){
+            std::cout << "Could not allocate memory for vector of length " << _len *sizeof(DT) / 1e9 << " GB. Exiting..." << std::endl;
+            exit(1);
+        }
     }
 
     Vector(DT* values, int64_t len, int64_t stride, bool mem_manage) :
