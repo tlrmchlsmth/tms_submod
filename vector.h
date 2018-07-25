@@ -79,16 +79,19 @@ public:
             _values[i*_stride] = alpha;
         }
     }
-    void zero_out() 
-    {
-        set_all(0.0);
-    }
 
     template<class RNG, class DIST>
     void fill_rand(RNG &gen, DIST &dist) {
         for(int64_t i = 0; i < _len; i++) {
             (*this)(i) = dist(gen);
         }
+    }
+
+    void fill_rand() {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::normal_distribution<> normal(0.0, 1.0);
+        this->fill_rand(gen, normal);
     }
 
     void print() const

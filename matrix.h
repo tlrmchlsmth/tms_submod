@@ -118,6 +118,14 @@ public:
         return Vector<DT>(&_values[col*_cs], _m, _rs, false);
     }
 
+    void set_all(DT alpha) {
+        for(int64_t i = 0; i < _m; i++) {
+            for(int64_t j = 0; j < _n; j++) {
+                (*this)(i,j) = 0.0;
+            }
+        }
+    }
+
     template<class RNG, class DIST>
     void fill_rand(RNG &gen, DIST &dist) {
         for(int64_t i = 0; i < _m; i++) {
@@ -951,7 +959,7 @@ void Matrix<double>::qr(Vector<double>& t)
 template<>
 void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws)
 {
-    assert(_m == _n && _n == B.width() && _n == T.width() && T.height() == nb_in && "Nonconformal tpqrt");
+    assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
     assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
 
     int m = B.height();
@@ -977,7 +985,7 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
     int l = l_in;
     
     // A is k-by-n, B is m-by-n and V is m-by-k.
-    assert(_m == m && _n == k && A.width() == n && T.height() == nb_in && T.width() == k && "Nonconformal apply tpq");
+    assert(_m == m && _n == k && A.width() == n && T.height() >= nb_in && T.width() == k && "Nonconformal apply tpq");
     assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
 
 

@@ -28,9 +28,9 @@ std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove, RNG &
 
 void val_incremental_qr_remove_cols()
 {
-    int64_t start = 16;
+    int64_t start = 128;
     int64_t end = 1024;
-    int64_t inc = 16;
+    int64_t inc = 128; 
     double percent_to_remove = 0.2; 
 
     std::random_device rd;
@@ -43,7 +43,8 @@ void val_incremental_qr_remove_cols()
     std::cout << "m\tn\terror" << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         int64_t m = n;
-        int64_t nb = 16;
+        int64_t task_size = 16;
+        int64_t nb = 4;
 
         std::uniform_int_distribution<> dist(0,n-1);
         std::vector<double> cycles;
@@ -79,7 +80,7 @@ void val_incremental_qr_remove_cols()
         //3. Delete Cols.
         S.remove_cols(cols_to_remove);
 //        R.blocked_remove_cols_incremental_qr(cols_to_remove, t, nb);
-        Rinit.blocked_kressner_remove_cols_incremental_qr(R, cols_to_remove, T, V_ws, nb, 4, ws);
+        Rinit.blocked_kressner_remove_cols_incremental_qr(R, cols_to_remove, T, V_ws, task_size, nb, ws);
 //        Runb.kressner_remove_cols_incremental_qr(cols_to_remove, T, V_ws, nb, ws);
         R.set_subdiagonal(0.0);
 //        Runb.set_subdiagonal(0.0);
