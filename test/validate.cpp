@@ -3,8 +3,8 @@
 #include <list>
 #include <set>
 
-#include "../../vector.h"
-#include "../../matrix.h"
+#include "../vector.h"
+#include "../matrix.h"
 
 //#define DEBUGGING
 

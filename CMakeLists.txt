@@ -13,11 +13,11 @@ include_directories( ${MY_SOURCE_DIR}/perf )
 set(CMAKE_CXX_STANDARD 14)
 
 set(SOURCE_FILES
-    min_norm_point.cpp
+    main.cpp
     perf/perf.cpp
     #
-    test/validate/validate.cpp
-    test/validate/validate.h
+    test/validate.cpp
+    test/bench.cpp
 )
 
 add_executable(tms_submod ${SOURCE_FILES})

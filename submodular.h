@@ -1,28 +1,62 @@
 #ifndef TMS_SUBMOD_FN_H
 #define TMS_SUBMOD_FN_H
 
+#include <algorithm>
+#include <vector>
 #include <unordered_set>
 #include <functional>
 
-using namespace std;
+#include "vector.h"
+#include "matrix.h"
 
 class FV2toR {
+protected:
+    //Workspace for the greedy algorithm
+    std::unordered_set<int64_t> A;
+    std::vector<int64_t> permutation;
+
 public:
-        virtual double eval(const std::unordered_set<int64_t>& A) = 0;
-        virtual double eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) = 0;
-        virtual std::unordered_set<int64_t> get_set() = 0;
-        virtual double eval(const std::unordered_set<int64_t>& A, double FA, int64_t b) {
-            std::unordered_set<int64_t> Ab = A;
-            Ab.insert(b);
-            double FAb = this->eval(Ab);
-            return FAb;
+    FV2toR(int64_t n) 
+    {
+        A.reserve(n);
+        permutation.reserve(n);
+        for(int i = 0; i < n; i++) 
+            permutation.push_back(i);
+    }
+    virtual double eval(const std::unordered_set<int64_t>& A) = 0;
+    virtual double eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) = 0;
+    virtual std::unordered_set<int64_t> get_set() = 0;
+    virtual double eval(const std::unordered_set<int64_t>& A, double FA, int64_t b) {
+        std::unordered_set<int64_t> Ab = A;
+        Ab.insert(b);
+        double FAb = this->eval(Ab);
+        return FAb;
+    }
+
+    void polyhedron_greedy(double alpha, const Vector<double>& weights, Vector<double>& xout) 
+    {
+        //sort weights
+        if (alpha > 0.0) {
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
+        } else if (alpha < 0.0) {
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
         }
+
+        double FA_old = 0.0;
+        for(int i = 0; i < xout.length(); i++) {
+            double FA = eval(A, FA_old, permutation[i]);
+            xout(permutation[i]) = FA - FA_old;
+            A.insert(permutation[i]);
+            FA_old = FA;
+        }
+        A.clear();
+    }
 };
 
 class IDivSqrtSize : public FV2toR {
 public:
     int64_t _n;
-    IDivSqrtSize(int64_t n) : _n(n) {}
+    IDivSqrtSize(int64_t n) : _n(n), FV2toR(n) {}
 
     double eval(const std::unordered_set<int64_t>& A) {
         double val = 0.0;
@@ -67,7 +101,8 @@ public:
     double baseline;
     
     //Generate a nonsymmetric random graph.
-    MinCut(int64_t n, double connectivity_factor) : 
+    MinCut(int64_t n, double connectivity_factor) :
+        FV2toR(n),
         _n(n), adjacency(Matrix<double>(n,n)), baseline(0.0),
         edges_from_source(Vector<double>(n)),
         edges_to_sink(Vector<double>(n)) 
@@ -130,6 +165,7 @@ public:
 
     //Generate a nonsymmetric random graph.
     MinCut(int64_t n, int64_t m,  double cfa, double cfb) : 
+        FV2toR(n),
         _n(n), adjacency(Matrix<double>(n,n)), baseline(0.0),
         edges_from_source(Vector<double>(n)),
         edges_to_sink(Vector<double>(n)) 
@@ -145,6 +181,10 @@ public:
 
         //Setup edges from source nodes
         int64_t k = n / m; //number of groups
+        if(k < 2){
+            k = 2;
+            m = n / 2;
+        }
 
         for(int64_t i = 0; i < m; i++) {
             if(dist(gen) / sqrt(m) < cfa) {
@@ -185,12 +225,13 @@ public:
         //Setup edges to sink nodes.
         for(int64_t i = 0; i < m; i++) {
             if(dist(gen) / sqrt(m) < cfa) {
-                edges_to_sink(n - i) = dist(gen);
+                edges_to_sink(n-i-1) = dist(gen);
             }
         }
+        
         for(int64_t i = m; i < 2*m; i++) {
             if(dist(gen) < cfb) {
-                edges_to_sink(n - i) = dist(gen);
+                edges_to_sink(n-i) = dist(gen);
             }
         }
     }
