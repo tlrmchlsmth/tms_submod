@@ -5,7 +5,7 @@ template<class DT>
 class Minimizer
 {
 public:
-    virtual void minimize(FV2toR& F, DT eps, DT tolerance, bool print) = 0;
+    virtual void minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print) = 0;
 };
 
 template<class DT>
@@ -20,7 +20,9 @@ public:
     //mu is a tmp vector with a length = m
     void min_norm_point_update_xhat(Vector<DT>& x_hat, Vector<DT>& y,
             Vector<DT>& mu_ws, Vector<DT>& lambda_ws,
-            Matrix<DT>& S, Matrix<DT>& R, DT tolerance)
+            Matrix<DT>& S, Matrix<DT>& R, DT tolerance,
+            Matrix<DT>& T, Matrix<DT>& H, int64_t nb,
+            Matrix<DT>& QR_ws)
     {
         while(true) {
             minor_cycles++;
@@ -68,11 +70,11 @@ public:
 
             //Remove unnecessary columns from S and fixup R so that S = QR for some Q
             S.remove_cols(toRemove);
-            R.remove_cols_incremental_qr(toRemove, mu);
+            R.remove_cols_incremental_qr_kressner(toRemove, T, H, nb, QR_ws);
         }
     }
 
-    void minimize(FV2toR& F, DT eps, DT tolerance, bool print) 
+    void minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
@@ -91,8 +93,13 @@ public:
         Vector<DT>* x_hat_next = &xh2;
 
         //Workspace for updating x_hat
+        int64_t nb = 32;
+        int64_t max_removed_cols = m/2;
         Vector<DT> mu_ws(m);
         Vector<DT> lambda_ws(m);
+        Matrix<DT> T(nb, m);
+        Matrix<DT> H(max_removed_cols, m); //TODO: handle case where we remove more than this
+        Matrix<DT> QR_ws(nb, m);
 
         //Initialize S and R.
         Matrix<DT> S_base(m,m+1);
@@ -185,15 +192,16 @@ public:
             } else {
                 min_norm_point_update_xhat(*x_hat, *x_hat_next,
                         mu_ws, lambda_ws,
-                        S, R, tolerance);
+                        S, R, tolerance,
+                        T, H, nb, QR_ws);
             }
             std::swap(x_hat, x_hat_next);
         }
         if(n_iter > max_iter) {
             std::cout << "Timed out." << std::endl;
         }
-        if(print) {
-            std::cout << "Final F_best " << F_best << " |A| " << A_best.size() << std::endl;
-        }
+//        if(print) {
+//            std::cout << "Final F_best " << F_best << " |A| " << A_best.size() << std::endl;
+//        }
     }
 };

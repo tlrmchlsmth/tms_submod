@@ -7,6 +7,8 @@
 #include "mkl.h"
 #include <assert.h>
 #include <iomanip>
+#include "perf/perf.h"
+#include "perf_log.h"
 
 template<class DT> class Vector;
 
@@ -26,12 +28,14 @@ public:
 
     bool _mem_manage;
 
+    PerfLog* log;
+
 //public:
 
     //
     // Constructors
     //
-    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n)
+    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), log(NULL)
     {
         //TODO: Pad columns so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
@@ -43,7 +47,7 @@ public:
     }
 
     Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, bool mem_manage) :
-        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage)
+        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage), log(NULL)
     {
     }
     ~Matrix()
@@ -51,6 +55,28 @@ public:
         if(_mem_manage){
             free(_values);
         }
+    }
+
+    inline int64_t height() const 
+    { 
+        return _m; 
+    }
+    inline int64_t width() const 
+    { 
+        return _n; 
+    }
+
+    inline 
+    DT& operator() (int64_t row, int64_t col)
+    {
+        assert(row < _m && col < _n && "Matrix index out of bounds");
+        return _values[row * _rs + col * _cs];
+    }
+    inline 
+    DT operator() (int64_t row, int64_t col) const
+    {
+        assert(row < _m && col < _n && "Matrix index out of bounds");
+        return _values[row * _rs + col * _cs];
     }
 
     //
@@ -118,6 +144,9 @@ public:
         return Vector<DT>(&_values[col*_cs], _m, _rs, false);
     }
 
+    //
+    // Routines for setting elements of the matrix
+    //
     void set_all(DT alpha) {
         for(int64_t i = 0; i < _m; i++) {
             for(int64_t j = 0; j < _n; j++) {
@@ -174,6 +203,9 @@ public:
         }
     }
 
+    //
+    // Simple computational routines
+    //
     void axpby(DT alpha, const Matrix<DT>& other, DT beta) 
     {
         assert(_m == other._m && _n == other._n);
@@ -195,9 +227,6 @@ public:
         return sqrt(fro_nrm);
     }
 
-    //
-    // Simple routines
-    //
     inline void transpose()
     {
         std::swap(_m, _n);
@@ -208,23 +237,6 @@ public:
     Matrix<DT> transposed()
     {
         return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false);
-    }
-
-    inline int64_t height() const { return _m; }
-    inline int64_t width() const { return _n; }
-
-    inline 
-    DT& operator() (int64_t row, int64_t col)
-    {
-        //assert(row < _m && col < _n && "Matrix index out of bounds");
-        return _values[row * _rs + col * _cs];
-    }
-
-    inline 
-    DT operator() (int64_t row, int64_t col) const
-    {
-        //assert(row < _m && col < _n && "Matrix index out of bounds");
-        return _values[row * _rs + col * _cs];
     }
 
     void print() const
@@ -294,7 +306,7 @@ public:
     }
     
     //
-    // Routines that should be LAPACK routines but are not.
+    // Routines related to removing columns of a matrix
     //
     inline void trap_qr(Vector<DT>& t, int64_t l)
     {
@@ -327,6 +339,9 @@ public:
 
     void remove_cols(std::list<int64_t>& cols_to_remove)
     {
+        int64_t start, end;
+        start = rdtsc();
+
         int64_t n_removed = 1;
         for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
             int64_t block_begin = *iter - (n_removed - 1);
@@ -345,6 +360,12 @@ public:
         }
 
         this->enlarge_n(-cols_to_remove.size());
+
+        end = rdtsc();
+        if(log != NULL) {
+            log->log("REMOVE COLS BYTES", _m * _n);
+            log->log("REMOVE COLS CYCLES", end - start);
+        }
     }
 
     void remove_cols_trap(std::list<int64_t>& cols_to_remove)
@@ -369,40 +390,6 @@ public:
         this->enlarge_n(-cols_to_remove.size());
     }
 
-    void remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Vector<DT>& t)
-    {
-        //First remove the columns.
-        this->remove_cols_trap(cols_to_remove);
-        
-        //Second pass.
-        //Use trapezoidal QR factorization to clean up elements below the diagonal
-        //Partition the matrix by panels based on the columns there were removed
-        int64_t n_removed = 1;
-        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
-            int64_t block_begin = *iter - (n_removed - 1);
-            if(block_begin == _n) break;
-
-            int64_t block_end = _n;
-            if(std::next(iter,1) != cols_to_remove.end()) {
-                block_end = *std::next(iter,1) - n_removed;
-            }
-
-            int64_t m = block_end - block_begin + n_removed;
-            int64_t n = block_end - block_begin;
-
-            auto R11 = this->submatrix(block_begin, block_begin, m, n);
-            auto t1  = t.subvector(block_begin, n);
-            R11.trap_qr(t1, n_removed + 1);
-
-            if(block_end < _n) {
-                auto R12 = this->submatrix(block_begin, block_end, m, _n - block_end);
-                R11.apply_trap_q(R12, t1, n_removed + 1);
-            }
-
-            n_removed++;
-        }
-        this->enlarge_m(-cols_to_remove.size());
-    }
 
     inline void shift_trapezoid_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t y_dist) 
     {
@@ -556,6 +543,7 @@ public:
         }
     }
 
+
     //Delete columns of the matrix and permute rows (to be annihilated) into V
     void remove_cols_permute_rows_in_place(std::list<int64_t>& cols_to_remove, Matrix<DT>& V)
     {
@@ -672,9 +660,12 @@ public:
         dest.enlarge_m(-cols_to_remove.size());
     }
 
-    //Use tpqr to remove columns in a way that is condusive to applying compact WY transformations
-    void blocked_kressner_remove_cols_incremental_qr(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t task_size, int64_t nb, Matrix<DT>& ws) const
+    //Remove columns and rows beforehand, and use tpqr to annihilate rows, task parallel version
+    void remove_cols_incremental_qr_tasks_kressner(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t task_size, int64_t nb, Matrix<DT>& ws) const
     {
+        int64_t start, end;
+        start = rdtsc();
+
         //Delete columns and permute rows into the V matrix
         this->remove_cols_permute_rows_out_of_place(dest, cols_to_remove, V);
 
@@ -701,7 +692,7 @@ public:
                     int64_t block_m = std::min(task_size, trap_n - i);
                     int64_t block_begin = trap_begin + i;
 
-                    auto V1 = V.submatrix(0, block_begin, n_removed, block_m);
+                    auto V1 = V.submatrix(0, block_begin, n_removed, block_m); V.log = log;
                     auto T1 = T.submatrix(0, block_begin, T.height(), block_m);
 
                     //Factorization
@@ -728,10 +719,19 @@ public:
             }
             n_removed++;
         }
+
+        end = rdtsc();
+        if(log != NULL) {
+            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR CYCLES", end - start);
+        }
     }
 
-    void kressner_remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
+    void remove_cols_incremental_qr_kressner(std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
     {
+        int64_t start, end;
+        start = rdtsc();
+
         //Use tpqr to remove columns in a way that is condusive to applying compact WY transformations
         
         //First partition the matrix according to the positions of the columns to be removed
@@ -766,7 +766,7 @@ public:
             }
 
             //Vectors to annihilate
-            auto V1 = V.submatrix(0, source_begin, n_removed, trap_n);
+            auto V1 = V.submatrix(0, source_begin, n_removed, trap_n); V1.log = log;
 
             //Get the upper triangular portion of the current trapezoid
             auto R11 = this->submatrix(source_begin, source_begin, trap_n, trap_n);
@@ -797,10 +797,63 @@ public:
 
         this->enlarge_n(-cols_to_remove.size());
         this->enlarge_m(-cols_to_remove.size());
+        
+        end = rdtsc();
+        if(log != NULL) {
+            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR CYCLES", end - start);
+        }
     }
 
-    void blocked_remove_cols_incremental_qr(std::list<int64_t>& cols_to_remove, Vector<DT>& t, int64_t nb)
+    void remove_cols_incremental_qr_householder(std::list<int64_t>& cols_to_remove, Vector<DT>& t)
     {
+        int64_t start, end;
+        start = rdtsc();
+
+        //First remove the columns.
+        this->remove_cols_trap(cols_to_remove);
+        
+        //Second pass.
+        //Use trapezoidal QR factorization to clean up elements below the diagonal
+        //Partition the matrix by panels based on the columns there were removed
+        int64_t n_removed = 1;
+        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
+            int64_t block_begin = *iter - (n_removed - 1);
+            if(block_begin == _n) break;
+
+            int64_t block_end = _n;
+            if(std::next(iter,1) != cols_to_remove.end()) {
+                block_end = *std::next(iter,1) - n_removed;
+            }
+
+            int64_t m = block_end - block_begin + n_removed;
+            int64_t n = block_end - block_begin;
+
+            auto R11 = this->submatrix(block_begin, block_begin, m, n);
+            auto t1  = t.subvector(block_begin, n);
+            R11.trap_qr(t1, n_removed + 1);
+
+            if(block_end < _n) {
+                auto R12 = this->submatrix(block_begin, block_end, m, _n - block_end);
+                R11.apply_trap_q(R12, t1, n_removed + 1);
+            }
+
+            n_removed++;
+        }
+        this->enlarge_m(-cols_to_remove.size());
+
+        end = rdtsc();
+        if(log != NULL) {
+            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR CYCLES", end - start);
+        }
+    }
+
+    void remove_cols_incremental_qr_blocked_householder(std::list<int64_t>& cols_to_remove, Vector<DT>& t, int64_t nb)
+    {
+        int64_t start, end;
+        start = rdtsc();
+
         //Fused column deletion and blocked application of orthogonal transformations
         //to remove columns from this matrix, and then annihilate elements below the diagonal.
 
@@ -866,7 +919,21 @@ public:
 
         this->enlarge_n(-cols_to_remove.size());
         this->enlarge_m(-cols_to_remove.size());
+
+        end = rdtsc();
+        if(log != NULL) {
+            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR CYCLES", end - start);
+        }
     }
+
+    //TODO: Implement the givens rotation case if there is one column to remove
+//    void remove_col_incremental_qr_givens(int64_t col_to_remove, Matrix<DT>& T, int64_t nb)
+//    {
+//        for(int64_t i = col_to_remove+1; i < _n; i += nb) {
+//            int64_t block_m = std::min(nb, _n - i);
+//        }
+//    }
 
 };
 
@@ -874,6 +941,9 @@ template<>
 void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y)
 {
     assert(_m == y._len && _n == x._len && "Nonconformal mvm.");
+
+    int64_t start, end;
+    start = rdtsc();
 
     if(_rs == 1) {
         cblas_dgemv(CblasColMajor, CblasNoTrans, _m, _n, alpha, _values, _cs, 
@@ -887,11 +957,22 @@ void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vec
         std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
         exit(1);
     }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("MVM FLOPS", 2 * _m * _n);
+        log->log("MVM CYCLES", end - start);
+        log->log("MVM BYTES", sizeof(double) * (_m * _n + 2*_m + _n));
+    }
 }
 template<>
 void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
 {
     assert(_m == _n && _m == x._len && "Nonconformal trsm.");
+
+    int64_t start, end;
+    start = rdtsc();
     
     if(_rs == 1) {
         cblas_dtrsv(CblasColMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _cs,
@@ -902,6 +983,14 @@ void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
     } else {
         std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
         exit(1);
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("TRSV FLOPS", _m * _n);
+        log->log("TRSV CYCLES", end - start);
+        log->log("TRSV BYTES", sizeof(double) * (_m * _n / 2 + 2*_m + _n));
     }
 }
 
@@ -919,6 +1008,9 @@ void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<dou
     auto BTrans = CblasNoTrans;
     int64_t lda = A._rs * A._cs;
     int64_t ldb = B._rs * B._cs;
+
+    int64_t start, end;
+    start = rdtsc();
 
     if(_rs == 1) {
         if(A._rs != 1) ATrans = CblasTrans;
@@ -938,6 +1030,14 @@ void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<dou
         std::cout << "Only row or column major QR supported. Exiting..." << std::endl;
         exit(1);
     }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("MMM FLOPS", 2 * _m * _n * A._n);
+        log->log("MMM CYCLES", end - start);
+        log->log("MMM BYTES", sizeof(double) * (2*_m *_n + _m * A._n + A._n * _n)); 
+    }
 }
 
 template<>
@@ -946,21 +1046,33 @@ void Matrix<double>::qr(Vector<double>& t)
     assert(t._stride == 1 && t._len >= std::min(_m, _n) && "Cannot perform qr.");
     assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
 
+    int64_t start, end;
+    start = rdtsc();
+
     if(_rs == 1) {
         LAPACKE_dgeqrf(LAPACK_COL_MAJOR, _m, _n, _values, _cs, t._values);
     } else /*if(_cs == 1)*/ {
         LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, _m, _n, _values, _rs, t._values);
-    } 
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
+        log->log("QR CYCLES", end - start);
+    }
 }
 
 
 //Use tpqrt to annihilate rectangle above the triangle.
 //Then stores the reflectors in that block
+//TODO: handle row-major
 template<>
 void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws)
 {
     assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
     assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
+    assert(_rs == 1 && "Only column major qr supported");
 
     int m = B.height();
     int n = B.width();
@@ -971,9 +1083,19 @@ void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, in
     int ldb = B._cs;
     int info;
 
+    int64_t start, end;
+    start = rdtsc();
+
     dtpqrt_(&m, &n, &l, &nb,
             _values, &lda, B._values, &ldb, T._values, &ldt,
             ws._values, &info);
+
+    end = rdtsc();
+
+    if(log != NULL) {
+//        log->log("TPQR FLOPS", 2*_m(_n*_n - 2*_n/3));
+        log->log("TPQR CYCLES", end - start);
+    }
 }
 
 template<>
@@ -987,6 +1109,7 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
     // A is k-by-n, B is m-by-n and V is m-by-k.
     assert(_m == m && _n == k && A.width() == n && T.height() >= nb_in && T.width() == k && "Nonconformal apply tpq");
     assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
+    assert(_rs == 1 && "Only column major qr supported");
 
 
     //Apply from the left
@@ -1005,10 +1128,21 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
     int ldb = B._cs;
     int info;
 
+    int64_t start, end;
+    start = rdtsc();
+
     dtpmqrt_(&side, &trans, &m, &n, &k, &l, &nb,
             _values, &ldv, T._values, &ldt,
             A._values, &lda, B._values, &ldb,
             ws._values, &info);
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        assert(l == 0); //TODO: Flop count is unknown when l == 0
+        log->log("APPLY TPQR FLOPS", k*k*n + 4*m*k);
+        log->log("APPLY TPQR CYCLES", end - start);
+    }
 }
 
 #endif

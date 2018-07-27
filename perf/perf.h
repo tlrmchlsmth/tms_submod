@@ -23,6 +23,7 @@ void        perf_init ();
 void        perf_done ();
 void        cycles_count_start ();
 benchmark_t cycles_count_stop  ();
+int64_t rdtsc();
 
 bool cmp_benchmark_t(benchmark_t lhs, benchmark_t rhs);
 

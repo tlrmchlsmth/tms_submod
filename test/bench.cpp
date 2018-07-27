@@ -78,7 +78,7 @@ void benchmark_delete_cols()
             cycles_count_start();
         //    S.remove_cols(cols_to_delete);
         //    R0.blocked_remove_cols_incremental_qr(cols_to_delete, t, nb);
-            Rinit0.blocked_kressner_remove_cols_incremental_qr(R0, cols_to_delete, T, V, task_size, nb, ws);
+            Rinit0.remove_cols_incremental_qr_tasks_kressner(R0, cols_to_delete, T, V, task_size, nb, ws);
             //R0.kressner_remove_cols_incremental_qr(cols_to_delete, T, V, nb, ws);
             //R.remove_cols_incremental_qr(cols_to_delete, t);
             cycles.push_back(cycles_count_stop().time);

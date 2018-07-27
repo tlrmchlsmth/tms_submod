@@ -207,3 +207,10 @@ void perf_done ()
 {
     delete [] cpu_cores;
 }
+
+int64_t rdtsc() 
+{
+    tsc_counter_t start;
+    RDTSC(start);
+    return start.int64;
+}

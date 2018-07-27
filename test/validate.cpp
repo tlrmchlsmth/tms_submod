@@ -80,7 +80,7 @@ void val_incremental_qr_remove_cols()
         //3. Delete Cols.
         S.remove_cols(cols_to_remove);
 //        R.blocked_remove_cols_incremental_qr(cols_to_remove, t, nb);
-        Rinit.blocked_kressner_remove_cols_incremental_qr(R, cols_to_remove, T, V_ws, task_size, nb, ws);
+        Rinit.remove_cols_incremental_qr_tasks_kressner(R, cols_to_remove, T, V_ws, task_size, nb, ws);
 //        Runb.kressner_remove_cols_incremental_qr(cols_to_remove, T, V_ws, nb, ws);
         R.set_subdiagonal(0.0);
 //        Runb.set_subdiagonal(0.0);

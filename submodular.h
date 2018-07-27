@@ -9,6 +9,7 @@
 #include "vector.h"
 #include "matrix.h"
 
+template<class DT>
 class FV2toR {
 protected:
     //Workspace for the greedy algorithm
@@ -23,17 +24,17 @@ public:
         for(int i = 0; i < n; i++) 
             permutation.push_back(i);
     }
-    virtual double eval(const std::unordered_set<int64_t>& A) = 0;
-    virtual double eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) = 0;
+    virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
+    virtual DT eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) = 0;
     virtual std::unordered_set<int64_t> get_set() = 0;
-    virtual double eval(const std::unordered_set<int64_t>& A, double FA, int64_t b) {
+    virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
         std::unordered_set<int64_t> Ab = A;
         Ab.insert(b);
-        double FAb = this->eval(Ab);
+        DT FAb = this->eval(Ab);
         return FAb;
     }
 
-    void polyhedron_greedy(double alpha, const Vector<double>& weights, Vector<double>& xout) 
+    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout) 
     {
         //sort weights
         if (alpha > 0.0) {
@@ -42,9 +43,9 @@ public:
             std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
         }
 
-        double FA_old = 0.0;
+        DT FA_old = 0.0;
         for(int i = 0; i < xout.length(); i++) {
-            double FA = eval(A, FA_old, permutation[i]);
+            DT FA = eval(A, FA_old, permutation[i]);
             xout(permutation[i]) = FA - FA_old;
             A.insert(permutation[i]);
             FA_old = FA;
@@ -53,21 +54,22 @@ public:
     }
 };
 
-class IDivSqrtSize : public FV2toR {
+template<class DT>
+class IDivSqrtSize : public FV2toR<DT> {
 public:
     int64_t _n;
-    IDivSqrtSize(int64_t n) : _n(n), FV2toR(n) {}
+    IDivSqrtSize(int64_t n) : _n(n), FV2toR<DT>(n) {}
 
-    double eval(const std::unordered_set<int64_t>& A) {
-        double val = 0.0;
+    DT eval(const std::unordered_set<int64_t>& A) {
+        DT val = 0.0;
         for(auto i : A) {
             val += i / sqrt(A.size());
         }
         return val;
     }
 
-    double eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) {
-        double val = 0.0;
+    DT eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) {
+        DT val = 0.0;
         int n = 0;
         for(auto i : A) {
             if (condition(i)) {
@@ -92,20 +94,21 @@ public:
 
 //submodular function for a flow network
 //1 source and 1 sink, 2 groups
-class MinCut : public FV2toR {
+template<class DT>
+class MinCut : public FV2toR<DT> {
 public:
-    Matrix<double> adjacency;
-    Vector<double> edges_from_source;
-    Vector<double> edges_to_sink;
+    Matrix<DT> adjacency;
+    Vector<DT> edges_from_source;
+    Vector<DT> edges_to_sink;
     int64_t _n;
-    double baseline;
+    DT baseline;
     
     //Generate a nonsymmetric random graph.
     MinCut(int64_t n, double connectivity_factor) :
-        FV2toR(n),
-        _n(n), adjacency(Matrix<double>(n,n)), baseline(0.0),
-        edges_from_source(Vector<double>(n)),
-        edges_to_sink(Vector<double>(n)) 
+        FV2toR<DT>(n),
+        _n(n), adjacency(Matrix<DT>(n,n)), baseline(0.0),
+        edges_from_source(Vector<DT>(n)),
+        edges_to_sink(Vector<DT>(n)) 
     {
         std::random_device rd;
         std::mt19937 gen{rd()};
@@ -165,10 +168,10 @@ public:
 
     //Generate a nonsymmetric random graph.
     MinCut(int64_t n, int64_t m,  double cfa, double cfb) : 
-        FV2toR(n),
-        _n(n), adjacency(Matrix<double>(n,n)), baseline(0.0),
-        edges_from_source(Vector<double>(n)),
-        edges_to_sink(Vector<double>(n)) 
+        FV2toR<DT>(n),
+        _n(n), adjacency(Matrix<DT>(n,n)), baseline(0.0),
+        edges_from_source(Vector<DT>(n)),
+        edges_to_sink(Vector<DT>(n)) 
     {
         std::random_device rd;
         std::mt19937 gen{rd()};
@@ -236,8 +239,8 @@ public:
         }
     }
 
-    double eval(const std::unordered_set<int64_t>& A) {
-        double val = 0.0;
+    DT eval(const std::unordered_set<int64_t>& A) {
+        DT val = 0.0;
         for(auto a : A){
             //Edges within graph
             for(int64_t i = 0; i < _n; i++) {
@@ -259,8 +262,8 @@ public:
         return val - baseline;
     }
 
-    double eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) {
-        double val = 0.0;
+    DT eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) {
+        DT val = 0.0;
         for(auto a : A){
             if(!condition(a)) continue;
 
@@ -286,10 +289,10 @@ public:
         return val - baseline;
     }
 
-    double eval(const std::unordered_set<int64_t>& A, double FA, int64_t b) {
+    DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
 
         //Gain from adding b
-        double gain = 0.0;
+        DT gain = 0.0;
         for(int64_t i = 0; i < adjacency.height(); i++) {
             if(b != i && A.count(i) == 0) {
                 gain += adjacency(b, i);
@@ -298,7 +301,7 @@ public:
         gain += edges_to_sink(b);
 
         //Loss from adding b
-        double loss = 0.0;
+        DT loss = 0.0;
         for(auto a : A){
             loss -= adjacency(a, b);
         }
