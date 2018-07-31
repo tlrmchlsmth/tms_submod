@@ -15,6 +15,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(SOURCE_FILES
     main.cpp
     perf/perf.cpp
+    util.cpp
     #
     test/validate.cpp
     test/bench.cpp

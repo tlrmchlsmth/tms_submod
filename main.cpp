@@ -12,34 +12,7 @@
 
 #include "vector.h"
 #include "matrix.h"
-
-#include <lemon/list_graph.h>
-#include <lemon/preflow.h>
-#include <lemon/edmonds_karp.h>
-using namespace lemon;
-
-template<class DT>
-DT mean(std::vector<DT> v) {
-    return std::accumulate(v.begin(), v.end(), 0.0) / v.size();
-}
-template<class DT>
-DT stdev(std::vector<DT> v) {
-    DT mu = mean(v);
-    std::vector<DT> diff(v.size());
-    std::transform(v.begin(), v.end(), diff.begin(), [mu](DT x) { return x - mu; });
-    DT sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
-    DT stdev = std::sqrt(sq_sum / v.size());
-    return stdev;
-}
-template<class DT>
-DT median(std::vector<DT> v) {
-    std::sort(v.begin(), v.end());
-    DT median = v[v.size()/2];
-    if(v.size() % 2 == 0) {
-        median = (median + v[v.size()/2 - 1]) / 2.0;
-    }
-    return median;
-}
+#include "util.h"
 
 template<class DT>
 double time_problem_with_lemon(MinCut<DT>& problem)
@@ -101,48 +74,69 @@ void benchmark_max_flow()
     int64_t n_reps = 10;
     double connectivity = 0.2; 
 
-    std::random_device rd;
-    std::mt19937 gen{rd()};
-    std::normal_distribution<> normal(0.0, 10);
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking min cut" << std::endl;
+    std::cout << "===========================================================" << std::endl;
 
     int fw = 10;
-    std::cout << std::setw(fw) << "n" << std::setw(2*fw) << "mean (s)" << std::setw(2*fw) << "median (s)" << std::setw(2*fw) <<  "stdev (s)";
-    std::cout << std::setw(2*fw) << "Major cycles" << std::setw(2*fw) << "Minor Cycles";
-    std::cout << std::setw(2*fw) << "Lemon cycles";
+    std::cout << std::setw(fw) << "n" << std::setw(2*fw) << "mean (s)" << std::setw(2*fw) << "median (s)";
+    std::cout << std::setw(2*fw) <<  "mvm %";
+    std::cout << std::setw(2*fw) <<  "trsv %";
+    std::cout << std::setw(2*fw) <<  "remove cols %";
+    std::cout << std::setw(2*fw) <<  "eval f %";
+    std::cout << std::setw(2*fw) <<  "greedy %";
+//    std::cout << std::setw(2*fw) << "Major cycles" << std::setw(2*fw) << "Minor Cycles";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
         int64_t n = i;
 
-        std::uniform_int_distribution<> dist(0,n-1);
         std::vector<double> cpu_cycles;
         std::vector<double> major_cycles;
         std::vector<double> minor_cycles;
-        std::vector<double> lemon_cpu_cycles;
+
+        std::vector<double> mvm_percent;
+        std::vector<double> trsv_percent;
+        std::vector<double> remove_cols_percent;
+        std::vector<double> eval_f_percent;
+        std::vector<double> greedy_percent;
+        
 
         for(int64_t r = 0; r < n_reps; r++) {
+            PerfLog log;
+
             //Initialize min norm point problem
             MinCut<double> problem(n, 16, 0.5, 0.05);
             
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            mnp.minimize(problem, 1e-10, 1e-6, false);
+            mnp.minimize(problem, 1e-10, 1e-6, false, &log);
+            double cycles = (double) cycles_count_stop().cycles;
             cpu_cycles.push_back(cycles_count_stop().time);
-            major_cycles.push_back(mnp.major_cycles);
-            minor_cycles.push_back(mnp.minor_cycles);
-
-            //Initialize Preflow problem 
-            lemon_cpu_cycles.push_back(time_problem_with_lemon(problem));
+            
+            mvm_percent.push_back((double) log.get_total("MVM TIME") / cycles);
+            trsv_percent.push_back((double) log.get_total("TRSV TIME") / cycles);
+            remove_cols_percent.push_back((double) log.get_total("REMOVE COLS QR TIME") / cycles);
+            eval_f_percent.push_back((double) log.get_total("EVAL F TIME") / cycles);
+            greedy_percent.push_back((double) log.get_total("GREEDY TIME") / cycles);
+/*
+            std::cout << "*****************" << std::endl;
+            log.print("TIME", cycles);
+            std::cout << "*****************" << std::endl;
+*/
         }
 
         std::cout << std::setw(fw) << n;
         std::cout << std::setw(2*fw) << mean(cpu_cycles);
         std::cout << std::setw(2*fw) << median(cpu_cycles);
-        std::cout << std::setw(2*fw) << stdev(cpu_cycles);
-        std::cout << std::setw(2*fw) << median(major_cycles);
-        std::cout << std::setw(2*fw) << median(minor_cycles);
-        std::cout << std::setw(2*fw) << mean(lemon_cpu_cycles);
+ //       std::cout << std::setw(2*fw) << stdev(cpu_cycles);
+        std::cout << std::setw(2*fw) << 100 * mean(mvm_percent);
+        std::cout << std::setw(2*fw) << 100 * mean(trsv_percent);
+        std::cout << std::setw(2*fw) << 100 * mean(remove_cols_percent);
+        std::cout << std::setw(2*fw) << 100 * mean(eval_f_percent);
+        std::cout << std::setw(2*fw) << 100 * mean(greedy_percent);
         std::cout << std::endl;
     }
 }
@@ -158,9 +152,9 @@ int main() {
 
     std::cout << "Min cut problem\n";
     MinCut<double> problem(1000, 0.2);
-    mnp.minimize(problem, 1e-10, 1e-5, true);
+    mnp.minimize(problem, 1e-10, 1e-5, true, NULL);
 
     std::cout << "Cardinality problem\n";
     IDivSqrtSize<double> F(500);
-    mnp.minimize(F, 1e-10, 1e-10, true); 
+    mnp.minimize(F, 1e-10, 1e-10, true, NULL); 
 }

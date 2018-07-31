@@ -337,7 +337,7 @@ public:
         }
     }
 
-    void remove_cols(std::list<int64_t>& cols_to_remove)
+    void remove_cols(const std::list<int64_t>& cols_to_remove)
     {
         int64_t start, end;
         start = rdtsc();
@@ -364,11 +364,11 @@ public:
         end = rdtsc();
         if(log != NULL) {
             log->log("REMOVE COLS BYTES", _m * _n);
-            log->log("REMOVE COLS CYCLES", end - start);
+            log->log("REMOVE COLS TIME", end - start);
         }
     }
 
-    void remove_cols_trap(std::list<int64_t>& cols_to_remove)
+    void remove_cols_trap(const std::list<int64_t>& cols_to_remove)
     {
         int64_t n_removed = 1;
         for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
@@ -545,7 +545,7 @@ public:
 
 
     //Delete columns of the matrix and permute rows (to be annihilated) into V
-    void remove_cols_permute_rows_in_place(std::list<int64_t>& cols_to_remove, Matrix<DT>& V)
+    void remove_cols_permute_rows_in_place(const std::list<int64_t>& cols_to_remove, Matrix<DT>& V)
     {
         int64_t cols_removed = 1;
         for(auto j_iter = cols_to_remove.begin(); j_iter != cols_to_remove.end(); j_iter++) {
@@ -600,7 +600,7 @@ public:
         this->enlarge_m(-cols_to_remove.size());
     }
 
-    void remove_cols_permute_rows_out_of_place(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& V) const
+    void remove_cols_permute_rows_out_of_place(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& V) const
     {
         //Copy initial triangle
         auto src_tri = this->submatrix(0, 0, cols_to_remove.front(), cols_to_remove.front());
@@ -661,7 +661,7 @@ public:
     }
 
     //Remove columns and rows beforehand, and use tpqr to annihilate rows, task parallel version
-    void remove_cols_incremental_qr_tasks_kressner(Matrix<DT>& dest, std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t task_size, int64_t nb, Matrix<DT>& ws) const
+    void remove_cols_incremental_qr_tasks_kressner(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t task_size, int64_t nb, Matrix<DT>& ws) const
     {
         int64_t start, end;
         start = rdtsc();
@@ -723,11 +723,11 @@ public:
         end = rdtsc();
         if(log != NULL) {
             log->log("REMOVE COLS QR BYTES", _m * _n);
-            log->log("REMOVE COLS QR CYCLES", end - start);
+            log->log("REMOVE COLS QR TIME", end - start);
         }
     }
 
-    void remove_cols_incremental_qr_kressner(std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
+    void remove_cols_incremental_qr_kressner(const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
     {
         int64_t start, end;
         start = rdtsc();
@@ -801,11 +801,11 @@ public:
         end = rdtsc();
         if(log != NULL) {
             log->log("REMOVE COLS QR BYTES", _m * _n);
-            log->log("REMOVE COLS QR CYCLES", end - start);
+            log->log("REMOVE COLS QR TIME", end - start);
         }
     }
 
-    void remove_cols_incremental_qr_householder(std::list<int64_t>& cols_to_remove, Vector<DT>& t)
+    void remove_cols_incremental_qr_householder(const std::list<int64_t>& cols_to_remove, Vector<DT>& t)
     {
         int64_t start, end;
         start = rdtsc();
@@ -845,11 +845,11 @@ public:
         end = rdtsc();
         if(log != NULL) {
             log->log("REMOVE COLS QR BYTES", _m * _n);
-            log->log("REMOVE COLS QR CYCLES", end - start);
+            log->log("REMOVE COLS QR TIME", end - start);
         }
     }
 
-    void remove_cols_incremental_qr_blocked_householder(std::list<int64_t>& cols_to_remove, Vector<DT>& t, int64_t nb)
+    void remove_cols_incremental_qr_blocked_householder(const std::list<int64_t>& cols_to_remove, Vector<DT>& t, int64_t nb)
     {
         int64_t start, end;
         start = rdtsc();
@@ -923,7 +923,7 @@ public:
         end = rdtsc();
         if(log != NULL) {
             log->log("REMOVE COLS QR BYTES", _m * _n);
-            log->log("REMOVE COLS QR CYCLES", end - start);
+            log->log("REMOVE COLS QR TIME", end - start);
         }
     }
 
@@ -962,7 +962,7 @@ void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vec
 
     if(log != NULL) {
         log->log("MVM FLOPS", 2 * _m * _n);
-        log->log("MVM CYCLES", end - start);
+        log->log("MVM TIME", end - start);
         log->log("MVM BYTES", sizeof(double) * (_m * _n + 2*_m + _n));
     }
 }
@@ -989,7 +989,7 @@ void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
 
     if(log != NULL) {
         log->log("TRSV FLOPS", _m * _n);
-        log->log("TRSV CYCLES", end - start);
+        log->log("TRSV TIME", end - start);
         log->log("TRSV BYTES", sizeof(double) * (_m * _n / 2 + 2*_m + _n));
     }
 }
@@ -1035,7 +1035,7 @@ void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<dou
 
     if(log != NULL) {
         log->log("MMM FLOPS", 2 * _m * _n * A._n);
-        log->log("MMM CYCLES", end - start);
+        log->log("MMM TIME", end - start);
         log->log("MMM BYTES", sizeof(double) * (2*_m *_n + _m * A._n + A._n * _n)); 
     }
 }
@@ -1059,7 +1059,7 @@ void Matrix<double>::qr(Vector<double>& t)
 
     if(log != NULL) {
         log->log("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
-        log->log("QR CYCLES", end - start);
+        log->log("QR TIME", end - start);
     }
 }
 
@@ -1094,7 +1094,7 @@ void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, in
 
     if(log != NULL) {
 //        log->log("TPQR FLOPS", 2*_m(_n*_n - 2*_n/3));
-        log->log("TPQR CYCLES", end - start);
+        log->log("TPQR TIME", end - start);
     }
 }
 
@@ -1141,7 +1141,7 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
     if(log != NULL) {
         assert(l == 0); //TODO: Flop count is unknown when l == 0
         log->log("APPLY TPQR FLOPS", k*k*n + 4*m*k);
-        log->log("APPLY TPQR CYCLES", end - start);
+        log->log("APPLY TPQR TIME", end - start);
     }
 }
 

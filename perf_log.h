@@ -5,67 +5,55 @@
 #include <map>
 #include <string>
 
-//Performance log. It's a set of histograms
-class PerfHist {
+//In the future we may add histogram/list support
+class PerfTotal {
 public:
     int64_t total;
-    std::vector<int64_t> buckets;
-    const int64_t bucket_size;
+    int64_t count;
 
-    PerfHist(int64_t n_buckets, int64_t bs) : bucket_size(bs), buckets(n_buckets), total(0){
-        for(int64_t i = 0; i < n_buckets; i++)
-            buckets[i] = 0;
-    }
-
-    void log(int64_t x) {
+    PerfTotal() : total(0), count(0) { }
+    inline void log(int64_t x) {
         total += x;
-        int64_t bucket = x / bucket_size;
-        buckets[bucket]++;
+        count++;
     }
 };
 
 class PerfLog {
 public:
-    std::map<std::string, PerfHist> hists;
+    std::map<std::string, PerfTotal> tot_classes;
 
     PerfLog(){}
 
-    void add_histogram(std::string s, int64_t n_buckets, int64_t bucket_size) {
-        hists.emplace(s,PerfHist(n_buckets, bucket_size));
+    void add_histogram(std::string s) {
+        tot_classes.emplace(s,PerfTotal());
     }
 
     void log(std::string s, int64_t x) {
-        hists.at(s).log(x);
+        tot_classes[s].log(x);
     }
 
     int64_t get_total(std::string s) const {
-        return hists.at(s).total;
+        return tot_classes.at(s).total;
     }
 
     double get_total(std::string s, double mult) const {
-        return mult * hists.at(s).total;
+        return tot_classes.at(s).total;
     }
 
-    void print_histogram(std::string s) {
-        for(int i = 0; i < hists.at(s).buckets.size(); i++) {
-            std::cout << std::setw(15) << i * hists.at(s).bucket_size;
+    void print(std::string tag) {
+        for(auto a : tot_classes) {
+            if(a.first.find(tag) != std::string::npos) {
+                std::cout << a.first << " : " << a.second.count << " : " << a.second.total << " : " << (double) a.second.total / (double) a.second.count << std::endl;
+            }
         }
-        std::cout << std::endl;
-        for(int i = 0; i < hists.at(s).buckets.size(); i++) {
-            std::cout << std::setw(15) << hists.at(s).buckets[i];
-        }
-        std::cout << std::endl;
     }
 
-    void print_histogram(std::string s, double mult) {
-        for(int i = 0; i < hists.at(s).buckets.size(); i++) {
-            std::cout << std::setw(15) << i * hists.at(s).bucket_size;
+    void print(std::string tag, int64_t total) {
+        for(auto a : tot_classes) {
+            if(a.first.find(tag) != std::string::npos) {
+                std::cout << a.first << " : " << a.second.count  << " : " << a.second.total << " : " << (double) a.second.total / (double) a.second.count  << " : " << (double) a.second.total / (double) total << std::endl;
+            }
         }
-        std::cout << std::endl;
-        for(int i = 0; i < hists.at(s).buckets.size(); i++) {
-            std::cout << std::setw(15) << mult * hists.at(s).buckets[i];
-        }
-        std::cout << std::endl;
     }
 };
 

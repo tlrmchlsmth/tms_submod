@@ -1,20 +1,31 @@
+#include <unordered_set>
+
 #include "matrix.h"
 #include "vector.h"
+#include "submodular.h"
+#include "perf_log.h"
+#include "perf/perf.h"
 
 template<class DT>
 class Minimizer
 {
 public:
-    virtual void minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print) = 0;
+    virtual std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) = 0;
+    std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print) 
+    {
+        return this->minimize(F, eps, tolerance, print, NULL);
+    }
+    std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance) 
+    {
+        return this->minimize(F, eps, tolerance, false, NULL);
+    }
 };
 
 template<class DT>
 class MinNormPoint : Minimizer<DT>
 {
 public:
-    int64_t minor_cycles;
-    int64_t major_cycles;
-    MinNormPoint() : minor_cycles(0), major_cycles(0) {}
+    MinNormPoint() {}
 
     //At the end, y is equal to the new value of x_hat
     //mu is a tmp vector with a length = m
@@ -22,13 +33,14 @@ public:
             Vector<DT>& mu_ws, Vector<DT>& lambda_ws,
             Matrix<DT>& S, Matrix<DT>& R, DT tolerance,
             Matrix<DT>& T, Matrix<DT>& H, int64_t nb,
-            Matrix<DT>& QR_ws)
+            Matrix<DT>& QR_ws,
+            PerfLog* log)
     {
         while(true) {
-            minor_cycles++;
+            int64_t minor_start = rdtsc();
 
-            auto mu = mu_ws.subvector(0, R.width());
-            auto lambda = lambda_ws.subvector(0, R.width());
+            auto mu = mu_ws.subvector(0, R.width()); mu.log = log;
+            auto lambda = lambda_ws.subvector(0, R.width()); lambda.log = log;
 
             //Find minimum norm point in affine hull spanned by S
             mu.set_all(1.0);
@@ -52,6 +64,7 @@ public:
             R.trsv(CblasUpper, lambda);
             lambda.scale(1.0 / lambda.sum());
 
+            int64_t z_start = rdtsc();
             // Find z in conv(S) that is closest to y
             DT beta = std::numeric_limits<DT>::max();
             for(int64_t i = 0; i < lambda.length(); i++) {
@@ -60,21 +73,33 @@ public:
                     beta = bound;
                 }
             }
+            if(log) {
+                log->log("MISC TIME", rdtsc() - z_start);
+            }
             x_hat.axpby(beta, y, (1-beta));
 
+            int64_t remove_start = rdtsc();
             std::list<int64_t> toRemove; //TODO: pre initialize
             for(int64_t i = 0; i < lambda.length(); i++){
                 if((1-beta) * lambda(i) + beta * mu(i) < tolerance)
                     toRemove.push_back(i);
             }
+            if(log) {
+                log->log("TOREMOVEPUSHBACK TIME", rdtsc() - remove_start);
+            } 
 
             //Remove unnecessary columns from S and fixup R so that S = QR for some Q
             S.remove_cols(toRemove);
             R.remove_cols_incremental_qr_kressner(toRemove, T, H, nb, QR_ws);
+
+            int64_t minor_end = rdtsc();
+            if(log) {
+                log->log("MINOR TIME", minor_end - minor_start);
+            }
         }
     }
 
-    void minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print) 
+    std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
@@ -91,6 +116,8 @@ public:
         Vector<DT> xh2(m);
         Vector<DT>* x_hat = &xh1;
         Vector<DT>* x_hat_next = &xh2;
+        xh1.log = log;
+        xh2.log = log;
 
         //Workspace for updating x_hat
         int64_t nb = 32;
@@ -105,8 +132,10 @@ public:
         Matrix<DT> S_base(m,m+1);
         Matrix<DT> R_base(m+1,m+1);
 
-        Matrix<DT> S = S_base.submatrix(0, 0, m, 1);
-        Matrix<DT> R = R_base.submatrix(0, 0, 1, 1);
+        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); 
+        Matrix<DT> R = R_base.submatrix(0, 0, 1, 1); 
+        S.log = log;
+        R.log = log;
 
         Vector<DT> first_col_s = S.subcol(0);
         F.polyhedron_greedy(1.0, wA, first_col_s);
@@ -117,65 +146,81 @@ public:
         std::unordered_set<int64_t> A_best;
         A_best.reserve(m);
         DT F_best = std::numeric_limits<DT>::max();
+        std::unordered_set<int64_t> A_curr;
+        A_curr.reserve(m);
         
         //Step 2:
-        int n_iter = 0;
-        int max_iter = 5000;
-        while(n_iter++ < max_iter) {
-            major_cycles++;
+        int64_t max_iter = 5000;
+        int64_t major_cycles = 0;
+        while(major_cycles++ < max_iter) {
+            int64_t major_start = rdtsc();
+
             //Snap to zero
             //TODO: Krause's code uses xhat->norm2() < tolerance,
-            //but if I do this, sometimes my code doesn't terminate.
-            if(x_hat->norm2()*x_hat->norm2() < tolerance) {
+            DT x_hat_norm2 = x_hat->norm2();
+            if(x_hat_norm2*x_hat_norm2 < tolerance) {
                 (*x_hat).set_all(0.0);
             }
 
-
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
-            Vector<DT> p_hat = S_base.subcol(S.width());
+            Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.log = log;
+            int64_t greedy_start = rdtsc();
             F.polyhedron_greedy(-1.0, *x_hat, p_hat);
-
+            if(log) { log->log("GREEDY TIME", rdtsc() - greedy_start); }
 
             // Update R to account for modifying S.
             // Let [r0 rho1]^T be the vector to add to r
             // r0 = R' \ (S' * p_hat)
-            Vector<DT> r0 = R_base.subcol(0, R.width(), R.height());
+            Vector<DT> r0 = R_base.subcol(0, R.width(), R.height()); r0.log = log;
             S.transpose(); S.mvm(1.0, p_hat, 0.0, r0); S.transpose();
             R.transpose(); R.trsv(CblasLower, r0); R.transpose();
 
             // rho1^2 = p_hat' * p_hat - r0' * r0;
-            DT rho1 = sqrt(std::abs(p_hat.norm2()*p_hat.norm2() - r0.norm2()*r0.norm2()));
+            DT phat_norm2 = p_hat.norm2();
+            DT r0_norm2 = r0.norm2();
+            DT rho1 = sqrt(std::abs(phat_norm2*phat_norm2 - r0_norm2*r0_norm2));
             
             R.enlarge_m(1); R.enlarge_n(1);
             R(R.width()-1, R.height()-1) = rho1;
             S.enlarge_n(1);
 
             // Check current function value
-            // TODO: Here I check to see if each element of x_hat is less than the tolerance,
-            // but Krause's code uses 0 instead.
-            auto F_cur = F.eval(V, [&](int64_t i) -> bool { return ((*x_hat)(i)) < tolerance; } );
-            if (F_cur < F_best) {
-                // Save best F and get the unique minimal minimizer
-                F_best = F_cur;
-                A_best.clear();
-                for (int64_t i = 0; i < (*x_hat).length(); i++) {
-                    if ((*x_hat)(i) < tolerance) {
-                        A_best.insert(i);
-                    }
+            A_curr.clear();
+            bool compute_f_cur = false;
+            for(int64_t i = 0; i < x_hat->length(); i++) {
+                if((*x_hat)(i) < tolerance) {
+                    A_curr.insert(i);
+                    if(A_best.count(i) == 0) 
+                        compute_f_cur = true;
                 }
+            }
+            compute_f_cur = compute_f_cur || A_curr.size() != A_best.size();
+
+            if(compute_f_cur) {
+                int64_t eval_start = rdtsc();
+                auto F_curr = F.eval(A_curr);
+                if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
+
+                int64_t misc_start = rdtsc();
+                if (F_curr < F_best) {
+                    // Save best F and get the unique minimal minimizer
+                    F_best = F_curr;
+                    A_best = A_curr;
+                }
+                if(log) { log->log("MISC TIME", rdtsc() - misc_start); }
             }
 
             // Get suboptimality bound
-            // TODO: Check against tolerance vs. check against 0.0
+            int64_t misc_start = rdtsc();
             DT sum_x_hat_lt_0 = 0.0;
             for (int64_t i = 0; i < x_hat->length(); i++) {
                 if((*x_hat)(i) < tolerance)
                     sum_x_hat_lt_0 += (*x_hat)(i);
             }
             DT subopt = F_best - sum_x_hat_lt_0;
+            if(log) { log->log("MISC TIME", rdtsc() - misc_start); }
 
-            if(print)
-                std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl;
+            if(print) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
 
             DT xt_p = (*x_hat).dot(p_hat);
             DT xnrm2 = (*x_hat).norm2();
@@ -193,15 +238,19 @@ public:
                 min_norm_point_update_xhat(*x_hat, *x_hat_next,
                         mu_ws, lambda_ws,
                         S, R, tolerance,
-                        T, H, nb, QR_ws);
+                        T, H, nb, QR_ws,
+                        log);
             }
             std::swap(x_hat, x_hat_next);
+
+            if(log) {
+                log->log("MAJOR TIME", rdtsc() - major_start);
+            }
         }
-        if(n_iter > max_iter) {
+        if(major_cycles > max_iter) {
             std::cout << "Timed out." << std::endl;
         }
-//        if(print) {
-//            std::cout << "Final F_best " << F_best << " |A| " << A_best.size() << std::endl;
-//        }
+
+        return A_best;
     }
 };
