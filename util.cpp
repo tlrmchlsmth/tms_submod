@@ -1,6 +1,8 @@
 #include <set>
 #include <list>
 #include <random>
+#include <iostream>
+#include <iomanip>
 
 std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove)
 {
@@ -21,4 +23,24 @@ std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove)
     }   
 
     return to_ret;
+}
+
+void print_err(double err, int64_t w) 
+{
+    if(std::abs(err) < 1e-6) {
+        std::cout << "\033[1;32m" << std::setw(w) << err << "\033[0m";
+    } else if(std::abs(err) < 1e-4) {
+        std::cout << "\033[1;33m" << std::setw(w) << err << "\033[0m";
+    } else {
+        std::cout << "\033[1;31m" << std::setw(w) << err << "\033[0m";
+    }
+}
+void print_err(float err, int64_t w) {
+    if(std::abs(err) < 1e-4) {
+        std::cout << "\033[1;32m" << std::setw(w) << err << "\033[0m";
+    } else if(std::abs(err) < 1e-2) {
+        std::cout << "\033[1;33m" << std::setw(w) << err << "\033[0m";
+    } else {
+        std::cout << "\033[1;31m" << std::setw(w) << err << "\033[0m";
+    }
 }

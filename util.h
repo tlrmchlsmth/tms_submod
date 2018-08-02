@@ -29,4 +29,6 @@ DT median(const std::vector<DT> v_in) {
 
 std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove);
 
+void print_err(double err, int64_t w);
+void print_err(float err, int64_t w);
 #endif

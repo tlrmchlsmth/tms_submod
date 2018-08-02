@@ -105,7 +105,9 @@ void val_incremental_qr_remove_cols()
         R4TR4y.axpy(-1.0, STSy);
         double error4 = R4TR4y.norm2();
         
-        std::cout << std::setw(w) << m << std::setw(w) << n << std::setw(w) << error1 << std::setw(w) << error2 << std::setw(w) << error3 << std::setw(w) << error4 << std::endl;
+        std::cout << std::setw(w) << m << std::setw(w) << n;
+        print_err(error1, w); print_err(error2, w); print_err(error3, w); print_err(error4, w);
+        std::cout << std::endl;
 #ifdef DEBUGGING        
         exit(1);
 #endif
@@ -179,7 +181,9 @@ void val_mincut()
         lemon_prob.run();
         double lemon_sol = lemon_prob.flowValue();
 
-        std::cout << std::setw(w) << n << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol << std::setw(w) << mnp_sol - lemon_sol << std::endl;
+        std::cout << std::setw(w) << n << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
+        print_err(mnp_sol - lemon_sol, w);
+        std::cout << std::endl;
 #ifdef DEBUGGING        
         exit(1);
 #endif
