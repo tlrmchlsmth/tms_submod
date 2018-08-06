@@ -68,9 +68,9 @@ double time_problem_with_lemon(MinCut<DT>& problem)
 
 void benchmark_max_flow()
 {
-    int64_t start = 16;
-    int64_t end = 512;
-    int64_t inc = 16;
+    int64_t start = 50;
+    int64_t end = 5000;
+    int64_t inc = 50;
     int64_t n_reps = 10;
     double connectivity = 0.2; 
 
@@ -81,6 +81,8 @@ void benchmark_max_flow()
 
     int fw = 10;
     std::cout << std::setw(fw) << "n" << std::setw(2*fw) << "mean (s)" << std::setw(2*fw) << "median (s)";
+    std::cout << std::setw(2*fw) <<  "major cycles";
+    std::cout << std::setw(2*fw) <<  "minor cycles";
     std::cout << std::setw(2*fw) <<  "mvm %";
     std::cout << std::setw(2*fw) <<  "trsv %";
     std::cout << std::setw(2*fw) <<  "remove cols %";
@@ -115,6 +117,9 @@ void benchmark_max_flow()
             mnp.minimize(problem, 1e-10, 1e-6, false, &log);
             double cycles = (double) cycles_count_stop().cycles;
             cpu_cycles.push_back(cycles_count_stop().time);
+
+            major_cycles.push_back(log.get_count("MAJOR TIME"));
+            minor_cycles.push_back(log.get_count("MINOR TIME"));
             
             mvm_percent.push_back((double) log.get_total("MVM TIME") / cycles);
             trsv_percent.push_back((double) log.get_total("TRSV TIME") / cycles);
@@ -131,7 +136,8 @@ void benchmark_max_flow()
         std::cout << std::setw(fw) << n;
         std::cout << std::setw(2*fw) << mean(cpu_cycles);
         std::cout << std::setw(2*fw) << median(cpu_cycles);
- //       std::cout << std::setw(2*fw) << stdev(cpu_cycles);
+        std::cout << std::setw(2*fw) << mean(major_cycles);
+        std::cout << std::setw(2*fw) << mean(minor_cycles);
         std::cout << std::setw(2*fw) << 100 * mean(mvm_percent);
         std::cout << std::setw(2*fw) << 100 * mean(trsv_percent);
         std::cout << std::setw(2*fw) << 100 * mean(remove_cols_percent);
@@ -140,7 +146,6 @@ void benchmark_max_flow()
         std::cout << std::endl;
     }
 }
-
 
 int main() {
     run_validation_suite();

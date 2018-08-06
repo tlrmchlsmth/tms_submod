@@ -29,23 +29,28 @@ public:
 
     //At the end, y is equal to the new value of x_hat
     //mu is a tmp vector with a length = m
-    void min_norm_point_update_xhat(Vector<DT>& x_hat, Vector<DT>& y,
+    //Returns: whether R and R_new should be swapped
+    bool min_norm_point_update_xhat(Vector<DT>& x_hat, Vector<DT>& y,
             Vector<DT>& mu_ws, Vector<DT>& lambda_ws,
-            Matrix<DT>& S, Matrix<DT>& R, DT tolerance,
+            Matrix<DT>& S, Matrix<DT>* R_in, Matrix<DT>* R_next_in, DT tolerance,
             Matrix<DT>& T, Matrix<DT>& H, int64_t nb,
             Matrix<DT>& QR_ws,
             PerfLog* log)
     {
+        Matrix<DT>* R = R_in;
+        Matrix<DT>* R_next = R_next_in;
+        bool to_ret = false;
+
         while(true) {
             int64_t minor_start = rdtsc();
 
-            auto mu = mu_ws.subvector(0, R.width()); mu.log = log;
-            auto lambda = lambda_ws.subvector(0, R.width()); lambda.log = log;
+            auto mu = mu_ws.subvector(0, R->width()); mu.log = log;
+            auto lambda = lambda_ws.subvector(0, R->width()); lambda.log = log;
 
             //Find minimum norm point in affine hull spanned by S
             mu.set_all(1.0);
-            R.transpose(); R.trsv(CblasLower, mu); R.transpose();
-            R.trsv(CblasUpper, mu);
+            R->transpose(); R->trsv(CblasLower, mu); R->transpose();
+            R->trsv(CblasUpper, mu);
             mu.scale(1.0 / mu.sum());
             S.mvm(1.0, mu, 0.0, y);
 
@@ -60,8 +65,8 @@ public:
             // Get representation of xhat in terms of S; enforce that we get
             // affine combination (i.e., sum(lambda)==1)
             S.transpose(); S.mvm(1.0, x_hat, 0.0, lambda); S.transpose();
-            R.transpose(); R.trsv(CblasLower, lambda); R.transpose();
-            R.trsv(CblasUpper, lambda);
+            R->transpose(); R->trsv(CblasLower, lambda); R->transpose();
+            R->trsv(CblasUpper, lambda);
             lambda.scale(1.0 / lambda.sum());
 
             int64_t z_start = rdtsc();
@@ -90,19 +95,26 @@ public:
 
             //Remove unnecessary columns from S and fixup R so that S = QR for some Q
             S.remove_cols(toRemove);
-            R.remove_cols_incremental_qr_kressner(toRemove, T, H, nb, QR_ws);
+            R_next->_m = R->_m;
+            R_next->_n = R->_n;
+            R->remove_cols_incremental_qr_tasks_kressner(*R_next, toRemove, T, H, 128, 32, QR_ws);
+            std::swap(R, R_next);
+            to_ret = !to_ret;
 
             int64_t minor_end = rdtsc();
             if(log) {
                 log->log("MINOR TIME", minor_end - minor_start);
             }
         }
+        return to_ret;
     }
 
     std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
+        int64_t eval_F_freq = 10;
+        int64_t cycles_since_last_F_eval = eval_F_freq;
         int64_t m = V.size();
 
         //Step 1: Initialize by picking a point in the polytiope.
@@ -130,17 +142,21 @@ public:
 
         //Initialize S and R.
         Matrix<DT> S_base(m,m+1);
-        Matrix<DT> R_base(m+1,m+1);
+        Matrix<DT> R_base1(m+1,m+1);
+        Matrix<DT> R_base2(m+1,m+1);
 
-        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); 
-        Matrix<DT> R = R_base.submatrix(0, 0, 1, 1); 
-        S.log = log;
-        R.log = log;
+        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); S.log = log;
+
+        //2 matrices for R, so we can do out of place column removal
+        Matrix<DT> R1 = R_base1.submatrix(0, 0, 1, 1);  R1.log = log;
+        Matrix<DT> R2 = R_base2.submatrix(0, 0, 1, 1);  R2.log = log;
+        Matrix<DT>* R_base = &R_base1; Matrix<DT>* R_base_next = &R_base2;
+        Matrix<DT>* R = &R1; Matrix<DT>* R_next = &R2;
 
         Vector<DT> first_col_s = S.subcol(0);
         F.polyhedron_greedy(1.0, wA, first_col_s);
         (*x_hat).copy(first_col_s);
-        R(0,0) = first_col_s.norm2();
+        (*R)(0,0) = first_col_s.norm2();
 
         //Initialize A_best F_best
         std::unordered_set<int64_t> A_best;
@@ -150,13 +166,15 @@ public:
         A_curr.reserve(m);
         
         //Step 2:
-        int64_t max_iter = 5000;
+        //int64_t max_iter = 10000;
         int64_t major_cycles = 0;
-        while(major_cycles++ < max_iter) {
+//        while(major_cycles++ < max_iter) {
+        while(true) {
+            major_cycles++;
             int64_t major_start = rdtsc();
 
             //Snap to zero
-            //TODO: Krause's code uses xhat->norm2() < tolerance,
+            //TODO: Krause's code uses xhat->norm2() < 0,
             DT x_hat_norm2 = x_hat->norm2();
             if(x_hat_norm2*x_hat_norm2 < tolerance) {
                 (*x_hat).set_all(0.0);
@@ -171,17 +189,17 @@ public:
             // Update R to account for modifying S.
             // Let [r0 rho1]^T be the vector to add to r
             // r0 = R' \ (S' * p_hat)
-            Vector<DT> r0 = R_base.subcol(0, R.width(), R.height()); r0.log = log;
+            Vector<DT> r0 = R_base->subcol(0, R->width(), R->height()); r0.log = log;
             S.transpose(); S.mvm(1.0, p_hat, 0.0, r0); S.transpose();
-            R.transpose(); R.trsv(CblasLower, r0); R.transpose();
+            R->transpose(); R->trsv(CblasLower, r0); R->transpose();
 
             // rho1^2 = p_hat' * p_hat - r0' * r0;
             DT phat_norm2 = p_hat.norm2();
             DT r0_norm2 = r0.norm2();
             DT rho1 = sqrt(std::abs(phat_norm2*phat_norm2 - r0_norm2*r0_norm2));
             
-            R.enlarge_m(1); R.enlarge_n(1);
-            R(R.width()-1, R.height()-1) = rho1;
+            R->enlarge_m(1); R->enlarge_n(1);
+            (*R)(R->width()-1, R->height()-1) = rho1;
             S.enlarge_n(1);
 
             // Check current function value
@@ -195,8 +213,10 @@ public:
                 }
             }
             compute_f_cur = compute_f_cur || A_curr.size() != A_best.size();
+            
+            if(compute_f_cur && cycles_since_last_F_eval++ >= eval_F_freq) {
+                cycles_since_last_F_eval = 0;
 
-            if(compute_f_cur) {
                 int64_t eval_start = rdtsc();
                 auto F_curr = F.eval(A_curr);
                 if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
@@ -235,11 +255,19 @@ public:
 
                 break;
             } else {
-                min_norm_point_update_xhat(*x_hat, *x_hat_next,
+                bool switch_R = min_norm_point_update_xhat(*x_hat, *x_hat_next,
                         mu_ws, lambda_ws,
-                        S, R, tolerance,
+                        S, R, R_next, tolerance,
                         T, H, nb, QR_ws,
                         log);
+                if(switch_R) {
+                    std::swap(R, R_next);
+                    std::swap(R_base, R_base_next);
+                }
+            }
+            x_hat->axpy(-1.0, *x_hat_next);
+            if(x_hat->norm2() < eps) {
+                std::cout << "x_hat isn't changing" << std::endl;
             }
             std::swap(x_hat, x_hat_next);
 
@@ -247,10 +275,11 @@ public:
                 log->log("MAJOR TIME", rdtsc() - major_start);
             }
         }
-        if(major_cycles > max_iter) {
-            std::cout << "Timed out." << std::endl;
-        }
+//        if(major_cycles > max_iter) {
+//            std::cout << "Timed out." << std::endl;
+//        }
 
-        return A_best;
+//        return A_best;
+        return A_curr;
     }
 };

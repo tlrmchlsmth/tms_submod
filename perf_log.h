@@ -33,12 +33,17 @@ public:
     }
 
     int64_t get_total(std::string s) const {
+        if(tot_classes.count(s) == 0)
+            return 0;
         return tot_classes.at(s).total;
     }
 
-    double get_total(std::string s, double mult) const {
-        return tot_classes.at(s).total;
+    int64_t get_count(std::string s) const {
+        if(tot_classes.count(s) == 0)
+            return 0;
+        return tot_classes.at(s).count;
     }
+
 
     void print(std::string tag) {
         for(auto a : tot_classes) {

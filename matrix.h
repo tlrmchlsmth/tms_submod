@@ -9,6 +9,7 @@
 #include <iomanip>
 #include "perf/perf.h"
 #include "perf_log.h"
+#include "util.h"
 
 template<class DT> class Vector;
 
@@ -37,7 +38,7 @@ public:
     //
     Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), log(NULL)
     {
-        //TODO: Pad columns so each column is aligned
+        //TODO: Pad so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
         if (ret == 0) {
         } else {
@@ -249,13 +250,13 @@ public:
         }
     }
 
-    void enlarge_m(int64_t m_inc)
+    inline void enlarge_m(int64_t m_inc)
     {
         assert(_m + m_inc <= _base_m && "Cannot add row to matrix.");
         _m += m_inc;
     }
 
-    void enlarge_n(int64_t n_inc)
+    inline void enlarge_n(int64_t n_inc)
     {
         assert(_n + n_inc <= _base_n && "Cannot add colum to matrix.");
         _n += n_inc;
@@ -314,12 +315,10 @@ public:
         assert( t._len >= std::min(_m, _n) && "Cannot perform trap qr.");
         
         for(int64_t i = 0; i < _n; i++) {
-            Vector<DT> xi = this->subcol(i, i, l);
-            t(i) = xi.house_gen();
+            t(i) = house_gen(l, &_values[i*_rs + i*_cs], _rs);
             
             if(i+1 < _n){
-                Matrix A2 = this->submatrix(i, i+1, l, _n-i-1);
-                xi.house_apply(t(i), A2);
+                 house_apply(l, _n-i-1, &_values[i*_rs + i*_cs], _rs, t(i), &_values[i*_rs + (i+1)*_cs], _rs, _cs);
             }
         }
     }
@@ -330,10 +329,11 @@ public:
         assert(t._len >= std::min(_m, _n) && "Cannot apply q from trap qr.");
         assert(_cs == 1 || _rs == 1 && "Only row or column major trap_qr supported");
 
+        int64_t m = A.height();
+        int64_t n = A.width();
+
         for(int64_t i = 0; i < _n; i++) {
-            const Vector<DT> xi = (*this).subcol(i, i, l);
-            Matrix<DT> Ai = A.submatrix(i, 0, l, A.width());
-            xi.house_apply(t(i), Ai);
+            house_apply(l, n, &_values[i*_rs + i*_cs], _rs, t(i), &A._values[i*A._rs], A._rs, A._cs);
         }
     }
 
@@ -388,6 +388,28 @@ public:
         }
 
         this->enlarge_n(-cols_to_remove.size());
+    }
+
+    void remove_cols_trap_oop(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove) const
+    {
+        int64_t n_removed = 1;
+        for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
+            int64_t block_begin = *iter - (n_removed - 1);
+            int64_t block_end = _n - n_removed;
+            if(std::next(iter,1) != cols_to_remove.end()) {
+                block_end = *std::next(iter,1) - n_removed;
+            }
+
+            for(int64_t i = block_begin; i < block_end; i++) {
+                auto col_to_overwrite = dest.subcol(0, i, std::min(i + n_removed + 1, _m));
+                const auto col_to_copy = this->subcol(0, i + n_removed, std::min(i + n_removed + 1, _m));
+                col_to_overwrite.copy(col_to_copy);
+            }
+
+            n_removed++;
+        }
+
+        dest.enlarge_n(-cols_to_remove.size());
     }
 
 
@@ -727,77 +749,47 @@ public:
         }
     }
 
-    void remove_cols_incremental_qr_kressner(const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws)
+    void remove_cols_incremental_qr_kressner(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws) const
     {
         int64_t start, end;
         start = rdtsc();
 
-        //Use tpqr to remove columns in a way that is condusive to applying compact WY transformations
-        
+        //Delete columns and permute rows into the V matrix
+        this->remove_cols_permute_rows_out_of_place(dest, cols_to_remove, V);
+
         //First partition the matrix according to the positions of the columns to be removed
         int64_t n_removed = 1;
         for(auto iter = cols_to_remove.begin(); iter != cols_to_remove.end(); iter++) {
             //trap_begin and trap_end represent the start and end of the trapezoid after shifting it.
-            int64_t source_begin = *iter + 1;
-            if(source_begin == _n) break;
-
-            int64_t source_end = _n;
-            if(std::next(iter,1) != cols_to_remove.end()) {
-                source_end = *std::next(iter,1);
-            }
-            int64_t dest_begin = source_begin - n_removed;
-
-            //Size of the triangular matrix
-            int64_t trap_n = source_end - source_begin;
-
-
-            //First shift the dense block above the trapezoid to the left
-            this->shift_dense_left(0, dest_begin, dest_begin, trap_n, n_removed);
-
-            //Shift the row to annihilate into the V matrix
-            auto r = this->subrow(source_begin-1, source_begin, _n - source_begin);
-            auto v = V.subrow(n_removed-1, source_begin, _n - source_begin);
-            v.copy(r);
+            int64_t trap_begin = *iter + 1 - n_removed;
+            int64_t trap_end = dest.width();
+            if(std::next(iter,1) != cols_to_remove.end())
+                trap_end = *std::next(iter,1) - n_removed;
+            int64_t trap_n = trap_end - trap_begin;
 
             //Early exit conditions
-            if(source_begin == source_end) {
+            if(trap_begin == trap_end) {
                 n_removed++;
                 continue;
             }
 
-            //Vectors to annihilate
-            auto V1 = V.submatrix(0, source_begin, n_removed, trap_n); V1.log = log;
-
-            //Get the upper triangular portion of the current trapezoid
-            auto R11 = this->submatrix(source_begin, source_begin, trap_n, trap_n);
-
-            //Perform a QR factorization annihilating V1
-            auto T1 = T.submatrix(0, source_begin, T.height(), trap_n);
-
+            //TPQR along the diagonal
+            auto V1 = V.submatrix(0, trap_begin, n_removed, trap_n); V1.log = log;
+            auto R11 = dest.submatrix(trap_begin, trap_begin, trap_n, trap_n); R11.log = log;
+            auto T1 = T.submatrix(0, trap_begin, T.height(), trap_n);
             R11.tpqr(V1, T1, 0, nb, ws);
 
-            //Shift triangle up and to the left
-            this->shift_triangle_up(dest_begin, dest_begin + n_removed, trap_n, n_removed);
-            this->shift_triangle_left(dest_begin, dest_begin, trap_n, n_removed);
-            
-            int64_t trail_begin = source_end+1;
+            //Apply Q to the rest of matrix
+            int64_t trail_begin = trap_end;
             if (trail_begin < _n) {
-                //Apply Q to the rest of matrix
-                auto R12 = this->submatrix(source_begin, trail_begin, trap_n, _n - trail_begin);
+                auto R12 = dest.submatrix(trap_begin, trail_begin, trap_n, _n - trail_begin);
                 auto V2 = V.submatrix(0, trail_begin, n_removed,  _n - trail_begin);
-
                 V1.apply_tpq(R12, V2, T1, 0, nb, ws);
-                
-                //Shift trailing block of the matrix upwards
-                this->shift_dense_up(dest_begin, trail_begin, trap_n, _n - trail_begin, n_removed);
             }
 
             n_removed++;
         }
 
-        this->enlarge_n(-cols_to_remove.size());
-        this->enlarge_m(-cols_to_remove.size());
-        
         end = rdtsc();
         if(log != NULL) {
             log->log("REMOVE COLS QR BYTES", _m * _n);
@@ -878,39 +870,55 @@ public:
             //First shift the dense block above and including the diagonal for this trapezoid.
             this->shift_dense_left(0, dest_begin, dest_begin + trap_h-1, trap_n, n_removed);
 
-            //Here we have a trapezoidal matrix.
-            //Perform blocked trapezoidal QR factorization on the current matrix.
-            for(int i = 0; i < trap_n; i += nb) {
-                //Size of the data block along the diagonal
-                int64_t block_m = std::min(nb + trap_h - 1, trap_n - i + trap_h - 1);
-                int64_t block_n = std::min(nb, trap_n - i);
+            //Perform QR factorization on the current trapezoid, and apply it
+            #pragma omp parallel
+            #pragma omp single
+            {
+                for(int i = 0; i < trap_n; i += nb) {
+                    //Size of the data block along the diagonal
+                    int64_t block_m = std::min(nb + trap_h - 1, trap_n - i + trap_h - 1);
+                    int64_t block_n = std::min(nb, trap_n - i);
+                    int64_t offset = trap_h - 1;
 
-                //Shift the part of the current trapezoidal block that we haven't already shifted to the left by n_removed blocks
-                int64_t offset = trap_h - 1;
-                this->shift_trapezoid_left(dest_begin + i + offset, dest_begin + i, block_n, trap_h, n_removed);
+                    auto R11 = this->submatrix(dest_begin + i, dest_begin + i, block_m, block_n);
+                    auto t1  = t.subvector(dest_begin + i, block_n);
 
-                //Perform a trapezoidal QR facorization on the first block along the diagonal.
-                auto R11 = this->submatrix(dest_begin + i, dest_begin + i, block_m, block_n);
-                auto t1  = t.subvector(dest_begin + i, block_n);
-                R11.trap_qr(t1, trap_h);
+                    //Shift part of the current trapezoidal block that hasn't already been  shifted
+                    //And perform a trapezoidal QR facorization on the first block along the diagonal.
+                    #pragma omp task depend(inout: i)
+                    {
+                        this->shift_trapezoid_left(dest_begin + i + offset, dest_begin + i, block_n, trap_h, n_removed);
+                    }
 
-                //Apply Q to the rest of the current (shifted) trapezoidal matrix
-                for(int64_t j = i + nb; j < trap_n; j += nb) {
-                    block_n = std::min(nb, trap_n - j);
-                    //Shift this dense block to the left by n_removed blocks
-                    this->shift_dense_left(dest_begin + i + offset, dest_begin + j, block_m - offset, block_n, n_removed);
+                    #pragma omp task depend(inout: i)
+                    {
+                        R11.trap_qr(t1, trap_h);
+                    }
 
-                    //Apply Q to this block
-                    auto R12 = this->submatrix(dest_begin + i, dest_begin + j, block_m, block_n);
-                    R11.apply_trap_q(R12, t1, trap_h);
-                }
+                    //Apply Q to the rest of the current (shifted) trapezoidal matrix
+                    for(int64_t j = i + nb; j < trap_n; j += nb) {
+                        #pragma omp task depend(in:i) //depend(inout:j)
+                        {
+                            block_n = std::min(nb, trap_n - j);
+                            //Shift this dense block to the left by n_removed blocks
+                            this->shift_dense_left(dest_begin + i + offset, dest_begin + j, block_m - offset, block_n, n_removed);
 
-                //Apply this QR factorization to the rest of the (unshifted) matrix
-                //We do some extra work here because we haven't deleted the columns yet
-                for(int64_t j = source_end; j < _n; j += nb) {
-                    block_n = std::min(nb, _n - j);
-                    auto R12 = this->submatrix(dest_begin + i, j, block_m, block_n);
-                    R11.apply_trap_q(R12, t1, trap_h);
+                            //Apply Q to this block
+                            auto R12 = this->submatrix(dest_begin + i, dest_begin + j, block_m, block_n);
+                            R11.apply_trap_q(R12, t1, trap_h);
+                        }
+                    }
+
+                    //Apply this QR factorization to the rest of the (unshifted) matrix
+                    //We do some extra work here because we haven't deleted the columns yet
+                    for(int64_t j = source_end; j < _n; j += nb) {
+                        #pragma omp task depend(in:i) //depend(inout:j)
+                        {
+                            block_n = std::min(nb, _n - j);
+                            auto R12 = this->submatrix(dest_begin + i, j, block_m, block_n);
+                            R11.apply_trap_q(R12, t1, trap_h);
+                        }
+                    }
                 }
             }
 

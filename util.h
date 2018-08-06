@@ -31,4 +31,35 @@ std::list<int64_t> get_cols_to_remove(int64_t m, double percent_to_remove);
 
 void print_err(double err, int64_t w);
 void print_err(float err, int64_t w);
+
+void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, double* X, int64_t x_rs, int64_t x_cs);
+template<class DT>
+DT house_gen(int64_t m, DT* x, int64_t stride) 
+{
+    DT chi1 = x[0];
+    DT nrm_x2_sqr = 0.0;
+    
+    for(int64_t i = 1; i < m; i++) {
+        DT xi = x[i*stride];
+        nrm_x2_sqr += xi * xi;
+    }
+    DT nrm_x  = sqrt(chi1*chi1 + nrm_x2_sqr);
+
+    DT tau = 0.5;
+    if(nrm_x2_sqr == 0) {
+        x[0] = -chi1;
+        return tau;
+    }
+
+    DT alpha = -sgn(chi1) * nrm_x;
+    DT mult = 1.0 / (chi1 - alpha);
+    
+    for(int64_t i = 1; i < m; i++) {
+        x[i] *= mult;
+    }
+
+    tau = 1.0 /  (0.5 + 0.5 * nrm_x2_sqr * mult * mult);
+    x[0] = alpha;
+    return tau;
+}
 #endif
