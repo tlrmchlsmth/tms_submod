@@ -88,6 +88,9 @@ void benchmark_max_flow()
     std::cout << std::setw(2*fw) <<  "remove cols %";
     std::cout << std::setw(2*fw) <<  "eval f %";
     std::cout << std::setw(2*fw) <<  "greedy %";
+    std::cout << std::setw(2*fw) <<  "MVM MB/S";
+    std::cout << std::setw(2*fw) <<  "TRSV MB/S";
+    std::cout << std::setw(2*fw) <<  "Remove cols MB/S";
 //    std::cout << std::setw(2*fw) << "Major cycles" << std::setw(2*fw) << "Minor Cycles";
     std::cout << std::endl;
 
@@ -103,6 +106,10 @@ void benchmark_max_flow()
         std::vector<double> remove_cols_percent;
         std::vector<double> eval_f_percent;
         std::vector<double> greedy_percent;
+
+        std::vector<double> mvm_bw;
+        std::vector<double> trsv_bw;
+        std::vector<double> remove_cols_bw;
         
 
         for(int64_t r = 0; r < n_reps; r++) {
@@ -126,6 +133,16 @@ void benchmark_max_flow()
             remove_cols_percent.push_back((double) log.get_total("REMOVE COLS QR TIME") / cycles);
             eval_f_percent.push_back((double) log.get_total("EVAL F TIME") / cycles);
             greedy_percent.push_back((double) log.get_total("GREEDY TIME") / cycles);
+
+            mvm_bw.push_back(((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME")));
+            trsv_bw.push_back(((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME")));
+            remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME")));
+//            mvm_bw.push_back(((double) log.get_total("MVM BYTES")));
+//            trsv_bw.push_back(((double) log.get_total("TRSV BYTES")));
+//            remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR BYTES"))); 
+//            mvm_bw.push_back(((double) log.get_total("MVM TIME")));
+//            trsv_bw.push_back(((double) log.get_total("TRSV TIME")));
+//            remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR TIME"))); 
 /*
             std::cout << "*****************" << std::endl;
             log.print("TIME", cycles);
@@ -143,15 +160,19 @@ void benchmark_max_flow()
         std::cout << std::setw(2*fw) << 100 * mean(remove_cols_percent);
         std::cout << std::setw(2*fw) << 100 * mean(eval_f_percent);
         std::cout << std::setw(2*fw) << 100 * mean(greedy_percent);
+        std::cout << std::setw(2*fw) << 3.6e3 * mean(mvm_bw);
+        std::cout << std::setw(2*fw) << 3.6e3 * mean(trsv_bw);
+        std::cout << std::setw(2*fw) << 3.6e3 * mean(remove_cols_bw);
         std::cout << std::endl;
     }
 }
 
 int main() {
     run_validation_suite();
+    benchmark_max_flow();
+
     run_benchmark_suite();
 
-    benchmark_max_flow();
 
     MinNormPoint<double> mnp;
 

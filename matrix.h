@@ -363,7 +363,7 @@ public:
 
         end = rdtsc();
         if(log != NULL) {
-            log->log("REMOVE COLS BYTES", _m * _n);
+            log->log("REMOVE COLS BYTES", 2 * _m * _n);
             log->log("REMOVE COLS TIME", end - start);
         }
     }
@@ -744,7 +744,7 @@ public:
 
         end = rdtsc();
         if(log != NULL) {
-            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR BYTES", 2 * _m * _n);
             log->log("REMOVE COLS QR TIME", end - start);
         }
     }
@@ -792,7 +792,7 @@ public:
 
         end = rdtsc();
         if(log != NULL) {
-            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR BYTES", 2 * _m * _n);
             log->log("REMOVE COLS QR TIME", end - start);
         }
     }
@@ -836,7 +836,7 @@ public:
 
         end = rdtsc();
         if(log != NULL) {
-            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR BYTES", 2 * _m * _n);
             log->log("REMOVE COLS QR TIME", end - start);
         }
     }
@@ -930,7 +930,7 @@ public:
 
         end = rdtsc();
         if(log != NULL) {
-            log->log("REMOVE COLS QR BYTES", _m * _n);
+            log->log("REMOVE COLS QR BYTES", 2 * _m * _n);
             log->log("REMOVE COLS QR TIME", end - start);
         }
     }
