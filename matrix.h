@@ -87,8 +87,7 @@ public:
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
-        auto width  = std::min(nc, _n - col);
-
+        auto width  = std::min(nc, _n - col); 
         return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, false);
     }
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
@@ -749,13 +748,16 @@ public:
         }
     }
 
-    void remove_cols_incremental_qr_kressner(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t nb, Matrix<DT>& ws) const
+    void remove_cols_incremental_qr_kressner(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& Vin, int64_t nb, Matrix<DT>& ws) const
     {
         int64_t start, end;
         start = rdtsc();
+   
+        Matrix<DT> V = Vin.submatrix(0,0,Vin.height(), this->width() - cols_to_remove.size());
 
         //Delete columns and permute rows into the V matrix
         this->remove_cols_permute_rows_out_of_place(dest, cols_to_remove, V);
+
 
         //First partition the matrix according to the positions of the columns to be removed
         int64_t n_removed = 1;
@@ -781,9 +783,9 @@ public:
 
             //Apply Q to the rest of matrix
             int64_t trail_begin = trap_end;
-            if (trail_begin < _n) {
-                auto R12 = dest.submatrix(trap_begin, trail_begin, trap_n, _n - trail_begin);
-                auto V2 = V.submatrix(0, trail_begin, n_removed,  _n - trail_begin);
+            if (trail_begin < dest.width()) {
+                auto R12 = dest.submatrix(trap_begin, trail_begin, trap_n, dest.width() - trail_begin);
+                auto V2 = V.submatrix(0, trail_begin, n_removed,  dest.width() - trail_begin);
                 V1.apply_tpq(R12, V2, T1, 0, nb, ws);
             }
 
@@ -1140,6 +1142,219 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
     start = rdtsc();
 
     dtpmqrt_(&side, &trans, &m, &n, &k, &l, &nb,
+            _values, &ldv, T._values, &ldt,
+            A._values, &lda, B._values, &ldb,
+            ws._values, &info);
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        assert(l == 0); //TODO: Flop count is unknown when l == 0
+        log->log("APPLY TPQR FLOPS", k*k*n + 4*m*k);
+        log->log("APPLY TPQR TIME", end - start);
+    }
+}
+
+template<>
+void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<float>& y)
+{
+    assert(_m == y._len && _n == x._len && "Nonconformal mvm.");
+
+    int64_t start, end;
+    start = rdtsc();
+
+    if(_rs == 1) {
+        cblas_sgemv(CblasColMajor, CblasNoTrans, _m, _n, alpha, _values, _cs, 
+                x._values, x._stride, 
+                beta, y._values, y._stride);
+    } else if(_cs == 1) {
+        cblas_sgemv(CblasRowMajor, CblasNoTrans, _m, _n, alpha, _values, _rs, 
+                x._values, x._stride, 
+                beta, y._values, y._stride);
+    } else {
+        std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
+        exit(1);
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("MVM FLOPS", 2 * _m * _n);
+        log->log("MVM TIME", end - start);
+        log->log("MVM BYTES", sizeof(float) * (_m * _n + 2*_m + _n));
+    }
+}
+template<>
+void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x)
+{
+    assert(_m == _n && _m == x._len && "Nonconformal trsm.");
+
+    int64_t start, end;
+    start = rdtsc();
+    
+    if(_rs == 1) {
+        cblas_strsv(CblasColMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _cs,
+                x._values, x._stride);
+    } else if(_cs == 1) {
+        cblas_strsv(CblasRowMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _rs,
+                x._values, x._stride);
+    } else {
+        std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
+        exit(1);
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("TRSV FLOPS", _m * _n);
+        log->log("TRSV TIME", end - start);
+        log->log("TRSV BYTES", sizeof(float) * (_m * _n / 2 + 2*_m + _n));
+    }
+}
+
+template<>
+void Matrix<float>::mmm(float alpha, const Matrix<float>& A, const Matrix<float>& B, float beta)
+{
+    assert(_m == A._m && _n == B._n && A._n == B._m && "Nonconformal gemm");
+    
+    if((_rs  != 1 && _cs != 1) || (A._rs != 1 && A._cs != 1) || (B._rs != 1 && B._cs != 1)) {
+        std::cout << "GEMM requires row or column major. Exiting..." << std::endl;
+        exit(1);
+    }
+
+    auto ATrans = CblasNoTrans;
+    auto BTrans = CblasNoTrans;
+    int64_t lda = A._rs * A._cs;
+    int64_t ldb = B._rs * B._cs;
+
+    int64_t start, end;
+    start = rdtsc();
+
+    if(_rs == 1) {
+        if(A._rs != 1) ATrans = CblasTrans;
+        if(B._rs != 1) BTrans = CblasTrans;
+
+        cblas_sgemm(CblasColMajor, ATrans, BTrans, _m, _n, A._n,
+                alpha, A._values, lda, B._values, ldb,
+                beta, _values, _cs);
+    } else if(_cs == 1) {
+        if(A._cs != 1) ATrans = CblasTrans;
+        if(B._cs != 1) BTrans = CblasTrans;
+
+        cblas_sgemm(CblasRowMajor, ATrans, BTrans, _m, _n, A._n,
+                alpha, A._values, lda, B._values, ldb,
+                beta, _values, _rs);
+    } else {
+        std::cout << "Only row or column major QR supported. Exiting..." << std::endl;
+        exit(1);
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("MMM FLOPS", 2 * _m * _n * A._n);
+        log->log("MMM TIME", end - start);
+        log->log("MMM BYTES", sizeof(float) * (2*_m *_n + _m * A._n + A._n * _n)); 
+    }
+}
+
+template<>
+void Matrix<float>::qr(Vector<float>& t)
+{
+    assert(t._stride == 1 && t._len >= std::min(_m, _n) && "Cannot perform qr.");
+    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
+
+    int64_t start, end;
+    start = rdtsc();
+
+    if(_rs == 1) {
+        LAPACKE_sgeqrf(LAPACK_COL_MAJOR, _m, _n, _values, _cs, t._values);
+    } else /*if(_cs == 1)*/ {
+        LAPACKE_sgeqrf(LAPACK_ROW_MAJOR, _m, _n, _values, _rs, t._values);
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
+        log->log("QR TIME", end - start);
+    }
+}
+
+
+//Use tpqrt to annihilate rectangle above the triangle.
+//Then stores the reflectors in that block
+//TODO: handle row-major
+template<>
+void Matrix<float>::tpqr(Matrix<float>& B, Matrix<float>& T, int64_t l_in, int64_t nb_in, Matrix<float>& ws)
+{
+    assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
+    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
+    assert(_rs == 1 && "Only column major qr supported");
+
+    int m = B.height();
+    int n = B.width();
+    int l = l_in;
+    int nb = std::min(B.width(), nb_in);
+    int lda = this->_cs;
+    int ldt = T._cs;
+    int ldb = B._cs;
+    int info;
+
+    int64_t start, end;
+    start = rdtsc();
+
+    stpqrt_(&m, &n, &l, &nb,
+            _values, &lda, B._values, &ldb, T._values, &ldt,
+            ws._values, &info);
+
+    end = rdtsc();
+
+    if(log != NULL) {
+//        log->log("TPQR FLOPS", 2*_m(_n*_n - 2*_n/3));
+        log->log("TPQR TIME", end - start);
+    }
+}
+
+template<>
+void Matrix<float>::apply_tpq(Matrix<float>& A, Matrix<float>& B, const Matrix<float>& T, int64_t l_in, int64_t nb_in, Matrix<float>& ws) const
+{
+    int m = B.height();
+    int n = B.width();
+    int k = A.height();
+    int l = l_in;
+    
+    // A is k-by-n, B is m-by-n and V is m-by-k.
+    std::cout << "_m " << _m << " m " << m << std::endl;
+    std::cout << "_n " << _n << " k " << k << std::endl;
+    std::cout << "A wid " << A.width() << " n " << n << std::endl;
+    std::cout << "T hei " << T.height() << " nb_in " << nb_in << std::endl;
+    std::cout << "T wid " << T.width() << " k " << k << std::endl;
+    assert(_m == m && _n == k && A.width() == n && T.height() >= nb_in && T.width() == k && "Nonconformal apply tpq");
+    assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
+    assert(_rs == 1 && "Only column major qr supported");
+
+
+    //Apply from the left
+    int nb = std::min(nb_in, A.height());
+   
+    //TODO: make sure ws has enough size 
+    //TODO 2: handle row stride
+    assert(_rs == 1); 
+
+
+    char side = 'L';
+    char trans = 'T'; //WHY??
+    int ldv = _cs;
+    int ldt = T._cs;
+    int lda = A._cs;
+    int ldb = B._cs;
+    int info;
+
+    int64_t start, end;
+    start = rdtsc();
+
+    stpmqrt_(&side, &trans, &m, &n, &k, &l, &nb,
             _values, &ldv, T._values, &ldt,
             A._values, &lda, B._values, &ldb,
             ws._values, &info);
