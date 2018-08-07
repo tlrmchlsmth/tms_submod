@@ -177,7 +177,7 @@ int main() {
     MinNormPoint<double> mnp;
 
     std::cout << "Min cut problem\n";
-    MinCut<double> problem(1000, 0.2);
+    MinCut<double> problem(1000, 15, 0.5, 0.05);
     mnp.minimize(problem, 1e-10, 1e-5, true, NULL);
 
     std::cout << "Cardinality problem\n";

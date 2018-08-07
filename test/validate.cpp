@@ -139,42 +139,36 @@ void val_mincut()
         //Solve problem with lemon
         ListDigraph g;
         ListDigraph::ArcMap<double> capacity(g);
-        int64_t n = problem.adjacency.height();
+        int64_t n = problem._n;
 
-        //Add interior nodes.
+        //Create nodes and lookup table for interior nodes.
         std::vector<int> node_ids;
-        node_ids.reserve(problem.adjacency.height());
+        node_ids.reserve(n);
         for(int i = 0; i < n; i++) {
             auto node = g.addNode();
             node_ids.push_back(g.id(node));
         }
+        ListDigraph::Node source = g.addNode();
+        ListDigraph::Node sink = g.addNode();
 
-        //Add interior edges
+        //Add edges from outgoing adjacency lists
         for(int i = 0; i < n; i++) {
-            for(int j = 0; j < n; j++) {
-                if(problem.adjacency(i,j) > 0.0) {
-                    auto arc = g.addArc(g.nodeFromId(node_ids[i]), g.nodeFromId(node_ids[j]));
-                    capacity[arc] = problem.adjacency(i,j);
+            for(auto b : problem.adj_out[i]) {
+                if(b.index == n+1) {
+                    //Edge to sink
+                    auto arc = g.addArc(g.nodeFromId(node_ids[i]), sink);
+                    capacity[arc] = b.weight;
+                } else {
+                    //Edge to interior node
+                    auto arc = g.addArc(g.nodeFromId(node_ids[i]), g.nodeFromId(node_ids[b.index]));
+                    capacity[arc] = b.weight;
                 }
             }
         }
-
-        //Add edges from source
-        ListDigraph::Node source = g.addNode();
-        for(int i = 0; i < n; i++) {
-            if(problem.edges_from_source(i) > 0.0) {
-               auto arc = g.addArc(source, g.nodeFromId(node_ids[i]));
-                capacity[arc] = problem.edges_from_source(i);
-            }
-        }
-
-        //Add edges to sink
-        ListDigraph::Node sink = g.addNode();
-        for(int i = 0; i < n; i++) {
-            if(problem.edges_to_sink(i) > 0.0) {
-                auto arc = g.addArc(g.nodeFromId(node_ids[i]), sink);
-                capacity[arc] = problem.edges_to_sink(i);
-            }
+        //Add edges from source node
+        for(auto b : problem.adj_out[n]) {
+            auto arc = g.addArc(source, g.nodeFromId(node_ids[b.index]));
+            capacity[arc] = b.weight;
         }
 
         Preflow<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);

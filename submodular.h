@@ -9,6 +9,8 @@
 #include "vector.h"
 #include "matrix.h"
 
+
+
 template<class DT>
 class FV2toR {
 protected:
@@ -24,10 +26,9 @@ public:
         for(int i = 0; i < n; i++) 
             permutation.push_back(i);
     }
-    virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
-    virtual DT eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) = 0;
-    virtual std::unordered_set<int64_t> get_set() = 0;
-    virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
+    virtual DT eval(const std::unordered_set<int64_t>& A) const = 0;
+    virtual std::unordered_set<int64_t> get_set() const = 0;
+    virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) const  {
         std::unordered_set<int64_t> Ab = A;
         Ab.insert(b);
         DT FAb = this->eval(Ab);
@@ -60,7 +61,7 @@ public:
     int64_t _n;
     IDivSqrtSize(int64_t n) : _n(n), FV2toR<DT>(n) {}
 
-    DT eval(const std::unordered_set<int64_t>& A) {
+    DT eval(const std::unordered_set<int64_t>& A) const {
         DT val = 0.0;
         for(auto i : A) {
             val += i / sqrt(A.size());
@@ -68,21 +69,7 @@ public:
         return val;
     }
 
-    DT eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) {
-        DT val = 0.0;
-        int n = 0;
-        for(auto i : A) {
-            if (condition(i)) {
-                val += i;
-                n += 1;
-            }
-        }
-
-        if(n != 0) val = val / sqrt(n); 
-        return val;
-    }
-
-    std::unordered_set<int64_t> get_set() {
+    std::unordered_set<int64_t> get_set() const {
         std::unordered_set<int64_t> V;
         V.reserve(_n);
         for(int i = 0; i < _n; i++) 
@@ -91,96 +78,38 @@ public:
     }
 };
 
+template<class DT>
+class Edge {
+public:
+    int64_t index;
+    DT weight;
+    Edge(int64_t i, DT w) : index(i), weight(w) {}
+};
+
 
 //submodular function for a flow network
 //1 source and 1 sink, 2 groups
 template<class DT>
 class MinCut : public FV2toR<DT> {
 public:
-    Matrix<DT> adjacency;
-    Vector<DT> edges_from_source;
-    Vector<DT> edges_to_sink;
+    //Each node has a list of edges in and a list of edges out.
+    //Each edge has an index and a weight, and we will have the source and sink node have index n and n+1, respectively.
+    std::vector<std::vector<Edge<DT>>> adj_in;
+    std::vector<std::vector<Edge<DT>>> adj_out;
     int64_t _n;
     DT baseline;
     
     //Generate a nonsymmetric random graph.
-    MinCut(int64_t n, double connectivity_factor) :
-        FV2toR<DT>(n),
-        _n(n), adjacency(Matrix<DT>(n,n)), baseline(0.0),
-        edges_from_source(Vector<DT>(n)),
-        edges_to_sink(Vector<DT>(n)) 
-    {
+    MinCut(int64_t n, int64_t m,  double cfa, double cfb) : FV2toR<DT>(n), _n(n), baseline(0.0) {
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
 
-        adjacency.set_all(0.0);
-        edges_from_source.set_all(0.0);
-        edges_to_sink.set_all(0.0);
-
-        //Setup edges for source and sink nodes
-        for(int i = 0; i < n/2; i++) {
-            if(dist(gen) < connectivity_factor) {
-                edges_from_source(i) = dist(gen);
-                baseline += edges_from_source(i);
-            }
+        //Initialize adjacency lists
+        for(int64_t i = 0; i < n+2; i++) {
+            adj_in.emplace_back(std::vector<Edge<DT>>());
+            adj_out.emplace_back(std::vector<Edge<DT>>());
         }
-        for(int i = n/2; i < n; i++) {
-            if(dist(gen) < connectivity_factor)
-                edges_to_sink(i) = dist(gen);
-
-        }
-
-        //Setup edges for other nodes
-        /*
-        for(int j = 0; j < n; j++) {
-            for(int i = 0; i < n; i++) {
-                adjacency(i,j) = 0.0;
-                if(dist(gen) < connectivity_factor)
-                    adjacency(i,j) = dist(gen);
-            }
-        }*/
-
-        for(int j = 0; j < n/2; j++) {
-            for(int i = 0; i < n/2; i++) {
-                if(dist(gen) < connectivity_factor)
-                    adjacency(i,j) = dist(gen);
-            }
-        }
-
-        for(int j = n/2; j < n; j++) {
-            for(int i = n/2; i < n; i++) {
-                if(dist(gen) < connectivity_factor)
-                    adjacency(i,j) = dist(gen);
-            }
-        }
-
-        //Setup edges between groups
-        std::uniform_real_distribution<double> zero_to_quarter_n(0.0, n/4);
-        std::uniform_real_distribution<double> zero_to_half_n(0.0, n/2);
-        int64_t n_connections_between_groups = (int64_t) zero_to_quarter_n(gen);
-        for(int64_t i = 0; i < n_connections_between_groups; i++) {
-            int64_t x = zero_to_half_n(gen);
-            int64_t y = zero_to_half_n(gen);
-            adjacency(x,y + n/2) = dist(gen);
-        }
-    }
-
-    //Generate a nonsymmetric random graph.
-    MinCut(int64_t n, int64_t m,  double cfa, double cfb) : 
-        FV2toR<DT>(n),
-        _n(n), adjacency(Matrix<DT>(n,n)), baseline(0.0),
-        edges_from_source(Vector<DT>(n)),
-        edges_to_sink(Vector<DT>(n)) 
-    {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
-
-        adjacency.set_all(0.0);
-        edges_from_source.set_all(0.0);
-        edges_to_sink.set_all(0.0);
-
 
         //Setup edges from source nodes
         int64_t k = n / m; //number of groups
@@ -191,14 +120,18 @@ public:
 
         for(int64_t i = 0; i < m; i++) {
             if(dist(gen) / sqrt(m) < cfa) {
-                edges_from_source(i) = dist(gen);
-                baseline += edges_from_source(i);
+                double weight = dist(gen);
+                adj_in[i].emplace_back(Edge<DT>(n, weight));
+                adj_out[n].emplace_back(Edge<DT>(i, weight));
+                baseline += weight;
             }
         }
         for(int64_t i = m; i < 2*m; i++) {
             if(dist(gen) < cfb) {
-                edges_from_source(i) = dist(gen);
-                baseline += edges_from_source(i);
+                double weight = dist(gen);
+                adj_in[i].emplace_back(Edge<DT>(n, weight));
+                adj_out[n].emplace_back(Edge<DT>(i, weight));
+                baseline += weight;
             }
         }
 
@@ -207,18 +140,24 @@ public:
             for(int i = 0; i < m; i++) {
                 for(int j = 0; j < m; j++) {
                     //Create edges within group
-                    if(dist(gen) < cfa) {
-                        adjacency(i + p*m, j + p*m) = dist(gen);
+                    if(i != j && dist(gen) < cfa) {
+                        double weight = dist(gen);
+                        adj_out[i+p*m].emplace_back(Edge<DT>(j+p*m, weight));
+                        adj_in[j+p*m].emplace_back(Edge<DT>(i+p*m, weight));
                     }
 
                     //Create edge with previous group
                     if(p > 0 && dist(gen) < cfb) {
-                        adjacency(i + p*m, j + (p-1)*m) = dist(gen);
+                        double weight = dist(gen);
+                        adj_out[i+p*m].emplace_back(Edge<DT>(j+(p-1)*m, weight));
+                        adj_in[j+(p-1)*m].emplace_back(Edge<DT>(i+p*m, weight));
                     }
 
                     //Create edge with next group
                     if(p < k-1 && dist(gen) < cfb) {
-                        adjacency(i + p*m, j + (p+1)*m) = dist(gen);
+                        double weight = dist(gen);
+                        adj_out[i+p*m].emplace_back(Edge<DT>(j+(p+1)*m, weight));
+                        adj_in[j+(p+1)*m].emplace_back(Edge<DT>(i+p*m, weight));
                     }
 
                 }
@@ -228,93 +167,62 @@ public:
         //Setup edges to sink nodes.
         for(int64_t i = 0; i < m; i++) {
             if(dist(gen) / sqrt(m) < cfa) {
-                edges_to_sink(n-i-1) = dist(gen);
+                double weight = dist(gen);
+                adj_out[n-i-1].emplace_back(Edge<DT>(n+1, weight));
+                adj_in[n+1].emplace_back(Edge<DT>(n-i-1, weight));
             }
         }
         
         for(int64_t i = m; i < 2*m; i++) {
             if(dist(gen) < cfb) {
-                edges_to_sink(n-i) = dist(gen);
+                double weight = dist(gen);
+                adj_out[n-i].emplace_back(Edge<DT>(n+1, weight));
+                adj_in[n+1].emplace_back(Edge<DT>(n-i, weight));
             }
         }
     }
 
-    DT eval(const std::unordered_set<int64_t>& A) {
+    DT eval(const std::unordered_set<int64_t>& A) const {
         DT val = 0.0;
-        for(auto a : A){
-            //Edges within graph
-            for(int64_t i = 0; i < _n; i++) {
-                if(a != i && A.count(i) == 0) {
-                    val += adjacency(a,i);
-                }
+        for(auto a : A) {
+            for(auto b : adj_out[a]) {
+                if(A.count(b.index) == 0)
+                    val += b.weight;
             }
-            //Edge to sink
-            val += edges_to_sink(a);
+        }
+        for(auto b : adj_out[_n]) {
+            if(A.count(b.index) == 0)
+                val += b.weight;
         }
 
-        //Edges from source
-        for(int64_t i = 0; i < _n; i++) {
-            if(A.count(i) == 0) {
-                val += edges_from_source(i);
-            }
-        }
-        
         return val - baseline;
     }
 
-    DT eval(const std::unordered_set<int64_t>& A, std::function<bool(int64_t)> condition) {
-        DT val = 0.0;
-        for(auto a : A){
-            if(!condition(a)) continue;
-
-            //Edges within graph
-            for(int64_t i = 0; i < _n; i++) {
-                if(a != i && (A.count(i) == 0 || !condition(i))) {
-                    val += adjacency(a, i);
-                }
-            }
-
-            //Edge to sink
-            val += edges_to_sink(a);
-        }
-        
-        //Edges from source
-        for(int64_t i = 0; i < _n; i++) {
-            if(!condition(i) || A.count(i) == 0) {
-                val += edges_from_source(i);
-            }
-        }
-
-        //return val;
-        return val - baseline;
-    }
-
-    DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
+    DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) const {
 
         //Gain from adding b
         DT gain = 0.0;
-        for(int64_t i = 0; i < adjacency.height(); i++) {
-            if(b != i && A.count(i) == 0) {
-                gain += adjacency(b, i);
-            }
+//        #pragma omp parallel for reduction(+:gain)
+        for(int64_t i = 0; i < adj_out[b].size(); i++) {
+            if(A.count(adj_out[b][i].index) == 0)
+                gain += adj_out[b][i].weight;
         }
-        gain += edges_to_sink(b);
 
         //Loss from adding b
         DT loss = 0.0;
-        for(auto a : A){
-            loss -= adjacency(a, b);
+//        #pragma omp parallel for reduction(+:loss)
+        for(int64_t i = 0; i < adj_in[b].size(); i++) {
+            if(adj_in[b][i].index == _n || A.count(adj_in[b][i].index) != 0)
+                loss -= adj_in[b][i].weight;
         }
-        loss -= edges_from_source(b);
 
         return FA + gain + loss;
     }
 
-    std::unordered_set<int64_t> get_set() {
+    std::unordered_set<int64_t> get_set() const {
         std::unordered_set<int64_t> V;
-        int64_t n = adjacency.height();
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
+        V.reserve(_n);
+        for(int i = 0; i < _n; i++) 
             V.insert(i);
         return V;
     }
