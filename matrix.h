@@ -979,7 +979,7 @@ void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vec
 template<>
 void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
 {
-    assert(_m == _n && _m == x._len && "Nonconformal trsm.");
+    assert(_m == _n && _m == x._len && "Nonconformal trsv.");
 
     int64_t start, end;
     start = rdtsc();
@@ -1187,7 +1187,7 @@ void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<
 template<>
 void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x)
 {
-    assert(_m == _n && _m == x._len && "Nonconformal trsm.");
+    assert(_m == _n && _m == x._len && "Nonconformal trsv.");
 
     int64_t start, end;
     start = rdtsc();

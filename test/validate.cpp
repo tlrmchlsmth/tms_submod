@@ -129,7 +129,9 @@ void val_mincut()
     std::cout << std::setw(w) << "n" << std::setw(w) << "MNP solution" << std::setw(w) << "Lemon solution" << std::setw(w) << "Difference" << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         //Initialize min cut problem
-        MinCut<double> problem(n, 16, 0.5, 0.05);
+//        MinCut<double> problem(n, 16, 0.5, 0.05);
+        MinCut<double> problem(n);
+        problem.WattsStrogatz(16, 0.25);
         
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
@@ -139,7 +141,6 @@ void val_mincut()
         //Solve problem with lemon
         ListDigraph g;
         ListDigraph::ArcMap<double> capacity(g);
-        int64_t n = problem._n;
 
         //Create nodes and lookup table for interior nodes.
         std::vector<int> node_ids;
@@ -154,6 +155,7 @@ void val_mincut()
         //Add edges from outgoing adjacency lists
         for(int i = 0; i < n; i++) {
             for(auto b : problem.adj_out[i]) {
+                assert(b.index != n);
                 if(b.index == n+1) {
                     //Edge to sink
                     auto arc = g.addArc(g.nodeFromId(node_ids[i]), sink);
@@ -165,15 +167,24 @@ void val_mincut()
                 }
             }
         }
+
         //Add edges from source node
         for(auto b : problem.adj_out[n]) {
-            auto arc = g.addArc(source, g.nodeFromId(node_ids[b.index]));
-            capacity[arc] = b.weight;
+            if(b.index == n+1) {
+                //Edge to sink
+                auto arc = g.addArc(source, sink);
+                capacity[arc] = b.weight;
+            } else {
+                //Edge to interior node
+                auto arc = g.addArc(source, g.nodeFromId(node_ids[b.index]));
+                capacity[arc] = b.weight;
+            }
         }
 
         Preflow<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
         lemon_prob.run();
         double lemon_sol = lemon_prob.flowValue();
+        
 
         std::cout << std::setw(w) << n << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
         print_err(mnp_sol - lemon_sol, w);
