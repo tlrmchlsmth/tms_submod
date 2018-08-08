@@ -151,6 +151,15 @@ public:
         return max;
     }
 
+    bool has_nan() const
+    {
+        for(int i = 0; i < _len; i++) {
+            if(std::isnan((*this)(i)))
+                return true;
+        }
+        return false;
+    }
+
     // Routines for later specialization
     DT norm2() const
     {

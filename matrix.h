@@ -623,6 +623,9 @@ public:
 
     void remove_cols_permute_rows_out_of_place(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& V) const
     {
+        if(cols_to_remove.size() == 0) {
+            dest.copy_upper_tri(*this);    
+        }
         //Copy initial triangle
         auto src_tri = this->submatrix(0, 0, cols_to_remove.front(), cols_to_remove.front());
         auto dest_tri = dest.submatrix(0, 0, cols_to_remove.front(), cols_to_remove.front());

@@ -89,10 +89,11 @@ public:
                 if((1-beta) * lambda(i) + beta * mu(i) < tolerance)
                     toRemove.push_back(i);
             }
+            if(toRemove.size() == 0) toRemove.push_back(0);
             if(log) {
-                log->log("TOREMOVEPUSHBACK TIME", rdtsc() - remove_start);
-            } 
-
+                log->log("MISC TIME", rdtsc() - remove_start);
+            }
+            
             //Remove unnecessary columns from S and fixup R so that S = QR for some Q
             S.remove_cols(toRemove);
             R_next->_m = R->_m;
@@ -121,7 +122,20 @@ public:
         std::unordered_set<int64_t> A;
         A.reserve(m);
 
+        //Characteristic vector
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
+
         Vector<DT> wA(m);
+        for(int64_t i = 0; i < m; i++) {
+            if(dist(gen) > .5) {
+                wA(i) = 1.0;
+                A.insert(i);
+            } else {
+                wA(i) = 0.0;
+            }
+        }
 
         //Workspace for x_hat and next x_hat
         Vector<DT> xh1(m);
@@ -154,11 +168,11 @@ public:
         Matrix<DT>* R = &R1; Matrix<DT>* R_next = &R2;
 
         Vector<DT> first_col_s = S.subcol(0);
-        F.polyhedron_greedy(1.0, wA, first_col_s);
+        F.polyhedron_greedy(1.0, wA, first_col_s, log);
         (*x_hat).copy(first_col_s);
         (*R)(0,0) = first_col_s.norm2();
 
-        //Initialize A_best F_best
+        //Initialize A_best and F_best
         std::unordered_set<int64_t> A_best;
         A_best.reserve(m);
         DT F_best = std::numeric_limits<DT>::max();
@@ -183,7 +197,7 @@ public:
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.log = log;
             int64_t greedy_start = rdtsc();
-            F.polyhedron_greedy(-1.0, *x_hat, p_hat);
+            F.polyhedron_greedy(-1.0, *x_hat, p_hat, log);
             if(log) { log->log("GREEDY TIME", rdtsc() - greedy_start); }
 
             // Update R to account for modifying S.
@@ -197,7 +211,7 @@ public:
             DT phat_norm2 = p_hat.norm2();
             DT r0_norm2 = r0.norm2();
             DT rho1 = sqrt(std::abs(phat_norm2*phat_norm2 - r0_norm2*r0_norm2));
-            
+
             R->enlarge_m(1); R->enlarge_n(1);
             (*R)(R->width()-1, R->height()-1) = rho1;
             S.enlarge_n(1);
@@ -214,9 +228,7 @@ public:
             }
             compute_f_cur = compute_f_cur || A_curr.size() != A_best.size();
             
-            if(compute_f_cur && cycles_since_last_F_eval++ >= eval_F_freq) {
-                cycles_since_last_F_eval = 0;
-
+            if(compute_f_cur) {
                 int64_t eval_start = rdtsc();
                 auto F_curr = F.eval(A_curr);
                 if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
@@ -254,6 +266,9 @@ public:
                 }
 
                 break;
+            } else if (std::abs(xt_p + xt_x) < tolerance) {
+                //We had to go through 0 to get to p_hat from x_hat.
+                x_hat_next->set_all(0.0);
             } else {
                 bool switch_R = min_norm_point_update_xhat(*x_hat, *x_hat_next,
                         mu_ws, lambda_ws,
@@ -265,6 +280,8 @@ public:
                     std::swap(R_base, R_base_next);
                 }
             }
+            if(x_hat_next->has_nan()) exit(1);
+
             x_hat->axpy(-1.0, *x_hat_next);
             if(x_hat->norm2() < eps) {
                 std::cout << "x_hat isn't changing" << std::endl;
