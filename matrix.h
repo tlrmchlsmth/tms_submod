@@ -80,6 +80,12 @@ public:
         return _values[row * _rs + col * _cs];
     }
 
+    inline DT* lea (int64_t row, int64_t col) 
+    {
+        assert(row < _m && col < _n && "Matrix index out of bounds");
+        return &_values[row * _rs + col * _cs];
+    }
+
     //
     // Acquiring submatrices, subvectors
     //
@@ -284,6 +290,11 @@ public:
     void qr(Vector<DT>& t)
     {
         std::cout << "QR factorization not implemented for datatype" << std::endl;
+        exit(1);
+    }
+    void chol()
+    {
+        std::cout << "Cholesky factorization not implemented for datatype" << std::endl;
         exit(1);
     }
 
@@ -685,6 +696,7 @@ public:
     }
 
     //Remove columns and rows beforehand, and use tpqr to annihilate rows, task parallel version
+    //ws must be at least nb by n
     void remove_cols_incremental_qr_tasks_kressner(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& V, int64_t task_size, int64_t nb, Matrix<DT>& ws) const
     {
         int64_t start, end;
@@ -745,6 +757,7 @@ public:
         }
 
         end = rdtsc();
+        end++;
         if(log != NULL) {
             log->log("REMOVE COLS QR BYTES", 2 * _m * _n);
             log->log("REMOVE COLS QR TIME", end - start);
@@ -1073,6 +1086,35 @@ void Matrix<double>::qr(Vector<double>& t)
     if(log != NULL) {
         log->log("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
         log->log("QR TIME", end - start);
+    }
+}
+
+template<>
+void Matrix<double>::chol()
+{
+    assert(_m == _n);
+    assert(_rs == 1 || _cs == 1);
+/*    char uplo = 'U';
+    int n = _n;
+    int lda = _cs;
+    int inf;*/
+//    dpotrf_(&uplo, &n, _values, &lda, &inf);
+    if(_rs == 1) {
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', _m,  _values, _cs);
+    } else /*if(_cs == 1)*/ {
+        LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'U', _m,  _values, _rs);
+    }
+}
+template<>
+void Matrix<float>::chol()
+{
+    assert(_m == _n);
+    assert(_rs == 1 || _cs == 1);
+
+    if(_rs == 1) {
+        LAPACKE_spotrf(LAPACK_COL_MAJOR, 'U', _m,  _values, _cs);
+    } else /*if(_cs == 1)*/ {
+        LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'U', _m,  _values, _rs);
     }
 }
 

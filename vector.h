@@ -73,6 +73,12 @@ public:
         return _values[index * _stride];
     }
 
+    inline DT* lea (int64_t index)
+    {
+        assert(index < _len && "Vector index out of bounds.");
+        return &_values[index * _stride];
+    }
+
     inline int64_t length()
     {
         return _len;
@@ -378,37 +384,6 @@ void Vector<double>::copy(const Vector<double> from) {
     if(log != NULL) {
         log->log("VECTOR TIME", rdtsc() - start);
         log->log("VECTOR BYTES", 2*sizeof(double)*_len);
-    }
-}
-
-template<>
-inline void Vector<double>::house_apply(double tau, Matrix<double>& X) const {
-    int64_t start = rdtsc();
-
-    #pragma omp parallel for
-    for(int j = 0; j < X.width(); j++) {
-        //BLAS VERSION
-//#define BLAS_HOUSE        
-#ifdef BLAS_HOUSE
-        double vt_x = X(0,j) + cblas_ddot(_len-1, &_values[1], _stride, &X._values[X._rs + j*X._cs], X._rs);
-        double alpha = tau * vt_x;
-        X(0, j) -= alpha;
-        cblas_daxpy(_len-1, -alpha, &_values[1], _stride, &X._values[X._rs + j*X._cs], X._rs);
-#else
-        //IPP version
-        double vt_x;
-        ippsDotProd_64f(&_values[1], &X._values[1 + j*X._cs], _len-1, &vt_x);
-        vt_x += X(0,j);
-        double alpha = tau * vt_x;
-        X(0, j) -= alpha;
-        ippsAddProductC_64f(&_values[1], -alpha, &X._values[1 + j*X._cs], _len-1);
-#endif
-    }
-
-    if(log) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR FLOPS", 4*_len * X.width());
-        log->log("VECTOR BYTES", sizeof(double)*(_len + 2*X.width() * X.height()));
     }
 }
 

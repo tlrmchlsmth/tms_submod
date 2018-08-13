@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_set>
 #include <functional>
+#include <cmath>
 
 #include "vector.h"
 #include "matrix.h"
@@ -12,30 +13,30 @@
 
 
 template<class DT>
-class FV2toR {
+class SubmodularFunction {
 protected:
     //Workspace for the greedy algorithm
     std::unordered_set<int64_t> A;
     std::vector<int64_t> permutation;
 
 public:
-    FV2toR(int64_t n) 
+    SubmodularFunction(int64_t n) 
     {
         A.reserve(n);
         permutation.reserve(n);
         for(int i = 0; i < n; i++) 
             permutation.push_back(i);
     }
-    virtual DT eval(const std::unordered_set<int64_t>& A) const = 0;
+    virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
     virtual std::unordered_set<int64_t> get_set() const = 0;
-    virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) const  {
+    virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
         std::unordered_set<int64_t> Ab = A;
         Ab.insert(b);
         DT FAb = this->eval(Ab);
         return FAb;
     }
 
-    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* log) 
+    virtual void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* log) 
     {
         int64_t start_a = rdtsc();
         //sort weights
@@ -56,6 +57,192 @@ public:
             A.insert(permutation[i]);
             FA_old = FA;
         }
+        
+        A.clear();
+        if(log) {
+            log->log("MARGINAL GAIN TIME", rdtsc() - start_b);
+        }
+    }
+};
+
+//m: # of states. n: number of variables
+template<class DT>
+class LogDet : public SubmodularFunction<DT> {
+public:
+    int64_t m;
+    int64_t n;
+
+    Matrix<DT> cov;     //Covariance matrix
+
+    Matrix<DT> KV;      //Cholesky factorization of the covariance matrix of S
+    Matrix<DT> KA_base;      //Workspace for the cholesky factorization of the covariance matrix of the random variables in set A
+    Matrix<DT> KAc_base;     //Workspace for the cholesky factorization of the covariance matrix of the random variables not in set A
+
+    DT log_det_cov;     //Log determinant of KV
+
+    Matrix<DT> T_ws;
+    Matrix<DT> V_ws;
+    Matrix<DT> ws;
+
+    int64_t nb;
+
+    DT log_determinant(Matrix<DT>& A)
+    {
+        DT val = 0.0;
+        for(int64_t i = 0; i < std::min(A.height(), A.width()); i++) {
+            val += log(A(i,i)*A(i,i));
+        }
+        return val;
+    }
+
+    LogDet(int64_t n_in) : SubmodularFunction<DT>(n_in),
+                                         n(n_in), cov(n_in, n_in),
+                                         KA_base(n_in, n_in), KAc_base(n_in, n_in), KV(n_in, n_in),
+                                         log_det_cov(0.0),
+                                         nb(64), T_ws(64, n_in), V_ws(n_in, n_in), ws(64, n_in)
+    {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+        //Create a covariance matrix. 
+        //Every element must be positive and it must be symmetric positive definite
+        //
+        //We accomplish this by:
+        //  1. Start with a random diagonal matrix
+        //  2. Hit it with an orthogonal similarity transformation
+        cov.set_all(0.0);
+        for(int64_t i = 0; i < n; i++)
+            cov(i,i) = dist(gen);
+
+        //Our orthogonal transformation is a single reflection
+        Vector<DT> v(n);
+        v.fill_rand(gen, dist);
+        v(0) = -v(0); // ensure that every element of the resulting matrix is positive
+        v.scale(1.0 / v.norm2());
+
+        v.house_apply(v(0), cov);
+        auto cov_T = cov.transposed();
+        v.house_apply(v(0), cov_T);
+
+        //Get cholesky factorization of the covariance matrix
+        KV.copy(cov);
+        KV.chol();
+        KV.set_subdiagonal(0.0);
+
+        //Doublecheck
+        Vector<double> y(n_in);
+        y.fill_rand();
+        Vector<double> cov_y(n_in);
+        cov.mvm(1.0, y, 0.0, cov_y); 
+        auto KT = KV.transposed();
+        Vector<double> Ky(n_in);
+        Vector<double> KTKy(n_in);
+        KV.mvm(1.0, y, 0.0, Ky); 
+        KT.mvm(1.0, Ky, 0.0, KTKy);
+        KTKy.axpy(-1.0, cov_y);
+        assert(KTKy.norm2() < 1e-10);
+        
+        //Check 
+        log_det_cov = log_determinant(KV);
+    }
+
+    DT eval(const std::unordered_set<int64_t>& A) {
+        if(A.size() == 0 || A.size() == n) return 0.0; //Fast-path so stuff doesn't break with empty matrices
+
+        std::list<int64_t> cols_to_remove_KA;
+        std::list<int64_t> cols_to_remove_KAc;
+        for(int64_t i = 0; i < n; i++) {
+            if(A.count(i) == 0) cols_to_remove_KA.push_back(i);
+            else cols_to_remove_KAc.push_back(i);
+        }
+
+        auto KA = KA_base.submatrix(0,0,n,n);
+        KV.remove_cols_incremental_qr_tasks_kressner(KA, cols_to_remove_KA, T_ws, V_ws, 64, 32, ws);
+        auto KAc = KAc_base.submatrix(0,0,n,n);
+        KV.remove_cols_incremental_qr_tasks_kressner(KAc, cols_to_remove_KAc, T_ws, V_ws, 64, 32, ws);
+
+        return log_determinant(KA) + log_determinant(KAc) - log_det_cov;
+    }
+
+    std::unordered_set<int64_t> get_set() const {
+        std::unordered_set<int64_t> V;
+        V.reserve(n);
+        for(int i = 0; i < n; i++) 
+            V.insert(i);
+        return V;
+    }
+
+    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* log) 
+    {
+        //sort weights
+        int64_t start_a = rdtsc();
+        if (alpha > 0.0) std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
+                [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
+        else std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
+                [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
+        if(log) log->log("SORT TIME", rdtsc() - start_a);
+
+        int64_t start_b = rdtsc();
+       
+        //Get initial KA (it might be cheaper to do this using householder reflections)
+        Vector<DT> t_a(n);
+        auto KA = KA_base.submatrix(0,0,1,1);
+        KA(0,0) = std::sqrt(cov(SubmodularFunction<DT>::permutation[0], SubmodularFunction<DT>::permutation[0]));
+
+        //Get initial KAc 
+        Vector<DT> t_ac(n);
+        auto KAc = KAc_base.submatrix(0,0,n,n);
+        KAc.copy(KV);
+        std::list<int64_t> col_to_remove;
+        col_to_remove.push_back(SubmodularFunction<DT>::permutation[0]);
+        KAc.remove_cols_incremental_qr_blocked_householder(col_to_remove, t_ac, 64);
+
+        //Create list of column ids to remove for KAc
+        std::vector<int64_t> shifted_cols_to_remove = SubmodularFunction<DT>::permutation;
+        for(int64_t i = 0; i < n; i++) {
+            int64_t index = shifted_cols_to_remove[i];
+            for(int64_t j = i+1; j < n; j++) {
+                if(index < shifted_cols_to_remove[j])
+                    shifted_cols_to_remove[j] -= 1;
+            }
+        }
+
+        //Evaluate initial FA
+        DT FA_old = log_determinant(KA) + log_determinant(KAc) - log_det_cov;
+        xout(SubmodularFunction<DT>::permutation[0]) = FA_old;
+
+        std::unordered_set<int64_t> A;
+        A.insert(SubmodularFunction<DT>::permutation[0]);
+
+        //Evaluate the rest of FAs
+        for(int64_t i = 1; i < n-1; i++) {
+            //
+            //Add column to KA
+            //
+            auto c1 = KA_base.subcol(0, i, i);
+            int64_t cov_i = SubmodularFunction<DT>::permutation[i]; 
+            for(int64_t j = 0; j < i; j++) {
+                c1(j) = cov(cov_i, SubmodularFunction<DT>::permutation[j]);
+            }
+            KA.transpose(); KA.trsv(CblasLower, c1); KA.transpose();
+            DT mu = sqrt(std::abs(cov(cov_i, cov_i) - c1.dot(c1)));
+            KA.enlarge_n(1); KA.enlarge_m(1);
+            KA(i,i) = mu;
+            
+            // 
+            //Remove column from KAc
+            //
+            *col_to_remove.begin() = shifted_cols_to_remove[i];
+            KAc.remove_cols_incremental_qr_householder(col_to_remove, t_ac);
+
+            //Evaluate
+            DT FA = log_determinant(KA) + log_determinant(KAc); //(actually FA + log_det_cov)
+            xout(cov_i) = FA - FA_old;
+            FA_old = FA;
+        }
+        xout(SubmodularFunction<DT>::permutation[n-1]) = 0.0;
+        
         A.clear();
         if(log) {
             log->log("MARGINAL GAIN TIME", rdtsc() - start_b);
@@ -64,12 +251,12 @@ public:
 };
 
 template<class DT>
-class IDivSqrtSize : public FV2toR<DT> {
+class IDivSqrtSize : public SubmodularFunction<DT> {
 public:
     int64_t size;
-    IDivSqrtSize(int64_t n) : size(n), FV2toR<DT>(n) {}
+    IDivSqrtSize(int64_t n) : size(n), SubmodularFunction<DT>(n) {}
 
-    DT eval(const std::unordered_set<int64_t>& A) const {
+    DT eval(const std::unordered_set<int64_t>& A) {
         DT val = 0.0;
         for(auto i : A) {
             val += i / sqrt(A.size());
@@ -98,7 +285,7 @@ public:
 //submodular function for a flow network
 //1 source and 1 sink, 2 groups
 template<class DT>
-class MinCut : public FV2toR<DT> {
+class MinCut : public SubmodularFunction<DT> {
 public:
     //Each node has a list of edges in and a list of edges out.
     //Each edge has an index and a weight, and we will have the source and sink node have index n and n+1, respectively.
@@ -107,7 +294,7 @@ public:
     int64_t size;
     DT baseline;
 
-    MinCut(int64_t n) : FV2toR<DT>(n), size(n), baseline(0.0) {}
+    MinCut(int64_t n) : SubmodularFunction<DT>(n), size(n), baseline(0.0) {}
 
 private:
     void init_adj_lists() 
@@ -225,7 +412,7 @@ private:
 
 public: 
     //Generate a nonsymmetric random graph.
-    MinCut(int64_t n, int64_t m,  double cfa, double cfb) : FV2toR<DT>(n), size(n), baseline(0.0) {
+    MinCut(int64_t n, int64_t m,  double cfa, double cfb) : SubmodularFunction<DT>(n), size(n), baseline(0.0) {
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
@@ -389,7 +576,7 @@ public:
         this->sanity_check();
     }
 
-    DT eval(const std::unordered_set<int64_t>& A) const {
+    DT eval(const std::unordered_set<int64_t>& A) {
         DT val = 0.0;
         for(auto a : A) {
             for(auto b : adj_out[a]) {
@@ -405,7 +592,7 @@ public:
         return val - baseline;
     }
 
-    DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) const {
+    DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
 
         //Gain from adding b
         DT gain = 0.0;

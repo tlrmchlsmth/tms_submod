@@ -131,8 +131,10 @@ void val_mincut()
         //Initialize min cut problem
 //        MinCut<double> problem(n, 16, 0.5, 0.05);
         MinCut<double> problem(n);
+
         problem.WattsStrogatz(16, 0.25);
-        
+        //problem.Geometric(0.05);
+
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
         auto A = mnp.minimize(problem, 1e-10, 1e-6, false, NULL);
@@ -185,7 +187,6 @@ void val_mincut()
         lemon_prob.run();
         double lemon_sol = lemon_prob.flowValue();
         
-
         std::cout << std::setw(w) << n << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
         print_err(mnp_sol - lemon_sol, w);
         std::cout << std::endl;

@@ -68,10 +68,10 @@ double time_problem_with_lemon(MinCut<DT>& problem)
 
 void benchmark_max_flow()
 {
-    int64_t start = 50;
-    int64_t end = 5000;
-    int64_t inc = 50;
-    int64_t n_reps = 10;
+    int64_t start = 250;
+    int64_t end = 10000;
+    int64_t inc = 250;
+    int64_t n_reps = 5;
     double connectivity = 0.2; 
 
 
@@ -88,10 +88,11 @@ void benchmark_max_flow()
     std::cout << std::setw(2*fw) <<  "remove cols %";
     std::cout << std::setw(2*fw) <<  "eval f %";
     std::cout << std::setw(2*fw) <<  "greedy %";
+    std::cout << std::setw(2*fw) <<  "sort %";
+    std::cout << std::setw(2*fw) <<  "marginal gain %";
     std::cout << std::setw(2*fw) <<  "MVM MB/S";
     std::cout << std::setw(2*fw) <<  "TRSV MB/S";
     std::cout << std::setw(2*fw) <<  "Remove cols MB/S";
-//    std::cout << std::setw(2*fw) << "Major cycles" << std::setw(2*fw) << "Minor Cycles";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -107,6 +108,9 @@ void benchmark_max_flow()
         std::vector<double> eval_f_percent;
         std::vector<double> greedy_percent;
 
+        std::vector<double> greedy_percent_a;
+        std::vector<double> greedy_percent_b;
+
         std::vector<double> mvm_bw;
         std::vector<double> trsv_bw;
         std::vector<double> remove_cols_bw;
@@ -116,7 +120,8 @@ void benchmark_max_flow()
             PerfLog log;
 
             //Initialize min norm point problem
-            MinCut<double> problem(n, 16, 0.5, 0.05);
+            MinCut<double> problem(n);
+            problem.WattsStrogatz(16, 0.25);
             
             //Time problem
             MinNormPoint<double> mnp;
@@ -134,20 +139,13 @@ void benchmark_max_flow()
             eval_f_percent.push_back((double) log.get_total("EVAL F TIME") / cycles);
             greedy_percent.push_back((double) log.get_total("GREEDY TIME") / cycles);
 
+            greedy_percent_a.push_back((double) log.get_total("SORT TIME") / (double) log.get_total("GREEDY TIME") );
+            greedy_percent_b.push_back((double) log.get_total("MARGINAL GAIN TIME") / (double) log.get_total("GREEDY TIME"));
+
             mvm_bw.push_back(((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME")));
             trsv_bw.push_back(((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME")));
-            remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME")));
-//            mvm_bw.push_back(((double) log.get_total("MVM BYTES")));
-//            trsv_bw.push_back(((double) log.get_total("TRSV BYTES")));
-//            remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR BYTES"))); 
-//            mvm_bw.push_back(((double) log.get_total("MVM TIME")));
-//            trsv_bw.push_back(((double) log.get_total("TRSV TIME")));
-//            remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR TIME"))); 
-/*
-            std::cout << "*****************" << std::endl;
-            log.print("TIME", cycles);
-            std::cout << "*****************" << std::endl;
-*/
+            if(log.get_total("REMOVE COLS QR TIME") > 0)
+                remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME")));
         }
 
         std::cout << std::setw(fw) << n;
@@ -160,6 +158,8 @@ void benchmark_max_flow()
         std::cout << std::setw(2*fw) << 100 * mean(remove_cols_percent);
         std::cout << std::setw(2*fw) << 100 * mean(eval_f_percent);
         std::cout << std::setw(2*fw) << 100 * mean(greedy_percent);
+        std::cout << std::setw(2*fw) << 100 * mean(greedy_percent_a);
+        std::cout << std::setw(2*fw) << 100 * mean(greedy_percent_b);
         std::cout << std::setw(2*fw) << 3.6e3 * mean(mvm_bw);
         std::cout << std::setw(2*fw) << 3.6e3 * mean(trsv_bw);
         std::cout << std::setw(2*fw) << 3.6e3 * mean(remove_cols_bw);
@@ -169,18 +169,30 @@ void benchmark_max_flow()
 
 int main() {
     run_validation_suite();
-    benchmark_max_flow();
-
     run_benchmark_suite();
-
 
     MinNormPoint<double> mnp;
 
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Running some examples" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+/*
+    std::cout << "Log Det problem\n";
+    LogDet<double> logdet_problem(100);
+    mnp.minimize(logdet_problem, 1e-10, 1e-5, true, NULL);
+
     std::cout << "Min cut problem\n";
-    MinCut<double> problem(1000, 15, 0.5, 0.05);
-    mnp.minimize(problem, 1e-10, 1e-5, true, NULL);
+    MinCut<double> max_flow_problem(1000, 15, 0.5, 0.05);
+    mnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL);
 
     std::cout << "Cardinality problem\n";
     IDivSqrtSize<double> F(500);
     mnp.minimize(F, 1e-10, 1e-10, true, NULL); 
+*/
+    benchmark_max_flow();
+
+
+
+
 }

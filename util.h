@@ -33,6 +33,7 @@ void print_err(double err, int64_t w);
 void print_err(float err, int64_t w);
 
 void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, double* X, int64_t x_rs, int64_t x_cs);
+
 template<class DT>
 DT house_gen(int64_t m, DT* x, int64_t stride) 
 {

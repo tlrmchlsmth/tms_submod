@@ -10,12 +10,12 @@ template<class DT>
 class Minimizer
 {
 public:
-    virtual std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) = 0;
-    std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print) 
+    virtual std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) = 0;
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
     {
         return this->minimize(F, eps, tolerance, print, NULL);
     }
-    std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance) 
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance) 
     {
         return this->minimize(F, eps, tolerance, false, NULL);
     }
@@ -110,7 +110,7 @@ public:
         return to_ret;
     }
 
-    std::unordered_set<int64_t> minimize(FV2toR<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
@@ -291,6 +291,9 @@ public:
             if(log) {
                 log->log("MAJOR TIME", rdtsc() - major_start);
             }
+        }
+        if(print) {
+            std::cout << "Done. |A| = " << A_curr.size() << " F_best = " << F.eval(A_curr) << std::endl;
         }
 //        if(major_cycles > max_iter) {
 //            std::cout << "Timed out." << std::endl;
