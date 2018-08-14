@@ -13,6 +13,8 @@
 
 template<class DT> class Vector;
 
+enum Tag {gen, symm_l, symm_u, tri_l, tri_u};
+
 template<class DT>
 class Matrix {
 
@@ -26,8 +28,10 @@ public:
 
     int64_t _base_m;
     int64_t _base_n;
-
     bool _mem_manage;
+
+    Tag _tag;
+
 
     PerfLog* log;
 
@@ -36,7 +40,7 @@ public:
     //
     // Constructors
     //
-    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), log(NULL)
+    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), _tag(gen), log(NULL)
     {
         //TODO: Pad so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
@@ -47,8 +51,8 @@ public:
         }
     }
 
-    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, bool mem_manage) :
-        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage), log(NULL)
+    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, Tag tag, bool mem_manage, PerfLog* log) :
+        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _tag(tag), _mem_manage(mem_manage), log(log)
     {
     }
     ~Matrix()
@@ -85,6 +89,11 @@ public:
         assert(row < _m && col < _n && "Matrix index out of bounds");
         return &_values[row * _rs + col * _cs];
     }
+    inline const DT* lea (int64_t row, int64_t col) const
+    {
+        assert(row < _m && col < _n && "Matrix index out of bounds");
+        return &_values[row * _rs + col * _cs];
+    }
 
     //
     // Acquiring submatrices, subvectors
@@ -93,8 +102,12 @@ public:
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
-        auto width  = std::min(nc, _n - col); 
-        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, false);
+        auto width  = std::min(nc, _n - col);
+        Tag subtag = gen;
+        if(row == col && mc == nc)
+            subtag = _tag;
+
+        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _base_m, _base_n, subtag, false, log);
     }
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
@@ -124,8 +137,10 @@ public:
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
-
-        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, false);
+        Tag subtag = gen;
+        if(row == col && mc == nc)
+            subtag = _tag;
+        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, subtag, false, log);
     }
     inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
@@ -242,7 +257,13 @@ public:
 
     Matrix<DT> transposed()
     {
-        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false);
+        Tag ttag = gen;
+        if(_tag == symm_l) { ttag = symm_u; }
+        else if(_tag == symm_u) { ttag = symm_l; }
+        else if(_tag == tri_l) { ttag = tri_u; }
+        else if(_tag == tri_u) { ttag = tri_l; }
+
+        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, ttag, false, log);
     }
 
     void print() const
