@@ -473,8 +473,8 @@ public:
 
     inline void shift_triangle_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t x_dist) 
     {
-        DT* src =  &_values[dest_m_coord * _rs + (dest_n_coord + x_dist) * _cs];
-        DT* dest = &_values[dest_m_coord * _rs + dest_n_coord * _cs];
+        DT* src =  lea(dest_m_coord, dest_n_coord + x_dist);
+        DT* dest = lea(dest_m_coord, dest_n_coord);
 
         if(_rs == 1) {
             int64_t N = std::min(nc, _n - x_dist - dest_n_coord);
@@ -500,9 +500,8 @@ public:
 
     inline void shift_triangle_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t y_dist) 
     {
-
-        DT* src =  &_values[(dest_m_coord + y_dist) * _rs + dest_n_coord * _cs];
-        DT* dest = &_values[dest_m_coord * _rs + dest_n_coord * _cs];
+        DT* src =  lea(dest_m_coord + y_dist, dest_n_coord);
+        DT* dest = lea(dest_m_coord, dest_n_coord);
 
         if(_rs == 1) {
             int64_t N = std::min(nc, _n - dest_n_coord);
@@ -533,6 +532,7 @@ public:
     {
         int64_t end_n = std::min(_n - x_dist, dest_n_coord + nc);
         int64_t end_m = std::min(_m, dest_m_coord + mc);
+
         if(_rs == 1) {
             for(int64_t j = dest_n_coord; j < end_n; j++) {
                 #pragma omp parallel for
@@ -953,14 +953,55 @@ public:
         }
     }
 
-    //TODO: Implement the givens rotation case if there is one column to remove
-//    void remove_col_incremental_qr_givens(int64_t col_to_remove, Matrix<DT>& T, int64_t nb)
-//    {
-//        for(int64_t i = col_to_remove+1; i < _n; i += nb) {
-//            int64_t block_m = std::min(nb, _n - i);
-//        }
-//    }
+    //Use givens rotations to annihilate the element below each diagonal element
+    void annihilate_subdiag_givens(Matrix<DT>& T)
+    {
+        for(int64_t i = 0; i < _n && i < _m-1; i++) {
+            //1. figure out Givens rotation to annihilate element below diagonal.
+            rotg(lea(i,i), lea(i+1,i), T.lea(0,i), T.lea(1,i));
+            
+            //2. Trailing update of Givens rotation
+            if(i+1 < _n)
+                rot(_n-(i+1), lea(i,i+1), _cs, lea(i+1,i+1), _cs, T(0,i), T(1,i));
+        }
+    }
 
+    void apply_givens_rots(Matrix<DT>& T)
+    {
+        for(int64_t i = 0; i < _m-1; i++) {
+            rot(_n, lea(i,0), _cs, lea(i+1,0), _cs, T(0,i), T(1,i));
+        }
+    }
+
+    void remove_column_iqr_givens(int64_t column, Matrix<DT>& T, int64_t nb) 
+    {
+        //First shift dense block above diagonal and to the right of the column removed
+        //to the left by one.
+        for(int i = 0; i < _m; i++) (*this)(i,column) = 0;
+        shift_dense_left(0, column, column, _n-column, 1);
+
+        //Proceed along the diagonal by blocks
+        for(int64_t i = column; i < _n; i += nb)
+        {
+            //Partition the matrix
+            auto R11 = this->submatrix(i, i+1, nb+1, nb);
+            auto T1  = T.submatrix(0, i+1, 2, nb+1);
+
+            //Annihilate subdiagonal elements and shift left
+            R11.annihilate_subdiag_givens(T1);
+            shift_triangle_left(i, i, nb, 1);
+            
+            //Trailing update
+            for(int64_t j = i + nb; j < _n; j += nb) {
+                auto R12 = this->submatrix(i, j+1, nb+1, nb);
+                R12.apply_givens_rots(T1);
+                shift_dense_left(i, j, nb, nb, 1); 
+            }
+        }
+
+        this->enlarge_m(-1);
+        this->enlarge_n(-1);
+    }
 };
 
 template<>

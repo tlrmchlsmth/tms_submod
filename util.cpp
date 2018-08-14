@@ -74,3 +74,5 @@ void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, d
 #endif
     }
 }
+
+
