@@ -6,6 +6,7 @@
 #include "../vector.h"
 #include "../matrix.h"
 #include "../minimizer.h"
+#include "../submodular.h"
 #include "../util.h"
 
 #include <lemon/list_graph.h>
@@ -13,6 +14,97 @@
 using namespace lemon;
 
 //#define DEBUGGING
+//
+
+template<class DT>
+DT brute_force_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, int64_t i, int64_t n) {
+    if(i == n) { 
+    //    std::cout << A.size() << " " << F.eval(A) << std::endl;
+        return F.eval(A);
+    } 
+    
+    DT val_noadd_i = brute_force_rec(F, A, i+1, n);
+
+    std::unordered_set<int64_t> B = A;
+    B.insert(i);
+    DT val_add_i = brute_force_rec(F, B, i+1, n);
+
+    return std::min(val_add_i, val_noadd_i);
+
+}
+
+void val_log_det_brute_force()
+{
+    int64_t start = 2;
+    int64_t end = 16;
+    int64_t inc = start;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Log Det Brute Force" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "mnp sol";
+    std::cout << std::setw(w) << "brute sol";
+    std::cout << std::setw(w) << "mnp |A|";
+    std::cout << std::setw(w) << "diff";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        //Create random problem
+        LogDet<double> problem(n);
+        MinNormPoint<double> mnp;
+        auto A = mnp.minimize(problem, 1e-10, 1e-6, false, NULL);
+        double mnp_sol = problem.eval(A) + problem.baseline;
+        
+        std::unordered_set<int64_t> empty;
+        double brute_sol = brute_force_rec(problem, empty, 0, n) + problem.baseline;
+
+        std::cout << std::setw(w) << n;
+        std::cout << std::setw(w) << mnp_sol;
+        std::cout << std::setw(w) << brute_sol;
+        std::cout << std::setw(w) << A.size();
+        print_err(brute_sol - mnp_sol, w);
+        std::cout << std::endl;
+    }
+
+}
+
+void val_log_det_greedy()
+{
+
+    int64_t start = 4;
+    int64_t end = 16; 
+    int64_t inc = 4; 
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Log Det Greedy" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "error";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        //Create random problem
+        LogDet<double> prob(n);
+
+        Vector<double> x(n);
+        Vector<double> p1(n);
+        Vector<double> p2(n);
+        x.fill_rand();
+
+        prob.polyhedron_greedy(1.0, x, p1, NULL);
+        prob.SubmodularFunction::polyhedron_greedy(1.0, x, p2, NULL);
+        p1.axpy(-1.0, p2);
+        double error = p1.norm2();
+        
+        std::cout << std::setw(w) << n;
+        print_err(error, w);
+        std::cout << std::endl;
+#ifdef DEBUGGING        
+        exit(1);
+#endif
+    }
+}
 
 void val_incremental_qr_remove_cols()
 {
@@ -30,10 +122,12 @@ void val_incremental_qr_remove_cols()
     for(int64_t n = start; n <= end; n += inc) {
         int64_t m = n;
         int64_t task_size = 16;
-        int64_t nb = 32;
+        int64_t nb = 4;
 
-        std::vector<double> cycles;
-        std::list<int64_t> cols_to_remove = get_cols_to_remove(n, percent_to_remove);
+//        std::vector<double> cycles;
+//        std::list<int64_t> cols_to_remove = get_cols_to_remove(n, percent_to_remove);
+        std::list<int64_t> cols_to_remove;
+        cols_to_remove.push_back(30); 
 
         //1. Create random S
         Matrix<double> S(m,n);
@@ -55,7 +149,8 @@ void val_incremental_qr_remove_cols()
         //3. Delete Cols.
         S.remove_cols(cols_to_remove);
         R1.remove_cols_incremental_qr_householder(cols_to_remove, t);
-        R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
+        R2.remove_column_iqr_givens(cols_to_remove.front(), T, nb);
+//        R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
         R.remove_cols_incremental_qr_kressner(R3, cols_to_remove, T, V_ws, nb, ws);
         R.remove_cols_incremental_qr_tasks_kressner(R4, cols_to_remove, T, V_ws, task_size, nb, ws);
         R1.set_subdiagonal(0.0); R2.set_subdiagonal(0.0); R3.set_subdiagonal(0.0); R4.set_subdiagonal(0.0);
@@ -204,4 +299,6 @@ void run_validation_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     val_incremental_qr_remove_cols();
     val_mincut();
+    val_log_det_greedy();
+    val_log_det_brute_force();
 }

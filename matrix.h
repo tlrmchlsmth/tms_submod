@@ -169,17 +169,19 @@ public:
     // Routines for setting elements of the matrix
     //
     void set_all(DT alpha) {
-        for(int64_t i = 0; i < _m; i++) {
-            for(int64_t j = 0; j < _n; j++) {
-                (*this)(i,j) = 0.0;
+        #pragma omp parallel for
+        for(int64_t j = 0; j < _n; j++) {
+            for(int64_t i = 0; i < _m; i++) {
+                (*this)(i,j) = alpha;
             }
         }
     }
 
     template<class RNG, class DIST>
     void fill_rand(RNG &gen, DIST &dist) {
-        for(int64_t i = 0; i < _m; i++) {
-            for(int64_t j = 0; j < _n; j++) {
+        //#pragma omp parallel for
+        for(int64_t j = 0; j < _n; j++) {
+            for(int64_t i = 0; i < _m; i++) {
                 (*this)(i,j) = dist(gen);
             }
         }
@@ -187,8 +189,15 @@ public:
     void fill_rand() {
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::normal_distribution<> normal(0.0, 10);
+        std::normal_distribution<> normal(-1.0, 1.0);
         this->fill_rand(gen, normal);
+    }
+
+    void set_diagonal(DT alpha) {
+        #pragma omp parallel for
+        for(int64_t i = 0; i < std::min(_m, _n); i++) {
+            (*this)(i,i) = alpha;
+        }
     }
 
     void set_subdiagonal(DT alpha) {
@@ -207,6 +216,18 @@ public:
         for(int j = 0; j < _n; j++) {
             for(int i = 0; i < _m; i++) {
                 (*this)(i,j) = other(i,j);
+            }
+        }
+    }
+
+    void copy_permute_rc(const Matrix<DT>& other, std::vector<int64_t>& p) 
+    {
+        assert(_m == other._m && _n == other._n);
+
+        #pragma omp parallel for
+        for(int j = 0; j < _n; j++) {
+            for(int i = 0; i < _m; i++) {
+                (*this)(i,j) = other(p[i],p[j]);
             }
         }
     }
@@ -301,9 +322,23 @@ public:
         std::cout << "Trsv not implemented for datatype" << std::endl;
         exit(1);
     }
+
+    void trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<DT>& x)
+    {
+        std::cout << "Trsv not implemented for datatype" << std::endl;
+        exit(1);
+    }
+
     void mmm(DT alpha, const Matrix<DT>& A, const Matrix<DT>& B, DT beta)
     {
         std::cout << "Gemm not implemented for datatype" << std::endl;
+        exit(1);
+
+    }
+
+    void syrk(CBLAS_UPLO uplo, DT alpha, const Matrix<DT>& A, DT beta)
+    {
+        std::cout << "Syrk not implemented for datatype" << std::endl;
         exit(1);
 
     }
@@ -313,7 +348,7 @@ public:
         std::cout << "QR factorization not implemented for datatype" << std::endl;
         exit(1);
     }
-    void chol()
+    void chol(char uplo)
     {
         std::cout << "Cholesky factorization not implemented for datatype" << std::endl;
         exit(1);
@@ -1002,7 +1037,7 @@ public:
         shift_dense_left(0, column, column, _n-column, 1);
 
         //Proceed along the diagonal by blocks
-        for(int64_t i = column; i < _n; i += nb)
+        for(int64_t i = column; i+1 < _n; i += nb)
         {
             //Partition the matrix
             auto R11 = this->submatrix(i, i+1, nb+1, nb);
@@ -1013,7 +1048,7 @@ public:
             shift_triangle_left(i, i, nb, 1);
             
             //Trailing update
-            for(int64_t j = i + nb; j < _n; j += nb) {
+            for(int64_t j = i + nb; j+1 < _n; j += nb) {
                 auto R12 = this->submatrix(i, j+1, nb+1, nb);
                 R12.apply_givens_rots(T1);
                 shift_dense_left(i, j, nb, nb, 1); 
@@ -1076,9 +1111,59 @@ void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
     end = rdtsc();
 
     if(log != NULL) {
-        log->log("TRSV FLOPS", _m * _n);
+        log->log("TRSV FLOPS", _n*_n);
         log->log("TRSV TIME", end - start);
-        log->log("TRSV BYTES", sizeof(double) * (_m * _n / 2 + 2*_m + _n));
+        log->log("TRSV BYTES", sizeof(double) * (_n*_n / 2 + 2*_n));
+    }
+}
+
+template<>
+void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X)
+{
+    if(side == CblasLeft) assert(_m == X.height() && "Nonconformal trsm");
+    else assert (_m == X.width() && "Nonconformal trsm");
+    assert(_m == _n && "Nonconformal trsm.");
+    assert((_rs == 1  || _cs == 1) && (X._rs == 1 || X._cs == 1));
+
+    int64_t start, end;
+    start = rdtsc();
+
+    int64_t ldx = X._cs * X._rs;
+
+    if(_rs == 1) { 
+        if(X._rs != 1) {
+            cblas_dtrsm(CblasRowMajor, side, uplo, CblasTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _cs,
+                    X._values, ldx);
+        }
+        else {
+            cblas_dtrsm(CblasColMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _cs,
+                    X._values, ldx);
+        }
+    } else {
+        if(X._cs != 1) {
+            cblas_dtrsm(CblasColMajor, side, uplo, CblasTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _rs,
+                    X._values, ldx);
+        }
+        else {
+            cblas_dtrsm(CblasRowMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _rs,
+                    X._values, ldx);
+        }
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("TRSM FLOPS", _n*_n*X.width());
+        log->log("TRSM TIME", end - start);
+        log->log("TRSM BYTES", sizeof(double) * (_n*_n/2 + 2*_n*X.width()));
     }
 }
 
@@ -1086,19 +1171,14 @@ template<>
 void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<double>& B, double beta)
 {
     assert(_m == A._m && _n == B._n && A._n == B._m && "Nonconformal gemm");
-    
-    if((_rs  != 1 && _cs != 1) || (A._rs != 1 && A._cs != 1) || (B._rs != 1 && B._cs != 1)) {
-        std::cout << "GEMM requires row or column major. Exiting..." << std::endl;
-        exit(1);
-    }
+    assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1) && (B._rs == 1 || B._cs == 1)); 
 
     auto ATrans = CblasNoTrans;
     auto BTrans = CblasNoTrans;
     int64_t lda = A._rs * A._cs;
     int64_t ldb = B._rs * B._cs;
 
-    int64_t start, end;
-    start = rdtsc();
+    int64_t start = rdtsc();
 
     if(_rs == 1) {
         if(A._rs != 1) ATrans = CblasTrans;
@@ -1107,25 +1187,45 @@ void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<dou
         cblas_dgemm(CblasColMajor, ATrans, BTrans, _m, _n, A._n,
                 alpha, A._values, lda, B._values, ldb,
                 beta, _values, _cs);
-    } else if(_cs == 1) {
+    } else {
         if(A._cs != 1) ATrans = CblasTrans;
         if(B._cs != 1) BTrans = CblasTrans;
 
         cblas_dgemm(CblasRowMajor, ATrans, BTrans, _m, _n, A._n,
                 alpha, A._values, lda, B._values, ldb,
                 beta, _values, _rs);
-    } else {
-        std::cout << "Only row or column major QR supported. Exiting..." << std::endl;
-        exit(1);
     }
-
-    end = rdtsc();
 
     if(log != NULL) {
         log->log("MMM FLOPS", 2 * _m * _n * A._n);
-        log->log("MMM TIME", end - start);
+        log->log("MMM TIME", rdtsc() - start);
         log->log("MMM BYTES", sizeof(double) * (2*_m *_n + _m * A._n + A._n * _n)); 
     }
+}
+
+template<>
+void Matrix<double>::syrk(CBLAS_UPLO uplo, double alpha, const Matrix<double>& A, double beta)
+{
+    assert(_m == A._m && _m == _n && "Nonconformal syrk");
+    assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1));
+
+    int64_t start = rdtsc();
+
+    auto ATrans = CblasNoTrans;
+    int64_t lda = A._rs * A._cs;
+
+    if(_rs == 1) {
+        if(A._rs != 1) ATrans = CblasTrans;
+        cblas_dsyrk(CblasColMajor, uplo, ATrans, _n, A._n, 
+            alpha, A._values, lda,
+            beta, _values, _cs);
+    } else {
+        if(A._cs != 1) ATrans = CblasTrans;
+        cblas_dsyrk(CblasRowMajor, uplo, ATrans, _n, A._n, 
+            alpha, A._values, lda,
+            beta, _values, _rs);
+    }
+
 }
 
 template<>
@@ -1152,7 +1252,7 @@ void Matrix<double>::qr(Vector<double>& t)
 }
 
 template<>
-void Matrix<double>::chol()
+void Matrix<double>::chol(char uplo)
 {
     assert(_m == _n);
     assert(_rs == 1 || _cs == 1);
@@ -1162,21 +1262,21 @@ void Matrix<double>::chol()
     int inf;*/
 //    dpotrf_(&uplo, &n, _values, &lda, &inf);
     if(_rs == 1) {
-        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'U', _m,  _values, _cs);
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, uplo, _m,  _values, _cs);
     } else /*if(_cs == 1)*/ {
-        LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'U', _m,  _values, _rs);
+        LAPACKE_dpotrf(LAPACK_ROW_MAJOR, uplo, _m,  _values, _rs);
     }
 }
 template<>
-void Matrix<float>::chol()
+void Matrix<float>::chol(char uplo)
 {
     assert(_m == _n);
     assert(_rs == 1 || _cs == 1);
 
     if(_rs == 1) {
-        LAPACKE_spotrf(LAPACK_COL_MAJOR, 'U', _m,  _values, _cs);
+        LAPACKE_spotrf(LAPACK_COL_MAJOR, uplo, _m,  _values, _cs);
     } else /*if(_cs == 1)*/ {
-        LAPACKE_spotrf(LAPACK_ROW_MAJOR, 'U', _m,  _values, _rs);
+        LAPACKE_spotrf(LAPACK_ROW_MAJOR, uplo, _m,  _values, _rs);
     }
 }
 
@@ -1336,7 +1436,6 @@ void Matrix<float>::mmm(float alpha, const Matrix<float>& A, const Matrix<float>
 
     int64_t start, end;
     start = rdtsc();
-
     if(_rs == 1) {
         if(A._rs != 1) ATrans = CblasTrans;
         if(B._rs != 1) BTrans = CblasTrans;
@@ -1363,6 +1462,31 @@ void Matrix<float>::mmm(float alpha, const Matrix<float>& A, const Matrix<float>
         log->log("MMM TIME", end - start);
         log->log("MMM BYTES", sizeof(float) * (2*_m *_n + _m * A._n + A._n * _n)); 
     }
+}
+
+template<>
+void Matrix<float>::syrk(CBLAS_UPLO uplo, float alpha, const Matrix<float>& A, float beta)
+{
+    assert(_m == A._m && _m == _n && "Nonconformal syrk");
+    assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1));
+
+    int64_t start = rdtsc();
+
+    auto ATrans = CblasNoTrans;
+    int64_t lda = A._rs * A._cs;
+
+    if(_rs == 1) {
+        if(A._rs != 1) ATrans = CblasTrans;
+        cblas_ssyrk(CblasColMajor, uplo, ATrans, _n, A._n, 
+            alpha, A._values, lda,
+            beta, _values, _cs);
+    } else {
+        if(A._cs != 1) ATrans = CblasTrans;
+        cblas_ssyrk(CblasRowMajor, uplo, ATrans, _n, A._n, 
+            alpha, A._values, lda,
+            beta, _values, _rs);
+    }
+
 }
 
 template<>
