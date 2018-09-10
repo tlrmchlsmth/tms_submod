@@ -110,6 +110,51 @@ void val_log_det_greedy()
         std::cout << std::endl;
     }
 }
+/*
+void val_mincut_greedy()
+{
+
+    int64_t start = 4;
+    int64_t end = 64; 
+    int64_t inc = 4; 
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Log Det Greedy Algorithm Consistency" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "error";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        MinCut<double> prob(n);
+        prob.WattsStrogatz(8, 0.25);
+
+        Vector<double> p1(n);
+        Vector<double> p2(n);
+        
+        std::vector<int64_t> perm(n);
+        for(int64_t i = 0; i < n; i++) perm[i] = i;
+        scramble(perm);
+
+        std::unordered_set<int64_t> A;
+        A.clear();
+        double FA_old = 0.0;
+        for(int i = 0; i < n; i++) {
+            A.insert(perm[i]);
+            double FA = prob.eval(A);
+            p1(perm[i]) = FA - FA_old;
+            FA_old = FA;
+        }
+
+        prob.eval(perm, p2);
+        p1.axpy(-1.0, p2);
+        double error = p1.norm2();
+        
+        std::cout << std::setw(w) << n;
+        print_err(error, w);
+        std::cout << std::endl;
+    }
+}*/
 
 void val_incremental_qr_remove_cols()
 {
@@ -218,7 +263,7 @@ void val_incremental_qr_remove_cols()
 void val_mincut()
 {
     int64_t start = 8;
-    int64_t end = 128;
+    int64_t end = 1024;
     int64_t inc = 8; 
 
     std::cout << "===========================================================" << std::endl;
@@ -226,14 +271,15 @@ void val_mincut()
     std::cout << "===========================================================" << std::endl;
 
     int w = 18;
-    std::cout << std::setw(w) << "n" << std::setw(w) << "MNP solution" << std::setw(w) << "Lemon solution" << std::setw(w) << "Difference" << std::endl;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "|A|" << std::setw(w) << "MNP solution" << std::setw(w) << "Lemon solution" << std::setw(w) << "Difference" << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         //Initialize min cut problem
 //        MinCut<double> problem(n, 16, 0.5, 0.05);
         MinCut<double> problem(n);
 
-        problem.WattsStrogatz(16, 0.25);
-        //problem.Geometric(0.05);
+//        problem.WattsStrogatz(16, 0.25);
+        problem.Geometric(0.05);
 
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
@@ -287,7 +333,8 @@ void val_mincut()
         lemon_prob.run();
         double lemon_sol = lemon_prob.flowValue();
         
-        std::cout << std::setw(w) << n << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
+        std::cout << std::setw(w) << n;
+        std::cout << std::setw(w) << A.size() << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
         print_err(mnp_sol - lemon_sol, w);
         std::cout << std::endl;
 #ifdef DEBUGGING        

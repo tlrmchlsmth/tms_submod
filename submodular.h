@@ -572,15 +572,16 @@ private:
         //so I don't have to handle the special cases
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::uniform_real_distribution<double> uniform_node(0.0, size);
-        int64_t source = (int64_t) uniform_node(gen);
-        int64_t sink = (int64_t) uniform_node(gen);
+        std::uniform_int_distribution<int64_t> uniform_node(0, size-1);
+
+        int64_t source = uniform_node(gen);
+        int64_t sink = uniform_node(gen);
         while(source == sink) {
-            sink = (int64_t) uniform_node(gen);
+            sink = uniform_node(gen);
         }
         assert(source >= 0 && source < size && sink >= 0 && sink < size);
 
-        //Swap locations of source, sink and last 2 nodes
+        //Swap locations (in memory) of source, sink and last 2 nodes
         std::swap(adj_out[source], adj_out[size]);
         std::swap(adj_in [source], adj_in [size]);
 
@@ -590,8 +591,15 @@ private:
         //Clear out incoming edges of source and outgoing edges of sink
         adj_in[size].clear();
         adj_out[size+1].clear();
-
         
+        //Double outgoing weights of source and incoming weights of sink
+        for(int64_t j = 0; j < adj_out[size].size(); j++) {
+            adj_out[size][j].weight *= 2.0;
+        }
+        for(int64_t j = 0; j < adj_in[size+1].size(); j++) {
+            adj_in[size+1][j].weight *= 2.0;
+        }
+
         //Fix up the rest of the adjacency lists
         for(int64_t i = 0; i < size+2; i++){
             //Remove outgoing edges to source node and incoming edges from sink node
@@ -602,6 +610,7 @@ private:
             for(int64_t e = 0; e < adj_out[i].size(); e++) {
                 if(adj_out[i][e].index == sink) {
                     adj_out[i][e].index = size+1; 
+                    adj_out[i][e].weight *= 2.0;
                 } else if(adj_out[i][e].index == size) {
                     adj_out[i][e].index = source;
                 } else if(adj_out[i][e].index == size+1) { 
@@ -611,6 +620,7 @@ private:
             for(int64_t e = 0; e < adj_in[i].size(); e++) {
                 if(adj_in[i][e].index == source)  {
                     adj_in[i][e].index = size;
+                    adj_in[i][e].weight *= 2.0;
                 } else if(adj_in[i][e].index == size) {
                     adj_in[i][e].index = source; 
                 } else if(adj_in[i][e].index == size+1) {
@@ -652,96 +662,12 @@ private:
 
 
 public: 
-    //Generate a nonsymmetric random graph.
-    MinCut(int64_t n, int64_t m,  double cfa, double cfb) : SubmodularFunction<DT>(n), size(n), baseline(0.0) {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
-
-        //Initialize adjacency lists
-        for(int64_t i = 0; i < n+2; i++) {
-            adj_in.emplace_back(std::vector<Edge<DT>>());
-            adj_out.emplace_back(std::vector<Edge<DT>>());
-        }
-
-        //Setup edges from source nodes
-        int64_t k = n / m; //number of groups
-        if(k < 2){
-            k = 2;
-            m = n / 2;
-        }
-
-        for(int64_t i = 0; i < m; i++) {
-            if(dist(gen) / sqrt(m) < cfa) {
-                double weight = dist(gen);
-                adj_in[i].emplace_back(Edge<DT>(n, weight));
-                adj_out[n].emplace_back(Edge<DT>(i, weight));
-                baseline += weight;
-            }
-        }
-        for(int64_t i = m; i < 2*m; i++) {
-            if(dist(gen) < cfb) {
-                double weight = dist(gen);
-                adj_in[i].emplace_back(Edge<DT>(n, weight));
-                adj_out[n].emplace_back(Edge<DT>(i, weight));
-                baseline += weight;
-            }
-        }
-
-        //Setup edges within graph
-        for(int64_t p = 0; p < k; p++) {
-            for(int i = 0; i < m; i++) {
-                for(int j = 0; j < m; j++) {
-                    //Create edges within group
-                    if(i != j && dist(gen) < cfa) {
-                        double weight = dist(gen);
-                        adj_out[i+p*m].emplace_back(Edge<DT>(j+p*m, weight));
-                        adj_in[j+p*m].emplace_back(Edge<DT>(i+p*m, weight));
-                    }
-
-                    //Create edge with previous group
-                    if(p > 0 && dist(gen) < cfb) {
-                        double weight = dist(gen);
-                        adj_out[i+p*m].emplace_back(Edge<DT>(j+(p-1)*m, weight));
-                        adj_in[j+(p-1)*m].emplace_back(Edge<DT>(i+p*m, weight));
-                    }
-
-                    //Create edge with next group
-                    if(p < k-1 && dist(gen) < cfb) {
-                        double weight = dist(gen);
-                        adj_out[i+p*m].emplace_back(Edge<DT>(j+(p+1)*m, weight));
-                        adj_in[j+(p+1)*m].emplace_back(Edge<DT>(i+p*m, weight));
-                    }
-
-                }
-            }
-        }
-
-        //Setup edges to sink nodes.
-        for(int64_t i = 0; i < m; i++) {
-            if(dist(gen) / sqrt(m) < cfa) {
-                double weight = dist(gen);
-                adj_out[n-i-1].emplace_back(Edge<DT>(n+1, weight));
-                adj_in[n+1].emplace_back(Edge<DT>(n-i-1, weight));
-            }
-        }
-        
-        for(int64_t i = m; i < 2*m; i++) {
-            if(dist(gen) < cfb) {
-                double weight = dist(gen);
-                adj_out[n-i].emplace_back(Edge<DT>(n+1, weight));
-                adj_in[n+1].emplace_back(Edge<DT>(n-i, weight));
-            }
-        }
-    }
-
-
     void WattsStrogatz(int64_t k, double beta) 
     {
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        std::uniform_real_distribution<double> uniform_node(0.0, size+2);
+        std::uniform_int_distribution<int64_t> uniform_node(0, size+1);
    
         this->init_adj_lists();
         
@@ -752,11 +678,11 @@ public:
                 int64_t new_neighbor = i+p;
         
                 if(dist(gen) < beta) {
-                    int64_t new_neighbor = (int64_t) uniform_node(gen);
+                    int64_t new_neighbor = uniform_node(gen);
                     int64_t attempts = 0;
                     while(new_neighbor == i || std::any_of(adj_out[i].begin(), adj_out[i].end(), [=](Edge<DT> e){return e.index == new_neighbor;})) 
                     {
-                        new_neighbor = (int64_t) uniform_node(gen);
+                        new_neighbor = uniform_node(gen);
                         attempts++;
 
                         if(attempts > 1000) {
@@ -834,7 +760,6 @@ public:
     }
 
     DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
-
         //Gain from adding b
         DT gain = 0.0;
         for(int64_t i = 0; i < adj_out[b].size(); i++) {

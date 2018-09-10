@@ -80,12 +80,12 @@ void benchmark_log_det()
 
     int fw = 8;
     std::cout << std::setw(fw) << "n";
-    std::cout << std::setw(2*fw) << "mean |A|";
+    std::cout << std::setw(fw) << "|A|";
     std::cout << std::setw(2*fw) << "seconds";
     std::cout << std::setw(2*fw) << "slowseconds";
-    std::cout << std::setw(2*fw) << "major cycles";
-    std::cout << std::setw(2*fw) << "slowmajor cycles";
-    std::cout << std::setw(2*fw) << "minor cycles";
+    std::cout << std::setw(2*fw) << "major";
+    std::cout << std::setw(2*fw) << "slowmajor";
+    std::cout << std::setw(2*fw) << "minor";
     std::cout << std::setw(2*fw) << "mvm %";
     std::cout << std::setw(2*fw) << "trsv %";
     std::cout << std::setw(2*fw) << "remove cols %";
@@ -120,7 +120,7 @@ void benchmark_log_det()
             double slow_seconds = (double) cycles_count_stop().time;
 
             std::cout << std::setw(fw) << n;
-            std::cout << std::setw(2*fw) << A.size();
+            std::cout << std::setw(fw) << A.size();
             std::cout << std::setw(2*fw) << seconds;
             std::cout << std::setw(2*fw) << slow_seconds;
             std::cout << std::setw(2*fw) << log.get_count("MAJOR TIME");
@@ -134,7 +134,12 @@ void benchmark_log_det()
 
             std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME"));
             std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME"));
-            std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME"));
+            if(log.get_total("REMOVE COLS QR TIME") > 0) {
+                std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME"));
+            }
+            else {
+                std::cout << std::setw(2*fw) << 0;
+            }
             std::cout << std::endl;
         }
     }
@@ -152,9 +157,11 @@ void benchmark_min_cut()
     std::cout << "===========================================================" << std::endl;
 
     int fw = 10;
-    std::cout << std::setw(fw) << "n" << std::setw(2*fw) << "mean (s)" << std::setw(2*fw) << "median (s)";
-    std::cout << std::setw(2*fw) <<  "major cycles";
-    std::cout << std::setw(2*fw) <<  "minor cycles";
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "|A|"; 
+    std::cout << std::setw(2*fw) << "seconds";
+    std::cout << std::setw(2*fw) <<  "major";
+    std::cout << std::setw(2*fw) <<  "minor";
     std::cout << std::setw(2*fw) <<  "mvm %";
     std::cout << std::setw(2*fw) <<  "trsv %";
     std::cout << std::setw(2*fw) <<  "remove cols %";
@@ -168,64 +175,41 @@ void benchmark_min_cut()
     for(int64_t i = start; i <= end; i += inc) {
         int64_t n = i;
 
-        std::vector<double> cpu_cycles;
-        std::vector<double> major_cycles;
-        std::vector<double> minor_cycles;
-
-        std::vector<double> mvm_percent;
-        std::vector<double> trsv_percent;
-        std::vector<double> remove_cols_percent;
-        std::vector<double> eval_f_percent;
-        std::vector<double> greedy_percent;
-
-        std::vector<double> mvm_bw;
-        std::vector<double> trsv_bw;
-        std::vector<double> remove_cols_bw;
-        
-
         for(int64_t r = 0; r < n_reps; r++) {
             PerfLog log;
 
             //Initialize min norm point problem
             MinCut<double> problem(n);
-            problem.WattsStrogatz(16, 0.25);
+            problem.WattsStrogatz(16, 0.75);
             
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            mnp.minimize(problem, 1e-10, 1e-6, false, &log);
+            auto A = mnp.minimize(problem, 1e-10, 1e-6, false, &log);
             double cycles = (double) cycles_count_stop().cycles;
-            cpu_cycles.push_back(cycles_count_stop().time);
+            double seconds = (double) cycles_count_stop().time;
 
-            major_cycles.push_back(log.get_count("MAJOR TIME"));
-            minor_cycles.push_back(log.get_count("MINOR TIME"));
-            
-            mvm_percent.push_back((double) log.get_total("MVM TIME") / cycles);
-            trsv_percent.push_back((double) log.get_total("TRSV TIME") / cycles);
-            remove_cols_percent.push_back((double) log.get_total("REMOVE COLS QR TIME") / cycles);
-            eval_f_percent.push_back((double) log.get_total("EVAL F TIME") / cycles);
-            greedy_percent.push_back((double) log.get_total("GREEDY TIME") / cycles);
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << A.size();
+            std::cout << std::setw(2*fw) << seconds;
+            std::cout << std::setw(2*fw) << log.get_count("MAJOR TIME");
+            std::cout << std::setw(2*fw) << log.get_count("MINOR TIME");
+            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("MVM TIME") / cycles;
+            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("TRSV TIME") / cycles;
+            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("REMOVE COLS QR TIME") / cycles;
+            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("EVAL F TIME") / cycles;
+            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("GREEDY TIME") / cycles;
 
-            mvm_bw.push_back(((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME")));
-            trsv_bw.push_back(((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME")));
-            if(log.get_total("REMOVE COLS QR TIME") > 0)
-                remove_cols_bw.push_back(((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME")));
+            std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME"));
+            std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME"));
+            if(log.get_total("REMOVE COLS QR TIME") > 0) {
+                std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME"));
+            }
+            else {
+                std::cout << std::setw(2*fw) << 0;
+            }
+            std::cout << std::endl;
         }
-
-        std::cout << std::setw(fw) << n;
-        std::cout << std::setw(2*fw) << mean(cpu_cycles);
-        std::cout << std::setw(2*fw) << median(cpu_cycles);
-        std::cout << std::setw(2*fw) << mean(major_cycles);
-        std::cout << std::setw(2*fw) << mean(minor_cycles);
-        std::cout << std::setw(2*fw) << 100 * mean(mvm_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(trsv_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(remove_cols_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(eval_f_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(greedy_percent);
-        std::cout << std::setw(2*fw) << 3.6e3 * mean(mvm_bw);
-        std::cout << std::setw(2*fw) << 3.6e3 * mean(trsv_bw);
-        std::cout << std::setw(2*fw) << 3.6e3 * mean(remove_cols_bw);
-        std::cout << std::endl;
     }
 }
 
@@ -279,6 +263,7 @@ void benchmark_mnp_vs_brsmnp()
             //Initialize min norm point problem
             MinCut<double> problem(n);
             problem.WattsStrogatz(16, 0.25);
+            //problem.Geometric(0.05);
             
             //Time problem
             MinNormPoint<double> mnp;
@@ -336,9 +321,10 @@ int main()
 {
     run_validation_suite();
     run_benchmark_suite();
-    benchmark_log_det();
 
     benchmark_min_cut();
+    benchmark_log_det();
+
     benchmark_mnp_vs_brsmnp();
 
 
