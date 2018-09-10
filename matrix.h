@@ -220,7 +220,7 @@ public:
         }
     }
 
-    void copy_permute_rc(const Matrix<DT>& other, std::vector<int64_t>& p) 
+    void copy_permute_rc(const Matrix<DT>& other, const std::vector<int64_t>& p) 
     {
         assert(_m == other._m && _n == other._n);
 
@@ -287,6 +287,18 @@ public:
         return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, ttag, false, log);
     }
 
+    void print(std::string name) const
+    {
+        std::cout << name << std::endl;
+        for(int i = 0; i < _m; i++) {
+            for(int j = 0; j < _n; j++) {
+                std::cout << std::left << std::setprecision(5) << std::setw(12) << (*this)(i,j);
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
     void print() const
     {
         for(int i = 0; i < _m; i++) {
@@ -295,6 +307,7 @@ public:
             }
             std::cout << std::endl;
         }
+        std::cout << std::endl;
     }
 
     inline void enlarge_m(int64_t m_inc)
@@ -1129,10 +1142,12 @@ void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X)
     start = rdtsc();
 
     int64_t ldx = X._cs * X._rs;
+    CBLAS_UPLO uplo_trans = CblasUpper;
+    if(uplo == CblasUpper) uplo_trans = CblasLower;
 
-    if(_rs == 1) { 
+    if(_rs == 1) {
         if(X._rs != 1) {
-            cblas_dtrsm(CblasRowMajor, side, uplo, CblasTrans, CblasNonUnit, 
+            cblas_dtrsm(CblasRowMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
                     X.height(), X.width(), 1.0,
                     _values, _cs,
                     X._values, ldx);
@@ -1145,7 +1160,7 @@ void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X)
         }
     } else {
         if(X._cs != 1) {
-            cblas_dtrsm(CblasColMajor, side, uplo, CblasTrans, CblasNonUnit, 
+            cblas_dtrsm(CblasColMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
                     X.height(), X.width(), 1.0,
                     _values, _rs,
                     X._values, ldx);
@@ -1256,28 +1271,50 @@ void Matrix<double>::chol(char uplo)
 {
     assert(_m == _n);
     assert(_rs == 1 || _cs == 1);
-/*    char uplo = 'U';
+    int inf;
     int n = _n;
-    int lda = _cs;
-    int inf;*/
-//    dpotrf_(&uplo, &n, _values, &lda, &inf);
+    if(_rs == 1) {
+        int lda = _cs;
+        dpotrf_(&uplo, &n, _values, &lda, &inf);
+    } else {
+        char uplo_trans = 'L';
+        if(uplo == 'L') uplo_trans = 'U';
+        int lda = _rs;
+
+        dpotrf_(&uplo_trans, &n, _values, &lda, &inf);
+    }
+#if 0
     if(_rs == 1) {
         LAPACKE_dpotrf(LAPACK_COL_MAJOR, uplo, _m,  _values, _cs);
     } else /*if(_cs == 1)*/ {
         LAPACKE_dpotrf(LAPACK_ROW_MAJOR, uplo, _m,  _values, _rs);
     }
+#endif
 }
 template<>
 void Matrix<float>::chol(char uplo)
 {
     assert(_m == _n);
     assert(_rs == 1 || _cs == 1);
+    int inf;
+    int n = _n;
+    if(_rs == 1) {
+        int lda = _cs;
+        spotrf_(&uplo, &n, _values, &lda, &inf);
+    } else {
+        char uplo_trans = 'L';
+        if(uplo == 'L') uplo_trans = 'U';
+        int lda = _rs;
 
+        spotrf_(&uplo_trans, &n, _values, &lda, &inf);
+    }
+#if 0
     if(_rs == 1) {
         LAPACKE_spotrf(LAPACK_COL_MAJOR, uplo, _m,  _values, _cs);
     } else /*if(_cs == 1)*/ {
         LAPACKE_spotrf(LAPACK_ROW_MAJOR, uplo, _m,  _values, _rs);
     }
+#endif
 }
 
 
@@ -1416,6 +1453,58 @@ void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x)
         log->log("TRSV FLOPS", _m * _n);
         log->log("TRSV TIME", end - start);
         log->log("TRSV BYTES", sizeof(float) * (_m * _n / 2 + 2*_m + _n));
+    }
+}
+
+template<>
+void Matrix<float>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<float>& X)
+{
+    if(side == CblasLeft) assert(_m == X.height() && "Nonconformal trsm");
+    else assert (_m == X.width() && "Nonconformal trsm");
+    assert(_m == _n && "Nonconformal trsm.");
+    assert((_rs == 1  || _cs == 1) && (X._rs == 1 || X._cs == 1));
+
+    int64_t start, end;
+    start = rdtsc();
+
+    int64_t ldx = X._cs * X._rs;
+    CBLAS_UPLO uplo_trans = CblasUpper;
+    if(uplo == CblasUpper) uplo_trans = CblasLower;
+
+    if(_rs == 1) {
+        if(X._rs != 1) {
+            cblas_strsm(CblasRowMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _cs,
+                    X._values, ldx);
+        }
+        else {
+            cblas_strsm(CblasColMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _cs,
+                    X._values, ldx);
+        }
+    } else {
+        if(X._cs != 1) {
+            cblas_strsm(CblasColMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _rs,
+                    X._values, ldx);
+        }
+        else {
+            cblas_strsm(CblasRowMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
+                    X.height(), X.width(), 1.0,
+                    _values, _rs,
+                    X._values, ldx);
+        }
+    }
+
+    end = rdtsc();
+
+    if(log != NULL) {
+        log->log("TRSM FLOPS", _n*_n*X.width());
+        log->log("TRSM TIME", end - start);
+        log->log("TRSM BYTES", sizeof(float) * (_n*_n/2 + 2*_n*X.width()));
     }
 }
 

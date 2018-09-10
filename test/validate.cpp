@@ -14,12 +14,10 @@
 using namespace lemon;
 
 //#define DEBUGGING
-//
 
 template<class DT>
 DT brute_force_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, int64_t i, int64_t n) {
     if(i == n) { 
-    //    std::cout << A.size() << " " << F.eval(A) << std::endl;
         return F.eval(A);
     } 
     
@@ -30,7 +28,6 @@ DT brute_force_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, in
     DT val_add_i = brute_force_rec(F, B, i+1, n);
 
     return std::min(val_add_i, val_noadd_i);
-
 }
 
 void val_log_det_brute_force()
@@ -53,7 +50,7 @@ void val_log_det_brute_force()
         //Create random problem
         LogDet<double> problem(n);
         MinNormPoint<double> mnp;
-        auto A = mnp.minimize(problem, 1e-10, 1e-6, false, NULL);
+        auto A = mnp.minimize(problem, 1e-5, 1e-10, false, NULL);
         double mnp_sol = problem.eval(A) + problem.baseline;
         
         std::unordered_set<int64_t> empty;
@@ -69,40 +66,48 @@ void val_log_det_brute_force()
 
 }
 
+//Make sure log det greedy algorithm and eval function are consistent
 void val_log_det_greedy()
 {
 
     int64_t start = 4;
-    int64_t end = 16; 
+    int64_t end = 64; 
     int64_t inc = 4; 
 
     std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating Log Det Greedy" << std::endl;
+    std::cout << "Validating Log Det Greedy Algorithm Consistency" << std::endl;
     std::cout << "===========================================================" << std::endl;
     int w = 18;
     std::cout << std::setw(w) << "n";
     std::cout << std::setw(w) << "error";
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
-        //Create random problem
         LogDet<double> prob(n);
 
-        Vector<double> x(n);
         Vector<double> p1(n);
         Vector<double> p2(n);
-        x.fill_rand();
+        
+        std::vector<int64_t> perm(n);
+        for(int64_t i = 0; i < n; i++) perm[i] = i;
+        scramble(perm);
 
-        prob.polyhedron_greedy(1.0, x, p1, NULL);
-        prob.SubmodularFunction::polyhedron_greedy(1.0, x, p2, NULL);
+        std::unordered_set<int64_t> A;
+        A.clear();
+        double FA_old = 0.0;
+        for(int i = 0; i < n; i++) {
+            A.insert(perm[i]);
+            double FA = prob.eval(A);
+            p1(perm[i]) = FA - FA_old;
+            FA_old = FA;
+        }
+
+        prob.eval(perm, p2);
         p1.axpy(-1.0, p2);
         double error = p1.norm2();
         
         std::cout << std::setw(w) << n;
         print_err(error, w);
         std::cout << std::endl;
-#ifdef DEBUGGING        
-        exit(1);
-#endif
     }
 }
 

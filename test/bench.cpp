@@ -8,6 +8,7 @@
 #include "../matrix.h"
 #include "../perf/perf.h"
 #include "../util.h"
+#include "../submodular.h"
 
 void benchmark_gemm()
 {
@@ -49,10 +50,11 @@ void benchmark_gemm()
         std::cout << std::endl;
     }
 }
+
 void benchmark_remove_cols()
 {
     int64_t start = 128;
-    int64_t end = 2048;
+    int64_t end = 1024;
     int64_t inc = start;
     int64_t n_reps = 3;
 
@@ -127,6 +129,55 @@ void benchmark_remove_cols()
     }
 }
 
+void benchmark_logdet_marginal_gains()
+{
+    int64_t start = 128;
+    int64_t end = 1024;
+    int64_t inc = 128;
+    int64_t n_reps = 3;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking LogDet Marginal Gains" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 20;
+    std::cout << std::setw(fw) << "n";
+    std::cout << std::setw(fw) << "GFLOPS 1";
+    std::cout << std::setw(fw) << "GFLOPS 2";
+    std::cout << std::endl;
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        LogDet<double> fast(n);
+        SlowLogDet<double> slow(n);
+
+        std::vector<int64_t> perm(n);
+        for(int64_t i = 0; i < n; i++) perm[i] = i;
+        Vector<double> p1(n);
+        Vector<double> p2(n);
+
+        std::vector<double> cycles1;
+        std::vector<double> cycles2;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            scramble(perm);
+
+            cycles_count_start();
+            fast.eval(perm, p1);
+            cycles1.push_back(cycles_count_stop().time);
+
+            cycles_count_start();
+            slow.eval(perm, p2);
+            cycles2.push_back(cycles_count_stop().time);
+        }
+
+        std::cout << std::setw(fw) << n;
+        std::cout << std::setw(fw) << n*n*n/3.0 / mean(cycles1) / 1e9;
+        std::cout << std::setw(fw) << n*n*n/3.0 / mean(cycles2) / 1e9;
+        std::cout << std::endl;
+    }
+}
+
 void run_benchmark_suite()
 {
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
@@ -134,4 +185,6 @@ void run_benchmark_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     benchmark_gemm();
     benchmark_remove_cols();
+    benchmark_logdet_marginal_gains();
 }
+

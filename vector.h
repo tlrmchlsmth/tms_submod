@@ -104,11 +104,21 @@ public:
         this->fill_rand(gen, normal);
     }
 
+    void print(std::string name) const
+    {
+        std::cout << name << std::endl;
+        for(int i = 0; i < _len; i++){
+            std::cout << _values[i*_stride] << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
     void print() const
     {
         for(int i = 0; i < _len; i++){
             std::cout << _values[i*_stride] << std::endl;
         }
+        std::cout << std::endl;
     }
 
     DT sum() const

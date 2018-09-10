@@ -51,6 +51,16 @@ void print_err(float err, int64_t w) {
     }
 }
 
+void scramble(std::vector<int64_t>& v) {
+    std::random_device rd;
+    std::mt19937 gen{rd()};
+    for(int64_t i = 0; i < v.size()-2; i++) {
+        std::uniform_int_distribution<int64_t> dist(i, v.size()-1);
+        int64_t j = dist(gen);
+        std::swap(v[i], v[j]);
+    }
+}
+
 
 //#define BLAS_HOUSE        
 void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, double* X, int64_t x_rs, int64_t x_cs) {

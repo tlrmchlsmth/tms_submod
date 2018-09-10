@@ -28,6 +28,7 @@ public:
     }
     virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
     virtual std::unordered_set<int64_t> get_set() const = 0;
+
     virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
         std::unordered_set<int64_t> Ab = A;
         Ab.insert(b);
@@ -35,7 +36,20 @@ public:
         return FAb;
     }
 
-    virtual void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* plog) 
+    //Todo: This should be renamed "marginal gains"
+    virtual void eval(const std::vector<int64_t>& perm, Vector<DT>& xout) 
+    {
+        A.clear();
+        DT FA_old = 0.0;
+        for(int i = 0; i < xout.length(); i++) {
+            DT FA = eval(A, FA_old, permutation[i]);
+            xout(permutation[i]) = FA - FA_old;
+            A.insert(permutation[i]);
+            FA_old = FA;
+        }
+    }
+
+    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* plog) 
     {
         int64_t start_a = rdtsc();
         //sort weights
@@ -49,15 +63,7 @@ public:
         }
 
         int64_t start_b = rdtsc();
-        DT FA_old = 0.0;
-        for(int i = 0; i < xout.length(); i++) {
-            DT FA = eval(A, FA_old, permutation[i]);
-            xout(permutation[i]) = FA - FA_old;
-            A.insert(permutation[i]);
-            FA_old = FA;
-        }
-        
-        A.clear();
+        eval(permutation, xout);
         if(plog) {
             plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
             plog->log("GREEDY TIME", rdtsc() - start_a);
@@ -71,17 +77,9 @@ class LogDet : public SubmodularFunction<DT> {
 public:
     int64_t n;
 
-    Matrix<DT> cov;     //Covariance matrix
-
-    Matrix<DT> KV;      //Cholesky factorization of the covariance matrix of S
-//    Matrix<DT> KA_base;      //Workspace for the cholesky factorization of the covariance matrix of the random variables in set A
-//    Matrix<DT> KAc_base;     //Workspace for the cholesky factorization of the covariance matrix of the random variables not in set A
-
-    DT baseline;     //Log determinant of KV
-
-//    Matrix<DT> T_ws;
-//    Matrix<DT> V_ws;
-//    Matrix<DT> ws;
+    Matrix<DT> Cov;     //Covariance matrix
+    Matrix<DT> U;       //Cholesky factorization of the covariance matrix of S
+    DT baseline;        //Log determinant of covariance matrix
 
     DT log_determinant(Matrix<DT>& A)
     {
@@ -93,6 +91,194 @@ public:
     }
 
     LogDet(int64_t n_in) : SubmodularFunction<DT>(n_in),
+                                         n(n_in), Cov(n_in, n_in), U(n_in, n_in),
+                                         baseline(0.0)
+    {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::uniform_real_distribution<double> diag_dist(-2.0, 2.0);
+        std::uniform_real_distribution<double> dist(-.01, .01);
+
+        //Create a covariance matrix. 
+        //Every element must be positive and it must be symmetric positive definite
+        //
+        //We accomplish this by:
+        //  1. Start with a random upper triangular matrix
+        //  2. Multiply it with its transpose
+        U.fill_rand(gen, dist);
+        for(int i = 0; i < n; i++) {
+            U(i,i) = diag_dist(gen);
+        }
+        U.set_subdiagonal(0.0);
+        auto UT = U.transposed();
+        Cov.mmm(1.0, UT, U, 0.0);
+        baseline = 0;
+    }
+
+    DT eval(const std::unordered_set<int64_t>& A) {
+        if(A.size() == 0) return 0.0; //Fast-path so stuff doesn't break with empty matrices
+
+        // Select some rows and columns and perform Cholesky factorization
+        auto Ua = U.submatrix(0,0,A.size(),A.size());
+        Ua.set_all(0.0);
+        int64_t kaj = 0;
+        for(int64_t j = 0; j < n; j++) {
+            if(A.count(j) == 0) continue;
+            int64_t kai = 0;
+            for(int64_t i = 0; i <= j; i++) {
+                if(A.count(i) == 0) continue;
+                Ua(kai, kaj) = Cov(i,j);
+                kai++;
+            }
+            kaj ++;
+        }
+        Ua.chol('U');
+        DT log_det = log_determinant(Ua);
+
+        return log_det;
+    }
+
+    std::unordered_set<int64_t> get_set() const {
+        std::unordered_set<int64_t> V;
+        V.reserve(n);
+        for(int i = 0; i < n; i++) 
+            V.insert(i);
+        return V;
+    }
+
+    void eval(const std::vector<int64_t>& perm, Vector<DT>& xout) 
+    {
+        //Permute rows and columns of covariance matrix and perform cholesky factorization
+        auto Ua = U.submatrix(0,0,n,n);
+        Ua.copy_permute_rc(Cov, perm);
+        Ua.chol('U');
+        for(int64_t i = 0; i < n; i++) {
+            xout(perm[i]) = log(Ua(i,i) * Ua(i,i));
+        }
+    }
+};
+
+template<class DT>
+class SlowLogDet : public SubmodularFunction<DT> {
+public:
+    int64_t n;
+
+    Matrix<DT> Cov;     //Covariance matrix
+    Matrix<DT> U;       //Cholesky factorization of the covariance matrix of S
+    DT baseline;        //Log determinant of covariance matrix
+
+    DT log_determinant(Matrix<DT>& A)
+    {
+        DT val = 0.0;
+        for(int64_t i = 0; i < std::min(A.height(), A.width()); i++) {
+            val += log(A(i,i)*A(i,i));
+        }
+        return val;
+    }
+
+    SlowLogDet(int64_t n_in, Matrix<DT>& Cov_in) : SubmodularFunction<DT>(n_in),
+                                                   n(n_in), Cov(n_in, n_in), U(n_in, n_in),
+                                                   baseline(0.0)
+    {
+        Cov.copy(Cov_in);
+    }
+
+    SlowLogDet(int64_t n_in) : SubmodularFunction<DT>(n_in),
+                               n(n_in), Cov(n_in, n_in), U(n_in, n_in),
+                               baseline(0.0)
+    {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::uniform_real_distribution<double> diag_dist(-2.0, 2.0);
+        std::uniform_real_distribution<double> dist(-.01, .01);
+
+        U.fill_rand(gen, dist);
+        for(int i = 0; i < n; i++) {
+            U(i,i) = diag_dist(gen);
+        }
+        U.set_subdiagonal(0.0);
+        auto UT = U.transposed();
+        Cov.mmm(1.0, UT, U, 0.0);
+        baseline = 0;
+    }
+
+    DT eval(const std::unordered_set<int64_t>& A) {
+        if(A.size() == 0) return 0.0; //Fast-path so stuff doesn't break with empty matrices
+
+        // Select some rows and columns and perform Cholesky factorization
+        auto Ua = U.submatrix(0,0,A.size(),A.size());
+        Ua.set_all(0.0);
+        int64_t kaj = 0;
+        for(int64_t j = 0; j < n; j++) {
+            if(A.count(j) == 0) continue;
+            int64_t kai = 0;
+            for(int64_t i = 0; i <= j; i++) {
+                if(A.count(i) == 0) continue;
+                Ua(kai, kaj) = Cov(i,j);
+                kai++;
+            }
+            kaj ++;
+        }
+        Ua.chol('U');
+        DT log_det = log_determinant(Ua);
+
+        return log_det;
+    }
+
+    std::unordered_set<int64_t> get_set() const {
+        std::unordered_set<int64_t> V;
+        V.reserve(n);
+        for(int i = 0; i < n; i++) 
+            V.insert(i);
+        return V;
+    }
+
+    void eval(const std::vector<int64_t>& perm, Vector<DT>& xout) 
+    {
+        //Get initial KA 
+        auto Ua = U.submatrix(0,0,1,1);
+        Ua(0,0) = std::sqrt(Cov(perm[0], perm[0]));
+
+        //Evaluate initial marginal gain 
+        xout(perm[0]) = log(Ua(0,0) * Ua(0,0));
+
+        //Evaluate the rest of marginal gains, one at a time
+        for(int64_t i = 1; i < n; i++) {
+            auto c1 = U.subcol(0, i, i);
+            for(int64_t j = 0; j < i; j++) {
+                c1(j) = Cov(perm[i], perm[j]);
+            }
+            Ua.transpose(); Ua.trsv(CblasLower, c1); Ua.transpose();
+            DT mu = sqrt(std::abs(Cov(perm[i], perm[i]) - c1.dot(c1)));
+            Ua.enlarge_n(1); Ua.enlarge_m(1);
+            Ua(i,i) = mu;
+            
+            xout(perm[i]) = log(mu*mu);
+        }
+    }
+};
+
+#if 0
+//m: # of states. n: number of variables
+template<class DT>
+class LogDetSymm : public SubmodularFunction<DT> {
+public:
+    int64_t n;
+
+    Matrix<DT> cov;     //Covariance matrix
+    Matrix<DT> KV;      //Cholesky factorization of the covariance matrix of S
+    DT baseline;     //Log determinant of KV
+
+    DT log_determinant(Matrix<DT>& A)
+    {
+        DT val = 0.0;
+        for(int64_t i = 0; i < std::min(A.height(), A.width()); i++) {
+            val += log(A(i,i)*A(i,i));
+        }
+        return val;
+    }
+
+    LogDetSymm(int64_t n_in) : SubmodularFunction<DT>(n_in),
                                          n(n_in), cov(n_in, n_in), KV(n_in, n_in),
                                          baseline(0.0)
     {
@@ -117,21 +303,26 @@ public:
         auto KVT = KV.transposed();
         cov.mmm(1.0, KVT, KV, 0.0);
 
-        //Our orthogonal transformation is a single reflection
-        /*for(int i = 0; i < 1; i++) {
-            Vector<DT> v(n);
-            v.fill_rand(gen, dist);
-            v.scale(1.0 / v.norm2());
-            v.house_apply(v(0), cov);
-            auto cov_T = cov.transposed();
-            v.house_apply(v(0), cov_T);
-        }*/
+        baseline = log_determinant(KV);
 
-        //Get cholesky factorization of the covariance matrix
+        //Our orthogonal transformation is a single reflection
+        /*
+        Vector<DT> v(n);
+        v.fill_rand(gen, dist);
+        v.scale(1.0 / v.norm2());
+        v.house_apply(v(0), cov);
+        auto cov_T = cov.transposed();
+        v.house_apply(v(0), cov_T);
+        */
+
+        //Check 
         
-//        KV.copy(cov);
-//        KV.chol('U');
-//        KV.set_subdiagonal(0.0);
+        //Get cholesky factorization of the covariance matrix
+        KV.copy(cov);
+        KV.chol('U');
+        KV.set_subdiagonal(0.0);
+        DT baseline2 = log_determinant(KV);
+        std::cout << baseline << "\t" << baseline2 << std::endl;
 
         //Doublecheck
         Vector<double> y(n_in);
@@ -148,8 +339,6 @@ public:
 //        KV.print(); std::cout << std::endl;
         assert(KTKy.norm2() < 1e-8);
        
-        //Check 
-        baseline = log_determinant(KV);
     }
 
     DT eval(const std::unordered_set<int64_t>& A) {
@@ -189,21 +378,6 @@ public:
         KAc.chol('U');
         DT log_det_kac = log_determinant(KAc);
         return log_det_ka + log_det_kac - baseline;
-
-        //TODO: probably there is a crossover point where the size of A is small where the following is beneficial
-/*
-        std::list<int64_t> cols_to_remove_KA;
-        std::list<int64_t> cols_to_remove_KAc;
-        for(int64_t i = 0; i < n; i++) {
-            if(A.count(i) == 0) cols_to_remove_KA.push_back(i);
-            else cols_to_remove_KAc.push_back(i);
-        }
-
-        KV.remove_cols_incremental_qr_tasks_kressner(KA, cols_to_remove_KA, T_ws, V_ws, 64, 32, ws);
-        auto KAc = KAc_base.submatrix(0,0,n,n);
-        KV.remove_cols_incremental_qr_tasks_kressner(KAc, cols_to_remove_KAc, T_ws, V_ws, 64, 32, ws);
-        return log_determinant(KA) + log_determinant(KAc) - baseline;
-        */
     }
 
     std::unordered_set<int64_t> get_set() const {
@@ -214,7 +388,7 @@ public:
         return V;
     }
 
-
+/*
     //incremental version of polyhedron greedy
     //Slow, uses l2 blas and here for posterity only
     void polyhedron_greedy_inc(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* plog) 
@@ -289,49 +463,33 @@ public:
             plog->log("GREEDY TIME", rdtsc() - start_a);
             plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
         }
-    }
+    }*/
 
-    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* plog) 
+    void eval(std::vector<int64_t>& perm, Vector<DT>& xout) 
     {
-        //sort weights
-        int64_t start_a = rdtsc();
-        if (alpha > 0.0) std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
-                [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
-        else std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
-                [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
-        if(plog) plog->log("SORT TIME", rdtsc() - start_a);
-
-
-        int64_t start_b = rdtsc();
-
         //Permute rows and columns of covariance matrix
-        std::vector<int64_t> perm = SubmodularFunction<DT>::permutation;
-        auto LA = KV.submatrix(0,0,n,n);
-        LA.copy_permute_rc(cov, perm);
+        auto Ua = U.submatrix(0,0,n,n);
+        Ua.copy_permute_rc(cov, perm);
         
-        //Do cholestky factorization of forward permuted matrix
-        LA.chol('U');
+        //Do cholestky factorization of permuted matrix
+        Ua.chol('U');
         for(int64_t i = 0; i < n; i++) {
-            xout(perm[i]) = log(LA(i,i) * LA(i,i));
+            xout(perm[i]) = log(Ua(i,i) * Ua(i,i));
         }
 
         //Reverse permutation of rows and columns of covariance matrix
         auto rev = perm;
         std::reverse(rev.begin(), rev.end());
-        LA.copy_permute_rc(cov, rev);
+        Ua.copy_permute_rc(cov, rev);
 
         //Do cholesky factorization of reverse permuted matrix
-        LA.chol('U');
+        Ua.chol('U');
         for(int64_t i = 0; i < n; i++) {
-            xout(perm[i]) -= log(LA(n-i-1, n-i-1)* LA(n-i-1, n-i-1));
-        }
-
-        if(plog) {
-            plog->log("GREEDY TIME", rdtsc() - start_a);
-            plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
+            xout(perm[i]) -= log(Ua(n-i-1, n-i-1)* Ua(n-i-1, n-i-1));
         }
     }
 };
+#endif
 
 template<class DT>
 class IDivSqrtSize : public SubmodularFunction<DT> {
