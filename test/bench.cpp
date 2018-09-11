@@ -163,17 +163,68 @@ void benchmark_logdet_marginal_gains()
             scramble(perm);
 
             cycles_count_start();
-            fast.eval(perm, p1);
+            fast.marginal_gains(perm, p1);
             cycles1.push_back(cycles_count_stop().time);
 
             cycles_count_start();
-            slow.eval(perm, p2);
+            slow.marginal_gains(perm, p2);
             cycles2.push_back(cycles_count_stop().time);
         }
 
         std::cout << std::setw(fw) << n;
         std::cout << std::setw(fw) << n*n*n/3.0 / mean(cycles1) / 1e9;
         std::cout << std::setw(fw) << n*n*n/3.0 / mean(cycles2) / 1e9;
+        std::cout << std::endl;
+    }
+}
+
+void benchmark_mincut_marginal_gains()
+{
+    int64_t start = 128;
+    int64_t end = 8192;
+    int64_t inc = 128;
+    int64_t n_reps = 3;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking Min Cut Marginal Gains" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 20;
+    std::cout << std::setw(fw) << "n";
+    std::cout << std::setw(fw) << "M Edges/S Fast";
+    std::cout << std::setw(fw) << "M Edges/S Slow";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        MinCut<double> fast(n);
+        fast.WattsStrogatz(16, 0.25);
+        SlowMinCut<double> slow(fast);
+
+        std::vector<int64_t> perm(n);
+        for(int64_t i = 0; i < n; i++) perm[i] = i;
+        Vector<double> p1(n);
+        Vector<double> p2(n);
+
+        std::vector<double> cycles1;
+        std::vector<double> cycles2;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            scramble(perm);
+
+            cycles_count_start();
+            fast.marginal_gains(perm, p1);
+            cycles1.push_back(cycles_count_stop().time);
+
+            cycles_count_start();
+            slow.marginal_gains(perm, p2);
+            cycles2.push_back(cycles_count_stop().time);
+        }
+
+        std::cout << std::setw(fw) << n;
+        std::cout << std::setw(fw) << 16*n / mean(cycles1) / 1e6;
+        std::cout << std::setw(fw) << 16*n / mean(cycles2) / 1e6;
         std::cout << std::endl;
     }
 }
@@ -185,6 +236,7 @@ void run_benchmark_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     benchmark_gemm();
     benchmark_remove_cols();
+    benchmark_mincut_marginal_gains();
     benchmark_logdet_marginal_gains();
 }
 

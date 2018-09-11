@@ -11,6 +11,7 @@
 #include "matrix.h"
 #include "perf_log.h"
 
+#include <omp.h>
 
 template<class DT>
 class SubmodularFunction {
@@ -26,30 +27,31 @@ public:
         for(int i = 0; i < n; i++) 
             permutation.push_back(i);
     }
+    virtual void initialize_default(){}
+
     virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
     virtual std::unordered_set<int64_t> get_set() const = 0;
 
-    virtual DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
+    virtual DT marginal_gain(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
         std::unordered_set<int64_t> Ab = A;
         Ab.insert(b);
         DT FAb = this->eval(Ab);
         return FAb;
     }
 
-    //Todo: This should be renamed "marginal gains"
-    virtual void eval(const std::vector<int64_t>& perm, Vector<DT>& xout) 
+    virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         A.clear();
         DT FA_old = 0.0;
-        for(int i = 0; i < xout.length(); i++) {
-            DT FA = eval(A, FA_old, permutation[i]);
-            xout(permutation[i]) = FA - FA_old;
+        for(int i = 0; i < x.length(); i++) {
+            DT FA = marginal_gain(A, FA_old, permutation[i]);
+            x(permutation[i]) = FA - FA_old;
             A.insert(permutation[i]);
             FA_old = FA;
         }
     }
 
-    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* plog) 
+    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* plog) 
     {
         int64_t start_a = rdtsc();
         //sort weights
@@ -63,7 +65,7 @@ public:
         }
 
         int64_t start_b = rdtsc();
-        eval(permutation, xout);
+        marginal_gains(permutation, x);
         if(plog) {
             plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
             plog->log("GREEDY TIME", rdtsc() - start_a);
@@ -146,114 +148,49 @@ public:
         return V;
     }
 
-    void eval(const std::vector<int64_t>& perm, Vector<DT>& xout) 
+    void marginal_gain(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         //Permute rows and columns of covariance matrix and perform cholesky factorization
         auto Ua = U.submatrix(0,0,n,n);
         Ua.copy_permute_rc(Cov, perm);
         Ua.chol('U');
         for(int64_t i = 0; i < n; i++) {
-            xout(perm[i]) = log(Ua(i,i) * Ua(i,i));
+            x(perm[i]) = log(Ua(i,i) * Ua(i,i));
         }
     }
 };
 
 template<class DT>
-class SlowLogDet : public SubmodularFunction<DT> {
+class SlowLogDet : public LogDet<DT> {
 public:
-    int64_t n;
-
-    Matrix<DT> Cov;     //Covariance matrix
-    Matrix<DT> U;       //Cholesky factorization of the covariance matrix of S
-    DT baseline;        //Log determinant of covariance matrix
-
-    DT log_determinant(Matrix<DT>& A)
+    SlowLogDet(LogDet<DT>& from) : LogDet<DT>(from.n)
     {
-        DT val = 0.0;
-        for(int64_t i = 0; i < std::min(A.height(), A.width()); i++) {
-            val += log(A(i,i)*A(i,i));
-        }
-        return val;
+        LogDet<DT>::Cov.copy(from.Cov);
     }
 
-    SlowLogDet(int64_t n_in, Matrix<DT>& Cov_in) : SubmodularFunction<DT>(n_in),
-                                                   n(n_in), Cov(n_in, n_in), U(n_in, n_in),
-                                                   baseline(0.0)
-    {
-        Cov.copy(Cov_in);
-    }
+    SlowLogDet(int64_t n_in) : LogDet<DT>(n_in) {}
 
-    SlowLogDet(int64_t n_in) : SubmodularFunction<DT>(n_in),
-                               n(n_in), Cov(n_in, n_in), U(n_in, n_in),
-                               baseline(0.0)
-    {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
-        std::uniform_real_distribution<double> diag_dist(-2.0, 2.0);
-        std::uniform_real_distribution<double> dist(-.01, .01);
-
-        U.fill_rand(gen, dist);
-        for(int i = 0; i < n; i++) {
-            U(i,i) = diag_dist(gen);
-        }
-        U.set_subdiagonal(0.0);
-        auto UT = U.transposed();
-        Cov.mmm(1.0, UT, U, 0.0);
-        baseline = 0;
-    }
-
-    DT eval(const std::unordered_set<int64_t>& A) {
-        if(A.size() == 0) return 0.0; //Fast-path so stuff doesn't break with empty matrices
-
-        // Select some rows and columns and perform Cholesky factorization
-        auto Ua = U.submatrix(0,0,A.size(),A.size());
-        Ua.set_all(0.0);
-        int64_t kaj = 0;
-        for(int64_t j = 0; j < n; j++) {
-            if(A.count(j) == 0) continue;
-            int64_t kai = 0;
-            for(int64_t i = 0; i <= j; i++) {
-                if(A.count(i) == 0) continue;
-                Ua(kai, kaj) = Cov(i,j);
-                kai++;
-            }
-            kaj ++;
-        }
-        Ua.chol('U');
-        DT log_det = log_determinant(Ua);
-
-        return log_det;
-    }
-
-    std::unordered_set<int64_t> get_set() const {
-        std::unordered_set<int64_t> V;
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
-            V.insert(i);
-        return V;
-    }
-
-    void eval(const std::vector<int64_t>& perm, Vector<DT>& xout) 
+    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         //Get initial KA 
-        auto Ua = U.submatrix(0,0,1,1);
-        Ua(0,0) = std::sqrt(Cov(perm[0], perm[0]));
+        auto Ua = LogDet<DT>::U.submatrix(0,0,1,1);
+        Ua(0,0) = std::sqrt(LogDet<DT>::Cov(perm[0], perm[0]));
 
         //Evaluate initial marginal gain 
-        xout(perm[0]) = log(Ua(0,0) * Ua(0,0));
+        x(perm[0]) = log(Ua(0,0) * Ua(0,0));
 
         //Evaluate the rest of marginal gains, one at a time
-        for(int64_t i = 1; i < n; i++) {
-            auto c1 = U.subcol(0, i, i);
+        for(int64_t i = 1; i < LogDet<DT>::n; i++) {
+            auto c1 = LogDet<DT>::U.subcol(0, i, i);
             for(int64_t j = 0; j < i; j++) {
-                c1(j) = Cov(perm[i], perm[j]);
+                c1(j) = LogDet<DT>::Cov(perm[i], perm[j]);
             }
             Ua.transpose(); Ua.trsv(CblasLower, c1); Ua.transpose();
-            DT mu = sqrt(std::abs(Cov(perm[i], perm[i]) - c1.dot(c1)));
+            DT mu = sqrt(std::abs(LogDet<DT>::Cov(perm[i], perm[i]) - c1.dot(c1)));
             Ua.enlarge_n(1); Ua.enlarge_m(1);
             Ua(i,i) = mu;
             
-            xout(perm[i]) = log(mu*mu);
+            x(perm[i]) = log(mu*mu);
         }
     }
 };
@@ -391,7 +328,7 @@ public:
 /*
     //incremental version of polyhedron greedy
     //Slow, uses l2 blas and here for posterity only
-    void polyhedron_greedy_inc(double alpha, const Vector<DT>& weights, Vector<DT>& xout, PerfLog* plog) 
+    void polyhedron_greedy_inc(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* plog) 
     {
         //sort weights
         int64_t start_a = rdtsc();
@@ -430,7 +367,7 @@ public:
 
         //Evaluate initial FA
         DT FA_old = log_determinant(KA) + log_determinant(KAc) - baseline;
-        xout(SubmodularFunction<DT>::permutation[0]) = FA_old;
+        x(SubmodularFunction<DT>::permutation[0]) = FA_old;
 
         //Evaluate the rest of FAs
         for(int64_t i = 1; i < n-1; i++) {
@@ -454,7 +391,7 @@ public:
 
             //Evaluate
             DT FA = log_determinant(KA) + log_determinant(KAc) - baseline;
-            xout(cov_i) = FA - FA_old;
+            x(cov_i) = FA - FA_old;
 
             FA_old = FA;
         }
@@ -465,7 +402,7 @@ public:
         }
     }*/
 
-    void eval(std::vector<int64_t>& perm, Vector<DT>& xout) 
+    void marginal_gains(std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         //Permute rows and columns of covariance matrix
         auto Ua = U.submatrix(0,0,n,n);
@@ -474,7 +411,7 @@ public:
         //Do cholestky factorization of permuted matrix
         Ua.chol('U');
         for(int64_t i = 0; i < n; i++) {
-            xout(perm[i]) = log(Ua(i,i) * Ua(i,i));
+            x(perm[i]) = log(Ua(i,i) * Ua(i,i));
         }
 
         //Reverse permutation of rows and columns of covariance matrix
@@ -485,7 +422,7 @@ public:
         //Do cholesky factorization of reverse permuted matrix
         Ua.chol('U');
         for(int64_t i = 0; i < n; i++) {
-            xout(perm[i]) -= log(Ua(n-i-1, n-i-1)* Ua(n-i-1, n-i-1));
+            x(perm[i]) -= log(Ua(n-i-1, n-i-1)* Ua(n-i-1, n-i-1));
         }
     }
 };
@@ -532,17 +469,21 @@ public:
     //Each edge has an index and a weight, and we will have the source and sink node have index n and n+1, respectively.
     std::vector<std::vector<Edge<DT>>> adj_in;
     std::vector<std::vector<Edge<DT>>> adj_out;
-    int64_t size;
+    int64_t n;
     DT baseline;
 
-    MinCut(int64_t n) : SubmodularFunction<DT>(n), size(n), baseline(0.0) {}
+    MinCut(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in), baseline(0.0) {}
+    void initialize_default()
+    {
+        WattsStrogatz(16, 0.25);
+    }
 
 private:
     void init_adj_lists() 
     {
         adj_in.clear();
         adj_out.clear();
-        for(int64_t i = 0; i < size+2; i++) {
+        for(int64_t i = 0; i < n+2; i++) {
             adj_in.emplace_back(std::vector<Edge<DT>>());
             adj_out.emplace_back(std::vector<Edge<DT>>());
         }
@@ -568,40 +509,40 @@ private:
     //Utility routine to randomly select source and sink nodes
     void select_source_and_sink() 
     {
-        //Select source and sink nodes randomly, but not the nodes at size or size+1,
+        //Select source and sink nodes randomly, but not the nodes at n or n+1,
         //so I don't have to handle the special cases
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::uniform_int_distribution<int64_t> uniform_node(0, size-1);
+        std::uniform_int_distribution<int64_t> uniform_node(0, n-1);
 
         int64_t source = uniform_node(gen);
         int64_t sink = uniform_node(gen);
         while(source == sink) {
             sink = uniform_node(gen);
         }
-        assert(source >= 0 && source < size && sink >= 0 && sink < size);
+        assert(source >= 0 && source < n && sink >= 0 && sink < n);
 
         //Swap locations (in memory) of source, sink and last 2 nodes
-        std::swap(adj_out[source], adj_out[size]);
-        std::swap(adj_in [source], adj_in [size]);
+        std::swap(adj_out[source], adj_out[n]);
+        std::swap(adj_in [source], adj_in [n]);
 
-        std::swap(adj_out[sink], adj_out[size+1]);
-        std::swap(adj_in [sink], adj_in [size+1]);
+        std::swap(adj_out[sink], adj_out[n+1]);
+        std::swap(adj_in [sink], adj_in [n+1]);
 
         //Clear out incoming edges of source and outgoing edges of sink
-        adj_in[size].clear();
-        adj_out[size+1].clear();
+        adj_in[n].clear();
+        adj_out[n+1].clear();
         
         //Double outgoing weights of source and incoming weights of sink
-        for(int64_t j = 0; j < adj_out[size].size(); j++) {
-            adj_out[size][j].weight *= 2.0;
+        for(int64_t j = 0; j < adj_out[n].size(); j++) {
+            adj_out[n][j].weight *= 2.0;
         }
-        for(int64_t j = 0; j < adj_in[size+1].size(); j++) {
-            adj_in[size+1][j].weight *= 2.0;
+        for(int64_t j = 0; j < adj_in[n+1].size(); j++) {
+            adj_in[n+1][j].weight *= 2.0;
         }
 
         //Fix up the rest of the adjacency lists
-        for(int64_t i = 0; i < size+2; i++){
+        for(int64_t i = 0; i < n+2; i++){
             //Remove outgoing edges to source node and incoming edges from sink node
             adj_out[i].erase(std::remove_if(adj_out[i].begin(), adj_out[i].end(), [=](Edge<DT> e){ return e.index == source; }), adj_out[i].end());
             adj_in [i].erase(std::remove_if(adj_in [i].begin(), adj_in [i].end(), [=](Edge<DT> e){ return e.index == sink;   }), adj_in [i].end());
@@ -609,21 +550,21 @@ private:
             //Redirect edges to their new sources and destinations
             for(int64_t e = 0; e < adj_out[i].size(); e++) {
                 if(adj_out[i][e].index == sink) {
-                    adj_out[i][e].index = size+1; 
+                    adj_out[i][e].index = n+1; 
                     adj_out[i][e].weight *= 2.0;
-                } else if(adj_out[i][e].index == size) {
+                } else if(adj_out[i][e].index == n) {
                     adj_out[i][e].index = source;
-                } else if(adj_out[i][e].index == size+1) { 
+                } else if(adj_out[i][e].index == n+1) { 
                     adj_out[i][e].index = sink;
                 }
             }
             for(int64_t e = 0; e < adj_in[i].size(); e++) {
                 if(adj_in[i][e].index == source)  {
-                    adj_in[i][e].index = size;
+                    adj_in[i][e].index = n;
                     adj_in[i][e].weight *= 2.0;
-                } else if(adj_in[i][e].index == size) {
+                } else if(adj_in[i][e].index == n) {
                     adj_in[i][e].index = source; 
-                } else if(adj_in[i][e].index == size+1) {
+                } else if(adj_in[i][e].index == n+1) {
                     adj_in[i][e].index = sink;
                 }
             }
@@ -632,15 +573,15 @@ private:
 
     void sanity_check()
     {
-        Matrix<double> sums(size+2, 5); sums.set_all(0.0);
+        Matrix<double> sums(n+2, 5); sums.set_all(0.0);
         Vector<double> sum_in_a = sums.subcol(1);
         Vector<double> sum_in_b = sums.subcol(2);
         Vector<double> sum_out_a= sums.subcol(3);
         Vector<double> sum_out_b= sums.subcol(4);
-        for(int64_t i = 0; i < size+2; i++)
+        for(int64_t i = 0; i < n+2; i++)
             sums(i, 0) = i;
 
-        for(int64_t i = 0; i < size+2; i++)
+        for(int64_t i = 0; i < n+2; i++)
         {
             for(auto a: adj_in[i]) {
                 sum_in_a(i) += a.weight;
@@ -667,14 +608,14 @@ public:
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        std::uniform_int_distribution<int64_t> uniform_node(0, size+1);
+        std::uniform_int_distribution<int64_t> uniform_node(0, n+1);
    
         this->init_adj_lists();
         
         //Connect each node to K nearest neighbors.
         //With a beta % chance, rewire edge randomly
-        for(int64_t i = 0; i < size+2; i++) {
-            for(int64_t p = 1; p < k/2 && i+p < size+2; p++) {
+        for(int64_t i = 0; i < n+2; i++) {
+            for(int64_t p = 1; p < k/2 && i+p < n+2; p++) {
                 int64_t new_neighbor = i+p;
         
                 if(dist(gen) < beta) {
@@ -700,7 +641,7 @@ public:
 
         //Establish baseline
         baseline = 0.0;
-        for(auto a : adj_out[size]) {
+        for(auto a : adj_out[n]) {
             baseline += a.weight;
         }
 
@@ -716,15 +657,15 @@ public:
 
         this->init_adj_lists(); 
 
-        std::vector<double> x_coords(size+2);
-        std::vector<double> y_coords(size+2);
-        for(int64_t i = 0; i < size+2; i++) {
+        std::vector<double> x_coords(n+2);
+        std::vector<double> y_coords(n+2);
+        for(int64_t i = 0; i < n+2; i++) {
             x_coords[i] = dist(gen);
             y_coords[i] = dist(gen);
         }
 
-        for(int64_t i = 0; i < size+2; i++) {
-            for(int64_t j = i+1; j < size+2; j++) {
+        for(int64_t i = 0; i < n+2; i++) {
+            for(int64_t j = i+1; j < n+2; j++) {
                 double x_dist = x_coords[i] - x_coords[j];
                 double y_dist = y_coords[i] - y_coords[j];
                 double euclidean = sqrt(x_dist * x_dist + y_dist * y_dist);
@@ -736,14 +677,15 @@ public:
 
         //Establish baseline
         baseline = 0.0;
-        for(auto a : adj_out[size]) {
+        for(auto a : adj_out[n]) {
             baseline += a.weight;
         }
 
         this->sanity_check();
     }
 
-    DT eval(const std::unordered_set<int64_t>& A) {
+    DT eval(const std::unordered_set<int64_t>& A) 
+    {
         DT val = 0.0;
         for(auto a : A) {
             for(auto b : adj_out[a]) {
@@ -751,7 +693,7 @@ public:
                     val += b.weight;
             }
         }
-        for(auto b : adj_out[size]) {
+        for(auto b : adj_out[n]) {
             if(A.count(b.index) == 0)
                 val += b.weight;
         }
@@ -759,7 +701,8 @@ public:
         return val - baseline;
     }
 
-    DT eval(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
+    DT marginal_gain(const std::unordered_set<int64_t>& A, DT FA, int64_t b) 
+    {
         //Gain from adding b
         DT gain = 0.0;
         for(int64_t i = 0; i < adj_out[b].size(); i++) {
@@ -770,17 +713,139 @@ public:
         //Loss from adding b
         DT loss = 0.0;
         for(int64_t i = 0; i < adj_in[b].size(); i++) {
-            if(adj_in[b][i].index == size || A.count(adj_in[b][i].index) != 0)
+            if(adj_in[b][i].index == n || A.count(adj_in[b][i].index) != 0)
                 loss -= adj_in[b][i].weight;
         }
 
         return FA + gain + loss;
     }
 
-    std::unordered_set<int64_t> get_set() const {
+    virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    {
+        std::vector<int64_t> perm_lookup(n);
+        _Pragma("omp parallel for")
+        for(int64_t i = 0; i < n; i++) {
+            perm_lookup[perm[i]] = i;
+        }
+
+        //Iterate over every edge.
+        //Each edge connects two nodes, a and b. We get a gain when the first of the nodes joins A and a loss when the second node joins A.
+        x.set_all(0.0);
+        _Pragma("omp parallel for")
+        for(int64_t a = 0; a < n; a++) {
+            int64_t index_a = perm_lookup[a];
+            for(auto edge : adj_out[a]) {
+                int64_t b = edge.index;
+                if(b == n+1) {
+                    x(a) += edge.weight;
+                }
+                else {
+                    int64_t index_b = perm_lookup[b];
+
+                    if(index_a < index_b) {
+                        x(a) += edge.weight;
+                    } else {
+                        x(a) -= edge.weight;
+                    }
+                }
+            }
+        }
+
+        for(auto edge : adj_out[n]) {
+            if(edge.index != n+1) x(edge.index) -= edge.weight;
+        }
+    }
+
+    std::unordered_set<int64_t> get_set() const 
+    {
         std::unordered_set<int64_t> V;
-        V.reserve(size);
-        for(int i = 0; i < size; i++) 
+        V.reserve(n);
+        for(int i = 0; i < n; i++) 
+            V.insert(i);
+        return V;
+    }
+};
+
+template<class DT>
+class SlowMinCut : public SubmodularFunction<DT> {
+public:
+    std::vector<std::vector<Edge<DT>>> adj_in;
+    std::vector<std::vector<Edge<DT>>> adj_out;
+    int64_t n;
+    DT baseline;
+
+    SlowMinCut(const MinCut<DT>& other) : SubmodularFunction<DT>(other.n), n(other.n), adj_in(other.adj_in), adj_out(other.adj_out), baseline(other.baseline) { }
+    SlowMinCut(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in)
+    {
+        MinCut<DT> other(n);
+        other.initialize_default();
+        adj_in = other.adj_in;
+        adj_out = other.adj_out;
+        baseline = other.baseline;
+    }
+
+    DT eval(const std::unordered_set<int64_t>& A) 
+    {
+        DT val = 0.0;
+        for(auto a : A) {
+            for(auto b : adj_out[a]) {
+                if(A.count(b.index) == 0)
+                    val += b.weight;
+            }
+        }
+        for(auto b : adj_out[n]) {
+            if(A.count(b.index) == 0)
+                val += b.weight;
+        }
+
+        return val - baseline;
+    }
+
+    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    {
+        _Pragma("omp parallel") 
+        {
+
+            int64_t t_id = omp_get_thread_num();
+            int64_t nt = omp_get_num_threads();
+
+            int64_t n_per_thread = (n - 1) / nt + 1;
+            int64_t start = n_per_thread * t_id;
+            int64_t end = std::min(start + n_per_thread, n);
+
+            //Each thread must maintain its own set A
+            std::unordered_set<int64_t> A;
+            A.reserve(perm.size());
+            for(int64_t i = 0; i < std::min(start, n); i++) A.insert(perm[i]);
+
+            for(int64_t j = start; j < end; j++) {
+                int64_t b = perm[j];
+
+                //Gain from adding b
+                DT gain = 0.0;
+                for(int64_t i = 0; i < adj_out[b].size(); i++) {
+                    if(A.count(adj_out[b][i].index) == 0)
+                        gain += adj_out[b][i].weight;
+                }
+
+                //Loss from adding b
+                DT loss = 0.0;
+                for(int64_t i = 0; i < adj_in[b].size(); i++) {
+                    if(adj_in[b][i].index == n || A.count(adj_in[b][i].index) != 0)
+                        loss -= adj_in[b][i].weight;
+                }
+
+                x(b) = gain + loss;
+                A.insert(b);
+            }
+        }
+    }
+
+    std::unordered_set<int64_t> get_set() const 
+    {
+        std::unordered_set<int64_t> V;
+        V.reserve(n);
+        for(int i = 0; i < n; i++) 
             V.insert(i);
         return V;
     }

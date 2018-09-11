@@ -106,7 +106,7 @@ void benchmark_log_det()
             LogDet<double> problem(n);
 
             PerfLog slow_log;
-            SlowLogDet<double> slow_problem(n, problem.Cov);
+            SlowLogDet<double> slow_problem(problem);
             
             //Time problem
             MinNormPoint<double> mnp;
@@ -180,7 +180,7 @@ void benchmark_min_cut()
 
             //Initialize min norm point problem
             MinCut<double> problem(n);
-            problem.WattsStrogatz(16, 0.75);
+            problem.WattsStrogatz(16, 0.25);
             
             //Time problem
             MinNormPoint<double> mnp;
@@ -319,11 +319,13 @@ void benchmark_mnp_vs_brsmnp()
 
 int main() 
 {
-    run_validation_suite();
     run_benchmark_suite();
-
+    run_validation_suite();
+    
     benchmark_min_cut();
     benchmark_log_det();
+
+
 
     benchmark_mnp_vs_brsmnp();
 

@@ -247,13 +247,6 @@ public:
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.log = log;
             F.polyhedron_greedy(-1.0, *x_hat, p_hat, log);
             
-/*            {
-                DT xt_p = x_hat->dot(p_hat);
-                DT xt_x = x_hat->dot(*x_hat);
-                std::cout << "original algorithm xt_p - xt_x is " << xt_p - xt_x << std::endl;
-            }*/
-
-
             // Update R to account for modifying S.
             // Let [r0 rho1]^T be the vector to add to r
             // r0 = R' \ (S' * p_hat)
@@ -390,7 +383,7 @@ public:
         for(int64_t j = 1; j < P_hat.width(); j++) {
             auto p_hat_j = P_hat.subcol(j);
             scramble(F.permutation);
-            F.eval(F.permutation, p_hat_j);
+            F.marginal_gains(F.permutation, p_hat_j);
         }
         if(log) log->log("SPECULATION TIME", rdtsc() - start_spec);
     }

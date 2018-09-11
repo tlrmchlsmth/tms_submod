@@ -11,6 +11,7 @@
 
 #include <lemon/list_graph.h>
 #include <lemon/preflow.h>
+#include <lemon/edmonds_karp.h>
 using namespace lemon;
 
 //#define DEBUGGING
@@ -30,14 +31,15 @@ DT brute_force_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, in
     return std::min(val_add_i, val_noadd_i);
 }
 
-void val_log_det_brute_force()
+template<class F>
+void val_brute_force(std::string name)
 {
     int64_t start = 2;
     int64_t end = 16;
     int64_t inc = start;
 
     std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating Log Det Brute Force" << std::endl;
+    std::cout << "Validating " << name << " Brute Force" << std::endl;
     std::cout << "===========================================================" << std::endl;
     int w = 18;
     std::cout << std::setw(w) << "n";
@@ -48,7 +50,8 @@ void val_log_det_brute_force()
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         //Create random problem
-        LogDet<double> problem(n);
+        F problem(n);
+        problem.initialize_default();
         MinNormPoint<double> mnp;
         auto A = mnp.minimize(problem, 1e-5, 1e-10, false, NULL);
         double mnp_sol = problem.eval(A) + problem.baseline;
@@ -63,7 +66,6 @@ void val_log_det_brute_force()
         print_err(brute_sol - mnp_sol, w);
         std::cout << std::endl;
     }
-
 }
 
 //Make sure log det greedy algorithm and eval function are consistent
@@ -101,7 +103,7 @@ void val_log_det_greedy()
             FA_old = FA;
         }
 
-        prob.eval(perm, p2);
+        prob.marginal_gains(perm, p2);
         p1.axpy(-1.0, p2);
         double error = p1.norm2();
         
@@ -110,7 +112,7 @@ void val_log_det_greedy()
         std::cout << std::endl;
     }
 }
-/*
+
 void val_mincut_greedy()
 {
 
@@ -119,7 +121,7 @@ void val_mincut_greedy()
     int64_t inc = 4; 
 
     std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating Log Det Greedy Algorithm Consistency" << std::endl;
+    std::cout << "Validating Min Cut Greedy Algorithm Consistency" << std::endl;
     std::cout << "===========================================================" << std::endl;
     int w = 18;
     std::cout << std::setw(w) << "n";
@@ -127,7 +129,7 @@ void val_mincut_greedy()
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         MinCut<double> prob(n);
-        prob.WattsStrogatz(8, 0.25);
+        prob.WattsStrogatz(16, 0.25);
 
         Vector<double> p1(n);
         Vector<double> p2(n);
@@ -146,7 +148,7 @@ void val_mincut_greedy()
             FA_old = FA;
         }
 
-        prob.eval(perm, p2);
+        prob.marginal_gains(perm, p2);
         p1.axpy(-1.0, p2);
         double error = p1.norm2();
         
@@ -154,7 +156,7 @@ void val_mincut_greedy()
         print_err(error, w);
         std::cout << std::endl;
     }
-}*/
+}
 
 void val_incremental_qr_remove_cols()
 {
@@ -263,7 +265,7 @@ void val_incremental_qr_remove_cols()
 void val_mincut()
 {
     int64_t start = 8;
-    int64_t end = 1024;
+    int64_t end = 256;
     int64_t inc = 8; 
 
     std::cout << "===========================================================" << std::endl;
@@ -275,15 +277,12 @@ void val_mincut()
     std::cout << std::setw(w) << "|A|" << std::setw(w) << "MNP solution" << std::setw(w) << "Lemon solution" << std::setw(w) << "Difference" << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         //Initialize min cut problem
-//        MinCut<double> problem(n, 16, 0.5, 0.05);
         MinCut<double> problem(n);
-
-//        problem.WattsStrogatz(16, 0.25);
-        problem.Geometric(0.05);
+        problem.WattsStrogatz(16, 0.25);
 
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
-        auto A = mnp.minimize(problem, 1e-10, 1e-6, false, NULL);
+        auto A = mnp.minimize(problem, 1e-5, 1e-5, false, NULL);
         double mnp_sol = problem.eval(A) + problem.baseline;
         
         //Solve problem with lemon
@@ -330,12 +329,14 @@ void val_mincut()
         }
 
         Preflow<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
+        //EdmondsKarp<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
         lemon_prob.run();
         double lemon_sol = lemon_prob.flowValue();
         
         std::cout << std::setw(w) << n;
         std::cout << std::setw(w) << A.size() << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
         print_err(mnp_sol - lemon_sol, w);
+        std::cout << std::setw(w) << problem.baseline;
         std::cout << std::endl;
 #ifdef DEBUGGING        
         exit(1);
@@ -350,7 +351,13 @@ void run_validation_suite()
     std::cout << "Running validation tests." << std::endl;
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     val_incremental_qr_remove_cols();
-    val_mincut();
+
+    //Validate consistency of marginal gains vs eval
     val_log_det_greedy();
-    val_log_det_brute_force();
+    val_mincut_greedy();
+
+    //Validate answer from mnp algorithm
+    val_brute_force<MinCut<double>>("MinCut");
+    val_brute_force<LogDet<double>>("Log Det");
+    val_mincut();
 }
