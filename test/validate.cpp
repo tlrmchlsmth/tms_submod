@@ -54,10 +54,10 @@ void val_brute_force(std::string name)
         problem.initialize_default();
         MinNormPoint<double> mnp;
         auto A = mnp.minimize(problem, 1e-5, 1e-10, false, NULL);
-        double mnp_sol = problem.eval(A) + problem.baseline;
+        double mnp_sol = problem.eval(A);
         
         std::unordered_set<int64_t> empty;
-        double brute_sol = brute_force_rec(problem, empty, 0, n) + problem.baseline;
+        double brute_sol = brute_force_rec(problem, empty, 0, n);
 
         std::cout << std::setw(w) << n;
         std::cout << std::setw(w) << mnp_sol;

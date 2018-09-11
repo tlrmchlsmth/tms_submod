@@ -231,7 +231,7 @@ public:
         A_curr.reserve(m);
         
         //Step 2:
-        int64_t max_iter = 1000000;
+        int64_t max_iter = 100000;
         int64_t major_cycles = 0;
         while(major_cycles++ < max_iter) {
             int64_t major_start = rdtsc();
@@ -245,7 +245,7 @@ public:
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.log = log;
-            F.polyhedron_greedy(-1.0, *x_hat, p_hat, log);
+            double F_curr = F.polyhedron_greedy(-1.0, *x_hat, p_hat, tolerance, log);
             
             // Update R to account for modifying S.
             // Let [r0 rho1]^T be the vector to add to r
@@ -265,28 +265,18 @@ public:
 
             // Check current function value
             A_curr.clear();
-            bool compute_f_cur = false;
             for(int64_t i = 0; i < x_hat->length(); i++) {
-                if((*x_hat)(i) < tolerance) {
-                    A_curr.insert(i);
-                    if(A_best.count(i) == 0) 
-                        compute_f_cur = true;
-                }
+                if((*x_hat)(i) < tolerance) A_curr.insert(i);
             }
-            compute_f_cur = compute_f_cur || A_curr.size() != A_best.size();
-            
-            if(compute_f_cur) {
-                int64_t eval_start = rdtsc();
-                auto F_curr = F.eval(A_curr);
-                if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
 
-                int64_t misc_start = rdtsc();
-                if (F_curr < F_best) {
-                    // Save best F and get the unique minimal minimizer
-                    F_best = F_curr;
-                    A_best = A_curr;
-                }
-                if(log) { log->log("MISC TIME", rdtsc() - misc_start); }
+            /*
+            int64_t eval_start = rdtsc();
+            auto F_curr = F.eval(A_curr);
+            if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
+            */
+            if (F_curr < F_best) {
+                F_best = F_curr;
+                A_best = A_curr;
             }
 
             // Get suboptimality bound
@@ -347,8 +337,7 @@ public:
             std::cout << "Done. |A| = " << A_curr.size() << " F_best = " << F.eval(A_curr) << std::endl;
         }
 
-//        return A_best;
-        return A_curr;
+        return A_best;
     }
 };
 

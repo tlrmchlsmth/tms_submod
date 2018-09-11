@@ -148,7 +148,7 @@ void benchmark_log_det()
 void benchmark_min_cut()
 {
     int64_t start = 100;
-    int64_t end = 1000;
+    int64_t end = 4000;
     int64_t inc = 100;
     int64_t n_reps = 5;
 
@@ -319,11 +319,13 @@ void benchmark_mnp_vs_brsmnp()
 
 int main() 
 {
-    run_benchmark_suite();
     run_validation_suite();
-    
+    run_benchmark_suite();
+
     benchmark_min_cut();
     benchmark_log_det();
+
+    
 
 
 

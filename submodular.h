@@ -44,9 +44,9 @@ public:
         A.clear();
         DT FA_old = 0.0;
         for(int i = 0; i < x.length(); i++) {
-            DT FA = marginal_gain(A, FA_old, permutation[i]);
-            x(permutation[i]) = FA - FA_old;
-            A.insert(permutation[i]);
+            DT FA = marginal_gain(A, FA_old, perm[i]);
+            x(perm[i]) = FA - FA_old;
+            A.insert(perm[i]);
             FA_old = FA;
         }
     }
@@ -71,6 +71,36 @@ public:
             plog->log("GREEDY TIME", rdtsc() - start_a);
         }
     }
+
+    double polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, double thresh, PerfLog* plog) 
+    {
+        int64_t start_a = rdtsc();
+        //sort weights
+        if (alpha > 0.0) {
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
+        } else if (alpha < 0.0) {
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
+        }
+        if(plog) {
+            plog->log("SORT TIME", rdtsc() - start_a);
+        }
+
+        int64_t start_b = rdtsc();
+        marginal_gains(permutation, x);
+        
+        //Get current value of F(A)
+        double val = 0.0;
+        for(int64_t i = 0; i < x.length(); i++) {
+            if(weights(permutation[i]) > thresh) break;
+            val += x(permutation[i]);
+        }
+
+        if(plog) {
+            plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
+            plog->log("GREEDY TIME", rdtsc() - start_a);
+        }
+        return val;
+    }
 };
 
 //m: # of states. n: number of variables
@@ -81,7 +111,7 @@ public:
 
     Matrix<DT> Cov;     //Covariance matrix
     Matrix<DT> U;       //Cholesky factorization of the covariance matrix of S
-    DT baseline;        //Log determinant of covariance matrix
+   // DT baseline;        //Log determinant of covariance matrix
 
     DT log_determinant(Matrix<DT>& A)
     {
@@ -93,8 +123,7 @@ public:
     }
 
     LogDet(int64_t n_in) : SubmodularFunction<DT>(n_in),
-                                         n(n_in), Cov(n_in, n_in), U(n_in, n_in),
-                                         baseline(0.0)
+                           n(n_in), Cov(n_in, n_in), U(n_in, n_in)
     {
         std::random_device rd;
         std::mt19937 gen{rd()};
@@ -114,11 +143,10 @@ public:
         U.set_subdiagonal(0.0);
         auto UT = U.transposed();
         Cov.mmm(1.0, UT, U, 0.0);
-        baseline = 0;
     }
 
     DT eval(const std::unordered_set<int64_t>& A) {
-        if(A.size() == 0) return 0.0; //Fast-path so stuff doesn't break with empty matrices
+        if(A.size() == 0) return 0.0;
 
         // Select some rows and columns and perform Cholesky factorization
         auto Ua = U.submatrix(0,0,A.size(),A.size());
@@ -148,7 +176,7 @@ public:
         return V;
     }
 
-    void marginal_gain(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         //Permute rows and columns of covariance matrix and perform cholesky factorization
         auto Ua = U.submatrix(0,0,n,n);

@@ -79,7 +79,7 @@ public:
         return &_values[index * _stride];
     }
 
-    inline int64_t length()
+    inline int64_t length() const
     {
         return _len;
     }
