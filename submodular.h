@@ -19,8 +19,9 @@ public:
     //Workspace for the greedy algorithm
     std::unordered_set<int64_t> A;
     std::vector<int64_t> permutation;
+    int64_t n;
 
-    SubmodularFunction(int64_t n) 
+    SubmodularFunction(int64_t n_in) : n(n_in)
     {
         A.reserve(n);
         permutation.reserve(n);
@@ -87,6 +88,7 @@ public:
 
         int64_t start_b = rdtsc();
         marginal_gains(permutation, x);
+        if(plog) plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
         
         //Get current value of F(A)
         double val = 0.0;
@@ -95,10 +97,7 @@ public:
             val += x(permutation[i]);
         }
 
-        if(plog) {
-            plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
-            plog->log("GREEDY TIME", rdtsc() - start_a);
-        }
+        if(plog) plog->log("GREEDY TIME", rdtsc() - start_a);
         return val;
     }
 };

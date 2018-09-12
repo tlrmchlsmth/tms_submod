@@ -95,15 +95,17 @@ public:
         while(keep_going) {
             int64_t minor_start = rdtsc();
 
-            auto mu = mu_ws.subvector(0, R->width()); mu.log = log;
-            auto lambda = lambda_ws.subvector(0, R->width()); lambda.log = log;
+            auto mu = mu_ws.subvector(0, R->width()); //mu.log = log; Don't log mu so we don't overcount
+            auto lambda = lambda_ws.subvector(0, R->width()); //lambda.log = log;
 
             //Find minimum norm point in affine hull spanned by S
+            int64_t solve_start = rdtsc();
             mu.set_all(1.0);
             R->transpose(); R->trsv(CblasLower, mu); R->transpose();
             R->trsv(CblasUpper, mu);
             mu.scale(1.0 / mu.sum());
             S.mvm(1.0, mu, 0.0, y);
+            if(log) log->log("SOLVE TIME", rdtsc() - solve_start);
 
             //Check to see if y is written as positive convex combination of S
             if(mu.min() >= -tolerance) {
@@ -115,10 +117,12 @@ public:
                 
                 // Get representation of xhat in terms of S; enforce that we get
                 // affine combination (i.e., sum(lambda)==1)
+                int64_t solve_start = rdtsc();
                 S.transpose(); S.mvm(1.0, x_hat, 0.0, lambda); S.transpose();
                 R->transpose(); R->trsv(CblasLower, lambda); R->transpose();
                 R->trsv(CblasUpper, lambda);
                 lambda.scale(1.0 / lambda.sum());
+                if(log) log->log("SOLVE TIME", rdtsc() - solve_start);
 
                 int64_t z_start = rdtsc();
                 // Find z in conv(S) that is closest to y
@@ -141,9 +145,7 @@ public:
                         toRemove.push_back(i);
                 }
                 if(toRemove.size() == 0) toRemove.push_back(0);
-                if(log) {
-                    log->log("MISC TIME", rdtsc() - remove_start);
-                }
+                if(log) log->log("MISC TIME", rdtsc() - remove_start);
                 
                 //Remove unnecessary columns from S and fixup R so that S = QR for some Q
                 S.remove_cols(toRemove);
@@ -159,8 +161,19 @@ public:
         }
         return to_ret;
     }
+    
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print_in, PerfLog* log)
+    {
+        Vector<DT> wA(F.n);
+        bool done = false;
+        bool print = print_in;
+        std::unordered_set<int64_t> A;
+        wA.fill_rand();
+        A = minimize(F, wA, &done, 500000, eps, tolerance, print, log);
+        return A;
+    }
 
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* log) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
@@ -168,25 +181,10 @@ public:
         int64_t cycles_since_last_F_eval = eval_F_freq;
         int64_t m = V.size();
 
-        //Step 1: Initialize by picking a point in the polytiope.
-        std::unordered_set<int64_t> A;
-        A.reserve(m);
-
         //Characteristic vector
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-
-        Vector<DT> wA(m);
-        wA.set_all(0.0);
-/*        for(int64_t i = 0; i < m; i++) {
-            if(dist(gen) > .5) {
-                wA(i) = 1.0;
-                A.insert(i);
-            } else {
-                wA(i) = 0.0;
-            }
-        }*/
 
         //Workspace for x_hat and next x_hat
         Vector<DT> xh1(m);
@@ -223,33 +221,28 @@ public:
         (*x_hat).copy(first_col_s);
         (*R)(0,0) = first_col_s.norm2();
 
-        //Initialize A_best and F_best
-        std::unordered_set<int64_t> A_best;
-        A_best.reserve(m);
         DT F_best = std::numeric_limits<DT>::max();
-        std::unordered_set<int64_t> A_curr;
-        A_curr.reserve(m);
         
         //Step 2:
-        int64_t max_iter = 100000;
         int64_t major_cycles = 0;
         while(major_cycles++ < max_iter) {
             int64_t major_start = rdtsc();
 
             //Snap to zero
-            //TODO: Krause's code uses xhat->norm2() < 0,
             DT x_hat_norm2 = x_hat->norm2();
-            if(x_hat_norm2*x_hat_norm2 < tolerance) {
+            if(x_hat_norm2*x_hat_norm2 < 0)
                 (*x_hat).set_all(0.0);
-            }
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.log = log;
             double F_curr = F.polyhedron_greedy(-1.0, *x_hat, p_hat, tolerance, log);
+            if (F_curr < F_best) 
+                F_best = F_curr;
             
             // Update R to account for modifying S.
             // Let [r0 rho1]^T be the vector to add to r
             // r0 = R' \ (S' * p_hat)
+            int64_t add_col_start = rdtsc();
             Vector<DT> r0 = R_base->subcol(0, R->width(), R->height()); r0.log = log;
             S.transpose(); S.mvm(1.0, p_hat, 0.0, r0); S.transpose();
             R->transpose(); R->trsv(CblasLower, r0); R->transpose();
@@ -262,25 +255,21 @@ public:
             R->enlarge_m(1); R->enlarge_n(1);
             (*R)(R->width()-1, R->height()-1) = rho1;
             S.enlarge_n(1);
+            if(log) { log->log("ADD COL TIME", rdtsc() - add_col_start); }
 
-            // Check current function value
-            A_curr.clear();
+            /*
+            //Slow version of checking current function value
+            int64_t eval_start = rdtsc();
             for(int64_t i = 0; i < x_hat->length(); i++) {
                 if((*x_hat)(i) < tolerance) A_curr.insert(i);
             }
 
-            /*
-            int64_t eval_start = rdtsc();
             auto F_curr = F.eval(A_curr);
-            if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
+            if(log) log->log("EVAL F TIME", rdtsc() - eval_start);
             */
-            if (F_curr < F_best) {
-                F_best = F_curr;
-                A_best = A_curr;
-            }
 
-            // Get suboptimality bound
             int64_t misc_start = rdtsc();
+            // Get suboptimality bound
             DT sum_x_hat_lt_0 = 0.0;
             for (int64_t i = 0; i < x_hat->length(); i++) {
                 if((*x_hat)(i) < tolerance)
@@ -319,7 +308,7 @@ public:
             }
             if(x_hat_next->has_nan()) exit(1);
 
-            x_hat->axpy(-1.0, *x_hat_next);
+            //x_hat->axpy(-1.0, *x_hat_next);
 //            if(x_hat->norm2() < eps) {
 //                std::cout << "x_hat isn't changing" << std::endl;
 //            }
@@ -328,15 +317,19 @@ public:
             if(log) {
                 log->log("MAJOR TIME", rdtsc() - major_start);
             }
-            if(major_cycles > max_iter) {
-                std::cout << "Timed out." << std::endl;
-                break;
-            }
-        }
-        if(print) {
-            std::cout << "Done. |A| = " << A_curr.size() << " F_best = " << F.eval(A_curr) << std::endl;
         }
 
+        //Return
+        std::unordered_set<int64_t> A_best;
+        for(int64_t i = 0; i < x_hat->length(); i++) {
+            if((*x_hat)(i) < tolerance) A_best.insert(i);
+        }
+        if(print) {
+            std::cout << "Done. |A| = " << A_best.size() << " F_best = " << F.eval(A_best) << std::endl;
+        }
+        if(major_cycles < max_iter) {
+            *done = true;
+        }
         return A_best;
     }
 };
