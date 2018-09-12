@@ -52,7 +52,7 @@ public:
         }
     }
 
-    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* plog) 
+    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* perf_log) 
     {
         int64_t start_a = rdtsc();
         //sort weights
@@ -61,19 +61,19 @@ public:
         } else if (alpha < 0.0) {
             std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
         }
-        if(plog) {
-            plog->log("SORT TIME", rdtsc() - start_a);
+        if(perf_log) {
+            perf_log->log_total("SORT TIME", rdtsc() - start_a);
         }
 
         int64_t start_b = rdtsc();
         marginal_gains(permutation, x);
-        if(plog) {
-            plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
-            plog->log("GREEDY TIME", rdtsc() - start_a);
+        if(perf_log) {
+            perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
+            perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
         }
     }
 
-    double polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, double thresh, PerfLog* plog) 
+    double polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, double thresh, PerfLog* perf_log) 
     {
         int64_t start_a = rdtsc();
         //sort weights
@@ -82,13 +82,13 @@ public:
         } else if (alpha < 0.0) {
             std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
         }
-        if(plog) {
-            plog->log("SORT TIME", rdtsc() - start_a);
+        if(perf_log) {
+            perf_log->log_total("SORT TIME", rdtsc() - start_a);
         }
 
         int64_t start_b = rdtsc();
         marginal_gains(permutation, x);
-        if(plog) plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
+        if(perf_log) perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
         
         //Get current value of F(A)
         double val = 0.0;
@@ -97,7 +97,7 @@ public:
             val += x(permutation[i]);
         }
 
-        if(plog) plog->log("GREEDY TIME", rdtsc() - start_a);
+        if(perf_log) perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
         return val;
     }
 };
@@ -355,7 +355,7 @@ public:
 /*
     //incremental version of polyhedron greedy
     //Slow, uses l2 blas and here for posterity only
-    void polyhedron_greedy_inc(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* plog) 
+    void polyhedron_greedy_inc(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* perf_log) 
     {
         //sort weights
         int64_t start_a = rdtsc();
@@ -363,7 +363,7 @@ public:
                 [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
         else std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
                 [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
-        if(plog) plog->log("SORT TIME", rdtsc() - start_a);
+        if(perf_log) perf_log->log_total("SORT TIME", rdtsc() - start_a);
 
         for(auto a: SubmodularFunction<DT>::permutation) {
             std::cout << a << ", ";
@@ -423,9 +423,9 @@ public:
             FA_old = FA;
         }
 
-        if(plog) {
-            plog->log("GREEDY TIME", rdtsc() - start_a);
-            plog->log("MARGINAL GAIN TIME", rdtsc() - start_b);
+        if(perf_log) {
+            perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
+            perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
         }
     }*/
 
@@ -559,13 +559,14 @@ private:
         //Clear out incoming edges of source and outgoing edges of sink
         adj_in[n].clear();
         adj_out[n+1].clear();
-        
-        //Double outgoing weights of source and incoming weights of sink
+       
+        double weight_factor = 4.0; 
+        //scale outgoing weights of source and incoming weights of sink
         for(int64_t j = 0; j < adj_out[n].size(); j++) {
-            adj_out[n][j].weight *= 2.0;
+            adj_out[n][j].weight *= weight_factor;
         }
         for(int64_t j = 0; j < adj_in[n+1].size(); j++) {
-            adj_in[n+1][j].weight *= 2.0;
+            adj_in[n+1][j].weight *= weight_factor;
         }
 
         //Fix up the rest of the adjacency lists
@@ -578,7 +579,7 @@ private:
             for(int64_t e = 0; e < adj_out[i].size(); e++) {
                 if(adj_out[i][e].index == sink) {
                     adj_out[i][e].index = n+1; 
-                    adj_out[i][e].weight *= 2.0;
+                    adj_out[i][e].weight *= weight_factor;
                 } else if(adj_out[i][e].index == n) {
                     adj_out[i][e].index = source;
                 } else if(adj_out[i][e].index == n+1) { 
@@ -588,7 +589,7 @@ private:
             for(int64_t e = 0; e < adj_in[i].size(); e++) {
                 if(adj_in[i][e].index == source)  {
                     adj_in[i][e].index = n;
-                    adj_in[i][e].weight *= 2.0;
+                    adj_in[i][e].weight *= weight_factor;
                 } else if(adj_in[i][e].index == n) {
                     adj_in[i][e].index = source; 
                 } else if(adj_in[i][e].index == n+1) {
@@ -634,7 +635,7 @@ public:
     {
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        std::uniform_real_distribution<double> dist(0.1, 1.0);
         std::uniform_int_distribution<int64_t> uniform_node(0, n+1);
    
         this->init_adj_lists();
@@ -681,6 +682,7 @@ public:
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
+        std::uniform_real_distribution<double> weight_dist(0.1, 1.0);
 
         this->init_adj_lists(); 
 
@@ -697,7 +699,7 @@ public:
                 double y_dist = y_coords[i] - y_coords[j];
                 double euclidean = sqrt(x_dist * x_dist + y_dist * y_dist);
                 if(euclidean < d)
-                    this->connect_undirected(i, j, dist(gen));         
+                    this->connect_undirected(i, j, weight_dist(gen));         
             }
         }
         this->select_source_and_sink();

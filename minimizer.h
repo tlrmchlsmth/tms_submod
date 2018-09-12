@@ -25,7 +25,6 @@ DT check_STS_eq_RTR(Matrix<DT>& S, Matrix<DT>& R)
     auto RT = R.transposed();
     R.set_subdiagonal(0.0);
 
-    //TODO: can be trmv instead
     R.mvm(1.0, y, 0.0, Ry); 
     RT.mvm(1.0, Ry, 0.0, RTRy); 
 
@@ -48,7 +47,6 @@ DT check_S_eq_RTR(Matrix<DT>& S, Matrix<DT>& R)
     auto RT = R.transposed();
     R.set_subdiagonal(0.0);
 
-    //TODO: can be trmv instead
     R.mvm(1.0, y, 0.0, Ry); 
     RT.mvm(1.0, Ry, 0.0, RTRy); 
 
@@ -60,7 +58,7 @@ template<class DT>
 class Minimizer
 {
 public:
-    virtual std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) = 0;
+    virtual std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* perf_log) = 0;
     std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
     {
         return this->minimize(F, eps, tolerance, print, NULL);
@@ -85,7 +83,7 @@ public:
             Matrix<DT>& S, Matrix<DT>* R_in, Matrix<DT>* R_next_in, DT tolerance,
             Matrix<DT>& T, Matrix<DT>& H, int64_t nb,
             Matrix<DT>& QR_ws,
-            PerfLog* log)
+            PerfLog* perf_log)
     {
         Matrix<DT>* R = R_in;
         Matrix<DT>* R_next = R_next_in;
@@ -95,8 +93,8 @@ public:
         while(keep_going) {
             int64_t minor_start = rdtsc();
 
-            auto mu = mu_ws.subvector(0, R->width()); //mu.log = log; Don't log mu so we don't overcount
-            auto lambda = lambda_ws.subvector(0, R->width()); //lambda.log = log;
+            auto mu = mu_ws.subvector(0, R->width()); //mu.perf_log = perf_log; Don't log mu so we don't overcount
+            auto lambda = lambda_ws.subvector(0, R->width()); //lambda.perf_log = perf_log;
 
             //Find minimum norm point in affine hull spanned by S
             int64_t solve_start = rdtsc();
@@ -105,7 +103,7 @@ public:
             R->trsv(CblasUpper, mu);
             mu.scale(1.0 / mu.sum());
             S.mvm(1.0, mu, 0.0, y);
-            if(log) log->log("SOLVE TIME", rdtsc() - solve_start);
+            if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
 
             //Check to see if y is written as positive convex combination of S
             if(mu.min() >= -tolerance) {
@@ -122,7 +120,7 @@ public:
                 R->transpose(); R->trsv(CblasLower, lambda); R->transpose();
                 R->trsv(CblasUpper, lambda);
                 lambda.scale(1.0 / lambda.sum());
-                if(log) log->log("SOLVE TIME", rdtsc() - solve_start);
+                if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
 
                 int64_t z_start = rdtsc();
                 // Find z in conv(S) that is closest to y
@@ -133,19 +131,19 @@ public:
                         beta = bound;
                     }
                 }
-                if(log) {
-                    log->log("MISC TIME", rdtsc() - z_start);
-                }
+                if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - z_start);
+
                 x_hat.axpby(beta, y, (1-beta));
 
                 int64_t remove_start = rdtsc();
+//                int max_to_remove = 1;
                 std::list<int64_t> toRemove; //TODO: pre initialize
                 for(int64_t i = 0; i < lambda.length(); i++){
                     if((1-beta) * lambda(i) + beta * mu(i) < tolerance)
                         toRemove.push_back(i);
                 }
                 if(toRemove.size() == 0) toRemove.push_back(0);
-                if(log) log->log("MISC TIME", rdtsc() - remove_start);
+                if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - remove_start);
                 
                 //Remove unnecessary columns from S and fixup R so that S = QR for some Q
                 S.remove_cols(toRemove);
@@ -157,23 +155,23 @@ public:
             }
 
             int64_t minor_end = rdtsc();
-            if(log) log->log("MINOR TIME", minor_end - minor_start);
+            if(perf_log) perf_log->log_total("MINOR TIME", minor_end - minor_start);
         }
         return to_ret;
     }
     
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print_in, PerfLog* log)
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print_in, PerfLog* perf_log)
     {
-        Vector<DT> wA(F.n);
         bool done = false;
         bool print = print_in;
         std::unordered_set<int64_t> A;
+        Vector<DT> wA(F.n);
         wA.fill_rand();
-        A = minimize(F, wA, &done, 500000, eps, tolerance, print, log);
+        A = minimize(F, wA, &done, 500000, eps, tolerance, print, perf_log);
         return A;
     }
 
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* log) 
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* perf_log) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
@@ -191,8 +189,8 @@ public:
         Vector<DT> xh2(m);
         Vector<DT>* x_hat = &xh1;
         Vector<DT>* x_hat_next = &xh2;
-        xh1.log = log;
-        xh2.log = log;
+        xh1.perf_log = perf_log;
+        xh2.perf_log = perf_log;
 
         //Workspace for updating x_hat
         int64_t nb = 32;
@@ -208,16 +206,16 @@ public:
         Matrix<DT> R_base1(m+1,m+1);
         Matrix<DT> R_base2(m+1,m+1);
 
-        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); S.log = log;
+        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); S.perf_log = perf_log;
 
         //2 matrices for R, so we can do out of place column removal
-        Matrix<DT> R1 = R_base1.submatrix(0, 0, 1, 1);  R1.log = log;
-        Matrix<DT> R2 = R_base2.submatrix(0, 0, 1, 1);  R2.log = log;
+        Matrix<DT> R1 = R_base1.submatrix(0, 0, 1, 1);  R1.perf_log = perf_log;
+        Matrix<DT> R2 = R_base2.submatrix(0, 0, 1, 1);  R2.perf_log = perf_log;
         Matrix<DT>* R_base = &R_base1; Matrix<DT>* R_base_next = &R_base2;
         Matrix<DT>* R = &R1; Matrix<DT>* R_next = &R2;
 
         Vector<DT> first_col_s = S.subcol(0);
-        F.polyhedron_greedy(1.0, wA, first_col_s, log);
+        F.polyhedron_greedy(1.0, wA, first_col_s, perf_log);
         (*x_hat).copy(first_col_s);
         (*R)(0,0) = first_col_s.norm2();
 
@@ -234,8 +232,8 @@ public:
                 (*x_hat).set_all(0.0);
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
-            Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.log = log;
-            double F_curr = F.polyhedron_greedy(-1.0, *x_hat, p_hat, tolerance, log);
+            Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.perf_log = perf_log;
+            double F_curr = F.polyhedron_greedy(-1.0, *x_hat, p_hat, tolerance, perf_log);
             if (F_curr < F_best) 
                 F_best = F_curr;
             
@@ -243,7 +241,7 @@ public:
             // Let [r0 rho1]^T be the vector to add to r
             // r0 = R' \ (S' * p_hat)
             int64_t add_col_start = rdtsc();
-            Vector<DT> r0 = R_base->subcol(0, R->width(), R->height()); r0.log = log;
+            Vector<DT> r0 = R_base->subcol(0, R->width(), R->height()); r0.perf_log = perf_log;
             S.transpose(); S.mvm(1.0, p_hat, 0.0, r0); S.transpose();
             R->transpose(); R->trsv(CblasLower, r0); R->transpose();
 
@@ -255,7 +253,7 @@ public:
             R->enlarge_m(1); R->enlarge_n(1);
             (*R)(R->width()-1, R->height()-1) = rho1;
             S.enlarge_n(1);
-            if(log) { log->log("ADD COL TIME", rdtsc() - add_col_start); }
+            if(perf_log) { perf_log->log_total("ADD COL TIME", rdtsc() - add_col_start); }
 
             /*
             //Slow version of checking current function value
@@ -265,7 +263,7 @@ public:
             }
 
             auto F_curr = F.eval(A_curr);
-            if(log) log->log("EVAL F TIME", rdtsc() - eval_start);
+            if(perf_log) perf_log->log_total("EVAL F TIME", rdtsc() - eval_start);
             */
 
             int64_t misc_start = rdtsc();
@@ -276,7 +274,7 @@ public:
                     sum_x_hat_lt_0 += (*x_hat)(i);
             }
             DT subopt = F_best - sum_x_hat_lt_0;
-            if(log) { log->log("MISC TIME", rdtsc() - misc_start); }
+            if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - misc_start);
 
             if(print) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
 
@@ -300,7 +298,7 @@ public:
                         mu_ws, lambda_ws,
                         S, R, R_next, tolerance,
                         T, H, nb, QR_ws,
-                        log);
+                        perf_log);
                 if(switch_R) {
                     std::swap(R, R_next);
                     std::swap(R_base, R_base_next);
@@ -314,23 +312,25 @@ public:
 //            }
             std::swap(x_hat, x_hat_next);
 
-            if(log) {
-                log->log("MAJOR TIME", rdtsc() - major_start);
-            }
+            if(perf_log) perf_log->log_total("MAJOR TIME", rdtsc() - major_start);
         }
 
         //Return
-        std::unordered_set<int64_t> A_best;
+        std::unordered_set<int64_t> A_max;
+        std::unordered_set<int64_t> A_min;
         for(int64_t i = 0; i < x_hat->length(); i++) {
-            if((*x_hat)(i) < tolerance) A_best.insert(i);
+            if((*x_hat)(i) < tolerance) A_max.insert(i);
+            if((*x_hat)(i) < 0) A_min.insert(i);
         }
-        if(print) {
-            std::cout << "Done. |A| = " << A_best.size() << " F_best = " << F.eval(A_best) << std::endl;
+//        if(A_max.size() != A_min.size()) {
+        if(print){
+            std::cout << "Done. |A_max| = " << A_max.size() << " F_max = " << F.eval(A_max) << std::endl;
+            std::cout << "Done. |A_min| = " << A_min.size() << " F_min = " << F.eval(A_min) << std::endl;
         }
         if(major_cycles < max_iter) {
             *done = true;
         }
-        return A_best;
+        return A_min;
     }
 };
 
@@ -355,7 +355,7 @@ public:
     {
         //Determine first col of P_hat with Edmonds greedy
         auto p_hat_0 = P_hat.subcol(0);
-        F.polyhedron_greedy(alpha, x_hat, p_hat_0, log);
+        F.polyhedron_greedy(alpha, x_hat, p_hat_0, perf_log);
 
         //Add more columns to P. We want each of them to be extreme points
         //x in B(f) is an extreme point in B(f) iff for some maximal chain 0 = S0 subset of S1 subset of ... subset of Sn = V
@@ -367,7 +367,7 @@ public:
             scramble(F.permutation);
             F.marginal_gains(F.permutation, p_hat_j);
         }
-        if(log) log->log("SPECULATION TIME", rdtsc() - start_spec);
+        if(perf_log) perf_log->log_total("SPECULATION TIME", rdtsc() - start_spec);
     }
 
     //At the end, y is equal to the new value of x_hat
@@ -427,8 +427,8 @@ public:
             w_j.scale(1.0 / w_j.sum());
         }
 
-        auto Y  = Y_ws.submatrix(0, 0, S.height(), b);  Y.log = log;
-        auto S0 =    S.submatrix(0, 0, S.height(), n); S0.log = log;
+        auto Y  = Y_ws.submatrix(0, 0, S.height(), b);  Y.perf_log = perf_log;
+        auto S0 =    S.submatrix(0, 0, S.height(), n); S0.perf_log = perf_log;
         Y.mmm(1.0, S0, W0, 0.0);
         for(int64_t j = 0; j < b; j++) {
             auto y_j = Y.subcol(j);
@@ -496,8 +496,8 @@ public:
             while(!x_hat_in_conv_S) 
             {
                 // Project y back into polytope and remove some vectors from S
-                auto w = W.subcol(0, 0, R->height()); w.log = log;
-                auto lambda = Lambda_ws.subcol(0, 0, R->height()); lambda.log = log;
+                auto w = W.subcol(0, 0, R->height()); w.perf_log = perf_log;
+                auto lambda = Lambda_ws.subcol(0, 0, R->height()); lambda.perf_log = perf_log;
                 assert(R->height() == R->width());
 
                 // Get representation of xhat in terms of S; enforce that we get
@@ -522,9 +522,7 @@ public:
                         beta = bound;
                     }
                 }
-                if(log) {
-                    log->log("MISC TIME", rdtsc() - z_start);
-                }
+                if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - z_start);
 /*                std::cout << x_hat.dot(x_hat) << std::endl;
                 std::cout << "beta is " << beta << std::endl;*/
                 x_hat.axpby(beta, y, (1-beta));
@@ -537,9 +535,7 @@ public:
                         toRemove.push_back(i);
                 }
                 if(toRemove.size() == 0) toRemove.push_back(0);
-                if(log) {
-                    log->log("MISC TIME", rdtsc() - remove_start);
-                }
+                if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - remove_start);
                 
                 //Remove unnecessary columns from S and fixup R so that S = QR for some Q
                 S.remove_cols(toRemove);
@@ -567,7 +563,7 @@ public:
             std::cout << std::endl;*/
         }
 
-        if(log) log->log("MINOR TIME", rdtsc() - minor_start);
+        if(perf_log) perf_log->log_total("MINOR TIME", rdtsc() - minor_start);
         return to_ret;
     }
 
@@ -600,8 +596,8 @@ public:
         }*/
 
         //Workspace for X_hat and next X_hat
-        Vector<DT> xh1(m); xh1.log = log;
-        Vector<DT> xh2(m); xh2.log = log;
+        Vector<DT> xh1(m); xh1.perf_log = perf_log;
+        Vector<DT> xh2(m); xh2.perf_log = perf_log;
         Vector<DT>* x_hat = &xh1;
         Vector<DT>* x_hat_next = &xh2;
 
@@ -620,16 +616,16 @@ public:
         Matrix<DT> R_base1(m+1,m+1);
         Matrix<DT> R_base2(m+1,m+1);
 
-        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); S.log = log;
+        Matrix<DT> S = S_base.submatrix(0, 0, m, 1); S.perf_log = perf_log;
 
         //2 matrices for R, so we can do out of place column removal
-        Matrix<DT> R1 = R_base1.submatrix(0, 0, 1, 1);  R1.log = log;
-        Matrix<DT> R2 = R_base2.submatrix(0, 0, 1, 1);  R2.log = log;
+        Matrix<DT> R1 = R_base1.submatrix(0, 0, 1, 1);  R1.perf_log = perf_log;
+        Matrix<DT> R2 = R_base2.submatrix(0, 0, 1, 1);  R2.perf_log = perf_log;
         Matrix<DT>* R_base = &R_base1; Matrix<DT>* R_base_next = &R_base2;
         Matrix<DT>* R = &R1; Matrix<DT>* R_next = &R2;
 
         Vector<DT> first_col_s = S.subcol(0);
-        F.polyhedron_greedy(1.0, wA, first_col_s, log);
+        F.polyhedron_greedy(1.0, wA, first_col_s, perf_log);
         (*x_hat).copy(first_col_s);
         (*R)(0,0) = first_col_s.norm2();
 
@@ -654,7 +650,7 @@ public:
             }
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
-            auto P_hat = S_base.submatrix(0, S.width(), S.height(), b); P_hat.log = log;
+            auto P_hat = S_base.submatrix(0, S.width(), S.height(), b); P_hat.perf_log = perf_log;
             speculate(F, P_hat, *x_hat, -1.0, log);
             auto p_hat_0 = P_hat.subcol(0);
             int64_t b_added = P_hat.width();
@@ -671,8 +667,8 @@ public:
             //  and R1'R1 = P_hat' P_hat - R0'R0
             
             //Determine R0
-            auto R0 = R_base->submatrix(0, R->width(), R->height(), b_added); R0.log = log;
-            auto r1 = R_base->subrow(R->height(), R->width(), b_added); r1.log = log;
+            auto R0 = R_base->submatrix(0, R->width(), R->height(), b_added); R0.perf_log = perf_log;
+            auto r1 = R_base->subrow(R->height(), R->width(), b_added); r1.perf_log = perf_log;
             auto ST = S.transposed();
             auto RT = R->transposed();
             R0.mmm(1.0, ST, P_hat, 0.0);
@@ -731,7 +727,7 @@ public:
             if(compute_f_cur) {
                 int64_t eval_start = rdtsc();
                 auto F_curr = F.eval(A_curr);
-                if(log) { log->log("EVAL F TIME", rdtsc() - eval_start); }
+                if(perf_log) { perf_log->log_total("EVAL F TIME", rdtsc() - eval_start); }
 
                 int64_t misc_start = rdtsc();
                 if (F_curr < F_best) {
@@ -739,7 +735,7 @@ public:
                     F_best = F_curr;
                     A_best = A_curr;
                 }
-                if(log) { log->log("MISC TIME", rdtsc() - misc_start); }
+                if(perf_log) { perf_log->log_total("MISC TIME", rdtsc() - misc_start); }
             }
 
             // Get suboptimality bound
@@ -750,7 +746,7 @@ public:
                     sum_x_hat_lt_0 += (*x_hat)(i);
             }
             DT subopt = F_best - sum_x_hat_lt_0;
-            if(log) { log->log("MISC TIME", rdtsc() - misc_start); }
+            if(perf_log) { perf_log->log_total("MISC TIME", rdtsc() - misc_start); }
 
             if(print) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
 
@@ -787,7 +783,7 @@ public:
                         Mu_ws, Lambda_ws,
                         S, R, R_next, tolerance,
                         T, H, nb, QR_ws,
-                        log);
+                        perf_log);
 
                 if(switch_R) {
                     std::swap(R, R_next);
@@ -802,7 +798,7 @@ public:
             }
             std::swap(x_hat, x_hat_next);
 
-            if(log) log->log("MAJOR TIME", rdtsc() - major_start);
+            if(perf_log) perf_log->log_total("MAJOR TIME", rdtsc() - major_start);
         }
         if(print) {
             std::cout << "Done. |A| = " << A_curr.size() << " F_best = " << F.eval(A_curr) << std::endl;

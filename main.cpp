@@ -14,6 +14,8 @@
 #include "matrix.h"
 #include "util.h"
 
+//#define SLOW_GREEDY
+
 template<class DT>
 double time_problem_with_lemon(MinCut<DT>& problem)
 {
@@ -79,58 +81,79 @@ void benchmark_logdet()
     std::cout << "===========================================================" << std::endl;
 
     int fw = 8;
-    std::cout << std::setw(fw) << "n";
-    std::cout << std::setw(fw) << "|A|";
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "|A|"; 
     std::cout << std::setw(2*fw) << "seconds";
+    std::cout << std::setw(2*fw) <<  "major";
+#ifdef SLOW_GREEDY
     std::cout << std::setw(2*fw) << "slowseconds";
-    std::cout << std::setw(2*fw) << "major";
     std::cout << std::setw(2*fw) << "slowmajor";
-    std::cout << std::setw(2*fw) << "minor";
-    std::cout << std::setw(2*fw) << "mvm %";
-    std::cout << std::setw(2*fw) << "trsv %";
-    std::cout << std::setw(2*fw) << "del cols %";
-    std::cout << std::setw(2*fw) << "eval f %";
-    std::cout << std::setw(2*fw) << "greedy %";
-    std::cout << std::setw(2*fw) << "MVM MB/S";
-    std::cout << std::setw(2*fw) << "TRSV MB/S";
-    std::cout << std::setw(2*fw) << "del cols MB/S";
+#endif
+    std::cout << std::setw(2*fw) <<  "minor";
+    std::cout << std::setw(2*fw) <<  "add col %";
+    std::cout << std::setw(2*fw) <<  "del col %";
+    std::cout << std::setw(2*fw) <<  "del col qr %";
+    std::cout << std::setw(2*fw) <<  "solve %";
+    std::cout << std::setw(2*fw) <<  "vector %";
+    std::cout << std::setw(2*fw) <<  "greedy %";
+    std::cout << std::setw(2*fw) <<  "total %";
+    std::cout << std::setw(2*fw) <<  "MVM MB/S";
+    std::cout << std::setw(2*fw) <<  "TRSV MB/S";
+    std::cout << std::setw(2*fw) <<  "del cols MB/S";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
         int64_t n = i;
 
         for(int64_t r = 0; r < n_reps; r++) {
+            int64_t max_iter = 500000;
             PerfLog log;
 
             //Initialize min norm point problem
             LogDet<double> problem(n);
-
+#ifdef SLOW_GREEDY
             PerfLog slow_log;
             SlowLogDet<double> slow_problem(problem);
-            
+#endif
+        
+            //Initial condition    
+            Vector<double> wA(n);
+            wA.fill_rand();
+            bool done = false;
+
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, 1e-10, 1e-5, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-5, 1e-5, false, &log);
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
 
+            done = false;
+#ifdef SLOW_GREEDY
             cycles_count_start();
-            mnp.minimize(slow_problem, 1e-10, 1e-5, false, &slow_log);
+            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-5, 1e-5, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
+#endif
 
             std::cout << std::setw(fw) << n;
             std::cout << std::setw(fw) << A.size();
             std::cout << std::setw(2*fw) << seconds;
+#ifdef SLOW_GREEDY
             std::cout << std::setw(2*fw) << slow_seconds;
+#endif
             std::cout << std::setw(2*fw) << log.get_count("MAJOR TIME");
+#ifdef SLOW_GREEDY
             std::cout << std::setw(2*fw) << slow_log.get_count("MAJOR TIME");
+#endif
             std::cout << std::setw(2*fw) << log.get_count("MINOR TIME");
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("MVM TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("TRSV TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("REMOVE COLS QR TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("EVAL F TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("GREEDY TIME") / cycles;
+
+            double total = 0.0;
+            for(auto p : { "ADD COL TIME", "REMOVE COLS TIME", "REMOVE COLS QR TIME", "SOLVE TIME", "VECTOR TIME", "GREEDY TIME"}) {
+                double percent = 100 * (double) log.get_total(p) / cycles;
+                total += percent;
+                std::cout << std::setw(2*fw) << percent;
+            }
+            std::cout << std::setw(2*fw) << total;
 
             std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME"));
             std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME"));
@@ -156,11 +179,15 @@ void benchmark_mincut()
     std::cout << "Benchmarking min cut" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 10;
+    int fw = 8;
     std::cout << std::setw(fw) << "n"; 
     std::cout << std::setw(fw) << "|A|"; 
     std::cout << std::setw(2*fw) << "seconds";
     std::cout << std::setw(2*fw) <<  "major";
+#ifdef SLOW_GREEDY
+    std::cout << std::setw(2*fw) << "slowseconds";
+    std::cout << std::setw(2*fw) << "slowmajor";
+#endif
     std::cout << std::setw(2*fw) <<  "minor";
     std::cout << std::setw(2*fw) <<  "add col %";
     std::cout << std::setw(2*fw) <<  "del col %";
@@ -168,16 +195,7 @@ void benchmark_mincut()
     std::cout << std::setw(2*fw) <<  "solve %";
     std::cout << std::setw(2*fw) <<  "vector %";
     std::cout << std::setw(2*fw) <<  "greedy %";
-    std::cout << std::setw(2*fw) <<  "misc %";
     std::cout << std::setw(2*fw) <<  "total %";
-/*    std::cout << std::setw(2*fw) <<  "mvm %";
-    std::cout << std::setw(2*fw) <<  "trsv %";
-    std::cout << std::setw(2*fw) <<  "del cols %";
-    std::cout << std::setw(2*fw) <<  "vector %";
-//    std::cout << std::setw(2*fw) <<  "eval f %";
-    std::cout << std::setw(2*fw) <<  "greedy %";
-    std::cout << std::setw(2*fw) <<  "misc %";
-    std::cout << std::setw(2*fw) <<  "total %";*/
     std::cout << std::setw(2*fw) <<  "MVM MB/S";
     std::cout << std::setw(2*fw) <<  "TRSV MB/S";
     std::cout << std::setw(2*fw) <<  "del cols MB/S";
@@ -187,38 +205,55 @@ void benchmark_mincut()
         int64_t n = i;
 
         for(int64_t r = 0; r < n_reps; r++) {
+            int64_t max_iter = 500000;
             PerfLog log;
 
             //Initialize min norm point problem
             MinCut<double> problem(n);
             problem.WattsStrogatz(16, 0.25);
+//            problem.Geometric(.05);
+#ifdef SLOW_GREEDY
+            PerfLog slow_log;
+            SlowMinCut<double> slow_problem(problem);
+#endif
+
+            //Initial condition    
+            Vector<double> wA(n);
+            wA.fill_rand();
+            bool done = false;
             
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, 1e-10, 1e-6, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-5, 1e-5, false, &log);
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
+
+            done = false;
+#ifdef SLOW_GREEDY
+            cycles_count_start();
+            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-5, 1e-5, false, &slow_log);
+            double slow_seconds = (double) cycles_count_stop().time;
+#endif
 
             std::cout << std::setw(fw) << n;
             std::cout << std::setw(fw) << A.size();
             std::cout << std::setw(2*fw) << seconds;
+#ifdef SLOW_GREEDY
+            std::cout << std::setw(2*fw) << slow_seconds;
+#endif
             std::cout << std::setw(2*fw) << log.get_count("MAJOR TIME");
+#ifdef SLOW_GREEDY
+            std::cout << std::setw(2*fw) << slow_log.get_count("MAJOR TIME");
+#endif
             std::cout << std::setw(2*fw) << log.get_count("MINOR TIME");
             double total = 0.0;
-            for(auto p : { "ADD COL TIME", "REMOVE COLS TIME", "REMOVE COLS QR TIME", "SOLVE TIME", "VECTOR TIME", "GREEDY TIME", "MISC TIME"}) {
+            for(auto p : { "ADD COL TIME", "REMOVE COLS TIME", "REMOVE COLS QR TIME", "SOLVE TIME", "VECTOR TIME", "GREEDY TIME"}) {
                 double percent = 100 * (double) log.get_total(p) / cycles;
                 total += percent;
                 std::cout << std::setw(2*fw) << percent;
             }
             std::cout << std::setw(2*fw) << total;
-
-/*            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("MVM TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("TRSV TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("REMOVE COLS QR TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("VECTOR TIME") / cycles;
-//            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("EVAL F TIME") / cycles;
-            std::cout << std::setw(2*fw) << 100 * (double) log.get_total("GREEDY TIME") / cycles;*/
 
             std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME"));
             std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME"));
@@ -233,6 +268,50 @@ void benchmark_mincut()
     }
 }
 
+int main() 
+{
+    run_validation_suite();
+
+
+    benchmark_mincut();
+    benchmark_logdet();
+    run_benchmark_suite();
+
+    //benchmark_mnp_vs_brsmnp();
+
+
+
+//    BRSMinNormPoint<double> brsmnp(8);
+//    MinCut<double> max_flow_problem(10);
+//    max_flow_problem.WattsStrogatz(16, 0.25);
+//    brsmnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL); 
+
+
+/*
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Running some examples" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    MinNormPoint<double> mnp;
+    std::cout << "Log Det problem\n";
+    LogDet<double> logdet_problem(100);
+    mnp.minimize(logdet_problem, 1e-10, 1e-5, true, NULL);
+
+    std::cout << "Min cut problem\n";
+    MinCut<double> max_flow_problem(1000, 15, 0.5, 0.05);
+    mnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL);
+
+    std::cout << "Cardinality problem\n";
+    IDivSqrtSize<double> F(500);
+    mnp.minimize(F, 1e-10, 1e-10, true, NULL); 
+*/
+
+
+
+
+}
+
+#if 0
 void benchmark_mnp_vs_brsmnp()
 {
     int64_t start = 4;
@@ -336,46 +415,4 @@ void benchmark_mnp_vs_brsmnp()
         std::cout << std::endl;*/
     }
 }
-
-int main() 
-{
-    run_validation_suite();
-
-
-    benchmark_mincut();
-    benchmark_logdet();
-    run_benchmark_suite();
-
-    benchmark_mnp_vs_brsmnp();
-
-
-
-//    BRSMinNormPoint<double> brsmnp(8);
-//    MinCut<double> max_flow_problem(10);
-//    max_flow_problem.WattsStrogatz(16, 0.25);
-//    brsmnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL); 
-
-
-/*
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Running some examples" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    MinNormPoint<double> mnp;
-    std::cout << "Log Det problem\n";
-    LogDet<double> logdet_problem(100);
-    mnp.minimize(logdet_problem, 1e-10, 1e-5, true, NULL);
-
-    std::cout << "Min cut problem\n";
-    MinCut<double> max_flow_problem(1000, 15, 0.5, 0.05);
-    mnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL);
-
-    std::cout << "Cardinality problem\n";
-    IDivSqrtSize<double> F(500);
-    mnp.minimize(F, 1e-10, 1e-10, true, NULL); 
-*/
-
-
-
-
-}
+#endif

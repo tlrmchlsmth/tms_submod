@@ -12,7 +12,7 @@ public:
     int64_t count;
 
     PerfTotal() : total(0), count(0) { }
-    inline void log(int64_t x) {
+    inline void log_total(int64_t x) {
         total += x;
         count++;
     }
@@ -28,8 +28,8 @@ public:
         tot_classes.emplace(s,PerfTotal());
     }
 
-    void log(std::string s, int64_t x) {
-        tot_classes[s].log(x);
+    void log_total(std::string s, int64_t x) {
+        tot_classes[s].log_total(x);
     }
 
     int64_t get_total(std::string s) const {

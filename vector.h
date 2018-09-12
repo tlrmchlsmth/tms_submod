@@ -20,12 +20,12 @@ public:
     int64_t _len;
     int64_t _stride;
 
-    PerfLog* log;
+    PerfLog* perf_log;
 
     bool _mem_manage;
 
 //public:
-    Vector(int64_t s) : _len(s), _stride(1), _mem_manage(true), log(NULL)
+    Vector(int64_t s) : _len(s), _stride(1), _mem_manage(true), perf_log(NULL)
     {
         auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
         if(ret != 0){
@@ -35,7 +35,7 @@ public:
     }
 
     Vector(DT* values, int64_t len, int64_t stride, bool mem_manage) :
-        _values(values), _len(len), _stride(stride), _mem_manage(mem_manage), log(NULL)
+        _values(values), _len(len), _stride(stride), _mem_manage(mem_manage), perf_log(NULL)
     {
     }
 
@@ -129,10 +129,10 @@ public:
         for(int i = 0; i < _len; i++)
             sum += _values[i*_stride];
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
-            log->log("VECTOR FLOPS", _len);
-            log->log("VECTOR BYTES", sizeof(DT)*_len);
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
+            perf_log->log_total("VECTOR FLOPS", _len);
+            perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
         }
 
         return sum;
@@ -145,9 +145,9 @@ public:
         for(int i = 1; i < _len; i++)
             min = std::min(min, _values[i*_stride]);
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
-            log->log("VECTOR BYTES", sizeof(DT)*_len);
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
+            perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
         }
 
         return min;
@@ -160,9 +160,9 @@ public:
         for(int i = 1; i < _len; i++)
             max = std::max(max, _values[i*_stride]);
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
-            log->log("VECTOR BYTES", sizeof(DT)*_len);
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
+            perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
         }
         return max;
     }
@@ -210,10 +210,10 @@ public:
             this(i) *= alpha;
         }
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
-            log->log("VECTOR BYTES", 2*sizeof(DT)*_len);
-            log->log("VECTOR FLOPS", _len);
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
+            perf_log->log_total("VECTOR BYTES", 2*sizeof(DT)*_len);
+            perf_log->log_total("VECTOR FLOPS", _len);
         }
     }
 
@@ -231,9 +231,9 @@ public:
         double tau = 0.5;
         if(nrm_x2_sqr == 0) {
             (*this)(0) = -chi1;
-            if(log) {
-                log->log("VECTOR BYTES", sizeof(DT)*_len);
-                log->log("VECTOR FLOPS", 2*_len);
+            if(perf_log) {
+                perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
+                perf_log->log_total("VECTOR FLOPS", 2*_len);
             }
         } else {
             DT alpha = -sgn(chi1) * nrm_x;
@@ -246,14 +246,14 @@ public:
             tau = 1.0 /  (0.5 + 0.5 * nrm_x2_sqr * mult * mult);
             (*this)(0) = alpha;
 
-            if(log) {
-                log->log("VECTOR FLOPS", 3*_len);
-                log->log("VECTOR BYTES", 3*sizeof(DT)*_len);
+            if(perf_log) {
+                perf_log->log_total("VECTOR FLOPS", 3*_len);
+                perf_log->log_total("VECTOR BYTES", 3*sizeof(DT)*_len);
             }
         }
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
         }
         return tau;
     }
@@ -277,10 +277,10 @@ public:
             x(i) -= alpha * (*this)(i);
         }
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
-            log->log("VECTOR FLOPS", 4*_len);
-            log->log("VECTOR BYTES", 3*sizeof(DT)*_len);
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
+            perf_log->log_total("VECTOR FLOPS", 4*_len);
+            perf_log->log_total("VECTOR BYTES", 3*sizeof(DT)*_len);
         }
     }
 
@@ -303,10 +303,10 @@ public:
             }
         }
 
-        if(log) {
-            log->log("VECTOR TIME", rdtsc() - start);
-            log->log("VECTOR FLOPS", 4*_len * X.width());
-            log->log("VECTOR BYTES", sizeof(DT)*(_len + 2*X.width() * X.height()));
+        if(perf_log) {
+            perf_log->log_total("VECTOR TIME", rdtsc() - start);
+            perf_log->log_total("VECTOR FLOPS", 4*_len * X.width());
+            perf_log->log_total("VECTOR BYTES", sizeof(DT)*(_len + 2*X.width() * X.height()));
         }
     }
 
@@ -323,10 +323,10 @@ inline double Vector<double>::norm2() const
 
     double nrm = cblas_dnrm2( _len, _values, _stride);
 
-    if(log) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR FLOPS", 2*_len);
-        log->log("VECTOR BYTES", sizeof(double)*_len);
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 2*_len);
+        perf_log->log_total("VECTOR BYTES", sizeof(double)*_len);
     }
 
     return nrm;
@@ -338,10 +338,10 @@ inline double Vector<double>::dot(const Vector<double>& other) const
 
     double alpha = cblas_ddot( _len, _values, _stride, other._values, other._stride);
 
-    if(log) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR FLOPS", 2*_len);
-        log->log("VECTOR BYTES", sizeof(double)*_len);
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 2*_len);
+        perf_log->log_total("VECTOR BYTES", sizeof(double)*_len);
     }
 
     return alpha;
@@ -353,10 +353,10 @@ inline void Vector<double>::scale(const double alpha)
 
     cblas_dscal(_len, alpha, _values, _stride);
 
-    if(log) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR FLOPS", _len);
-        log->log("VECTOR BYTES", 2*sizeof(double)*_len);
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", _len);
+        perf_log->log_total("VECTOR BYTES", 2*sizeof(double)*_len);
     }
 }
 template<>
@@ -366,10 +366,10 @@ inline void Vector<double>::axpy(const double alpha, const Vector<double>& other
 
     cblas_daxpy(_len, alpha, other._values, other._stride, _values, _stride);
 
-    if(log) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR FLOPS", 2*_len);
-        log->log("VECTOR BYTES", 3*sizeof(double)*_len);
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 2*_len);
+        perf_log->log_total("VECTOR BYTES", 3*sizeof(double)*_len);
     }
 }
 template<>
@@ -379,10 +379,10 @@ inline void Vector<double>::axpby(const double alpha, const Vector<double>& othe
 
     cblas_daxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
 
-    if(log) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR FLOPS", 3*_len);
-        log->log("VECTOR BYTES", 3*sizeof(double)*_len);
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 3*_len);
+        perf_log->log_total("VECTOR BYTES", 3*sizeof(double)*_len);
     }
 }
 template<>
@@ -391,9 +391,9 @@ void Vector<double>::copy(const Vector<double> from) {
 
     cblas_dcopy(_len, from._values, from._stride, _values, _stride);
 
-    if(log != NULL) {
-        log->log("VECTOR TIME", rdtsc() - start);
-        log->log("VECTOR BYTES", 2*sizeof(double)*_len);
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR BYTES", 2*sizeof(double)*_len);
     }
 }
 
