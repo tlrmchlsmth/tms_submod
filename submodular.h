@@ -64,9 +64,9 @@ public:
         int64_t start_a = rdtsc();
         //sort x
         if (alpha > 0.0) {
-            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
         } else if (alpha < 0.0) {
-            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         }
         if(perf_log) {
             perf_log->log_total("SORT TIME", rdtsc() - start_a);
@@ -82,12 +82,11 @@ public:
 
     double polyhedron_greedy_eval(double alpha, const Vector<DT>& x, Vector<DT>& p, PerfLog* perf_log) 
     {
-        int64_t start_a = rdtsc();
-        //sort x
+        int64_t start_a = rdtsc(); //sort x
         if (alpha > 0.0) {
-            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
         } else if (alpha < 0.0) {
-            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
+            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         }
         if(perf_log) {
             perf_log->log_total("SORT TIME", rdtsc() - start_a);

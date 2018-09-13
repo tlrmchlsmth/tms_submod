@@ -61,7 +61,6 @@ void scramble(std::vector<int64_t>& v) {
     }
 }
 
-
 //#define BLAS_HOUSE        
 void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, double* X, int64_t x_rs, int64_t x_cs) {
     #pragma omp parallel for

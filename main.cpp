@@ -20,9 +20,9 @@
 void benchmark_logdet()
 {
     int64_t start = 500;
-    int64_t end = 4000;
+    int64_t end = 25000;
     int64_t inc = 500;
-    int64_t n_reps = 5;
+    int64_t n_reps = 10;
 
 
     std::cout << "===========================================================" << std::endl;
@@ -55,7 +55,7 @@ void benchmark_logdet()
         int64_t n = i;
 
         for(int64_t r = 0; r < n_reps; r++) {
-            int64_t max_iter = 500000;
+            int64_t max_iter = 1e5;
             PerfLog log;
 
             //Initialize min norm point problem
@@ -73,7 +73,7 @@ void benchmark_logdet()
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-5, 1e-5, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-10, 1e-10, false, &log);
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
 
@@ -131,10 +131,10 @@ void benchmark_logdet()
 
 void benchmark_mincut()
 {
-    int64_t start = 100;
-    int64_t end = 4000;
-    int64_t inc = 100;
-    int64_t n_reps = 5;
+    int64_t start = 500;
+    int64_t end = 25000;
+    int64_t inc = 500;
+    int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking min cut" << std::endl;
@@ -166,7 +166,7 @@ void benchmark_mincut()
         int64_t n = i;
 
         for(int64_t r = 0; r < n_reps; r++) {
-            int64_t max_iter = 1000000;
+            int64_t max_iter = 1e6;
             PerfLog log;
 
             //Initialize min norm point problem
@@ -186,7 +186,7 @@ void benchmark_mincut()
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 0.04, 1e-15, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-10, 1e-10, false, &log);
 
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
@@ -202,7 +202,7 @@ void benchmark_mincut()
 #ifdef SLOW_GREEDY
             done = false;
             cycles_count_start();
-            mnp.minimize(slow_problem, wA, &done, max_iter, 0.05, 1e-15, false, &slow_log);
+            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-10, 1e-10, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
 #endif
 
@@ -243,7 +243,7 @@ void benchmark_iwata()
     int64_t start = 100;
     int64_t end = 4000;
     int64_t inc = 100;
-    int64_t n_reps = 5;
+    int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking Iwata's test function" << std::endl;
@@ -271,7 +271,7 @@ void benchmark_iwata()
         int64_t n = i;
 
         for(int64_t r = 0; r < n_reps; r++) {
-            int64_t max_iter = 1000000;
+            int64_t max_iter = 1e5;
             PerfLog log;
 
             //Initialize min norm point problem
@@ -285,7 +285,7 @@ void benchmark_iwata()
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 0.04, 1e-15, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-10, 1e-10, false, &log);
 
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
@@ -328,10 +328,10 @@ int main()
 {
     run_validation_suite();
 
-
-    benchmark_iwata();
     benchmark_mincut();
+    benchmark_iwata();
     benchmark_logdet();
+
 
     run_benchmark_suite();
 
@@ -342,7 +342,7 @@ int main()
 //    BRSMinNormPoint<double> brsmnp(8);
 //    MinCut<double> max_flow_problem(10);
 //    max_flow_problem.WattsStrogatz(16, 0.25);
-//    brsmnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL); 
+//    brsmnp.minimize(max_flow_problem, 1e-10, 1e-10, true, NULL); 
 
 
 /*
@@ -353,11 +353,11 @@ int main()
     MinNormPoint<double> mnp;
     std::cout << "Log Det problem\n";
     LogDet<double> logdet_problem(100);
-    mnp.minimize(logdet_problem, 1e-10, 1e-5, true, NULL);
+    mnp.minimize(logdet_problem, 1e-10, 1e-10, true, NULL);
 
     std::cout << "Min cut problem\n";
     MinCut<double> max_flow_problem(1000, 15, 0.5, 0.05);
-    mnp.minimize(max_flow_problem, 1e-10, 1e-5, true, NULL);
+    mnp.minimize(max_flow_problem, 1e-10, 1e-10, true, NULL);
 
     std::cout << "Cardinality problem\n";
     IDivSqrtSize<double> F(500);

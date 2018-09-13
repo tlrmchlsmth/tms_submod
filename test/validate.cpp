@@ -341,7 +341,7 @@ void val_mincut()
 
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
-        auto A = mnp.minimize(problem, .04, 1e-15, false, NULL);
+        auto A = mnp.minimize(problem, 1e-10, 1e-15, false, NULL);
         double mnp_sol = problem.eval(A);// + problem.baseline;
         
         //Solve problem with lemon

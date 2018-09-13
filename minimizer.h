@@ -66,6 +66,10 @@ public:
     {
         return this->minimize(F, eps, tolerance, false, NULL);
     }
+    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F) 
+    {
+        return this->minimize(F, 1e-10, 1e-10, false, NULL);
+    }
 };
 
 template<class DT>
@@ -105,26 +109,6 @@ public:
             mu.scale(1.0 / mu.sum());
             S.mvm(1.0, mu, 0.0, y);
             if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
-/*
-            if(y.norm2() <= x_hat_nrm2) {
-                std::cout << "|y| " << y.norm2() << " <= |x| " << x_hat_nrm2 << std::endl;
-            }
-            if(y.norm2() > x_hat_nrm2) {
-                std::cout << "|y| " << y.norm2() << " > |x| " << x_hat_nrm2 << std::endl;
-                DT min_r_diag = std::abs((*R)(0,0));
-                int64_t min_coord = 0;
-                for(int64_t i = 0; i < R->width(); i++) {
-                    if(std::abs((*R)(i,i)) < min_r_diag) {
-                        min_r_diag = std::abs((*R)(i,i));
-                        min_coord = i;
-                    }
-                    std::cout << "R(" << i << "," << i << ") = " << (*R)(i,i) << std::endl;
-                }
-                std::cout << "Checksum STS vs RTR " << check_STS_eq_RTR(S, *R) << std::endl;
-                std::cout << "Min R diag " << min_r_diag << " at " << min_coord << " of " << R->width() << std::endl;
-                exit(1);
-            }
-*/
             //Check to see if y is written as positive convex combination of S
             if(mu.min() > -tolerance) {
                 keep_going = false;
@@ -146,44 +130,25 @@ public:
                 //Note: it is imperitive to not let z drift out of the convex hull of S.
                 int64_t z_start = rdtsc();
                 // Find z in conv(S) that is closest to y
-//                DT beta = std::numeric_limits<DT>::max();
+                //DT beta = std::numeric_limits<DT>::max();
                 DT beta = 1.0;
                 for(int64_t i = 0; i < lambda.length(); i++) {
                     DT bound = 1.0;
-//                      if(mu(i) < -tolerance) {
                       if(mu(i) < tolerance) {
                         bound = lambda(i) / (lambda(i) - mu(i));
                     }
-                    //if(bound > tolerance && bound < beta) {
-                //    if(bound > tolerance && bound < beta) {
                     if(bound > tolerance && bound < beta) {
                         beta = bound;
                     }
                 }
-                /*
-                std::cout << "beta = " << beta << std::endl;
-                DT min_gamma = 1.0;
-                for(int64_t i = 0; i < lambda.length(); i++) {
-                    DT gamma_i = beta * mu(i) + (1-beta) * lambda(i);
-                    std::cout << "gamma i " << gamma_i << " lambda i " << lambda(i) << " mu i " << mu(i) << " beta " << beta << std::endl;
-                    if(gamma_i < min_gamma)
-                        min_gamma = gamma_i;
-                }
-                std::cout << "MIN gamma " << min_gamma << std::endl;
-                */
                 if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - z_start);
 
                 x_hat.axpby(beta, y, (1-beta));
-//                DT z_nrm2 = x_hat.norm2();
-//                if(x_hat_nrm2 < z_nrm2) {
-//                    std::cout << "|z| " << z_nrm2 << " |x_hat| " << x_hat_nrm2 << " |y| " << y.norm2() << " beta " << beta << std::endl;
-//                }
 
                 int64_t remove_start = rdtsc();
                 std::list<int64_t> toRemove; //TODO: pre initialize
-//                int max_remove = 1;
-                for(int64_t i = 0; i < lambda.length() /*&& toRemove.size() < max_remove*/; i++){
-                    if((1-beta) * lambda(i) + beta * mu(i) <= 1e-12) //tolerance)
+                for(int64_t i = 0; i < lambda.length(); i++){
+                    if((1-beta) * lambda(i) + beta * mu(i) <= tolerance)
                         toRemove.push_back(i);
                 }
 
@@ -202,10 +167,6 @@ public:
                 std::swap(R, R_next);
                 to_ret = !to_ret;
             }
-
-//            if(y.norm2() > x_hat_nrm2) {
-//                std::cout << "|y| " << y.norm2() << " > |x| " << x_hat_nrm2 << std::endl;
-//            }
 
             int64_t minor_end = rdtsc();
             if(perf_log) perf_log->log_total("MINOR TIME", minor_end - minor_start);
@@ -343,13 +304,14 @@ public:
             DT subopt = F_best - sum_x_hat_lt_0;
             if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - misc_start);
 
-//            if(print || major_cycles % 10000 == 0) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
+//            if(print || major_cycles % 100 == 0) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
 
             DT xt_p = x_hat->dot(p_hat);
             DT xnrm = x_hat->norm2();
             DT xt_x = xnrm * xnrm;
-//            if(print || major_cycles % 10000 == 0) std::cout << "x'p " << xt_p << " x'x " << xt_x << std::endl;
-            if ((std::abs(xt_p - xt_x) < tolerance) || (subopt<eps)) {
+//            if(print || major_cycles % 100 == 0) std::cout << "x'p " << xt_p << " x'x " << xt_x << std::endl;
+//            if (std::abs(xt_p - xt_x) < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
+            if( xt_x - xt_p  < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
                 // We are done: x_hat is already closest norm point
                 if (std::abs(xt_p - xt_x) < tolerance) subopt = 0.0;
                 break;
@@ -529,7 +491,7 @@ public:
 
             //Doublecheck that STS q = RTR q
             DT error = check_STS_eq_RTR(S, *R); 
-            if(error > 1e-5) {
+            if(error > 1e-10) {
                 std::cout << "In xhat update: ||STS q - RTR q|| " << error << std::endl;
                 exit(1);
             }
