@@ -94,7 +94,7 @@ void val_submodularity(std::string name)
     }
 }
 
-template<class F>
+template<class F, class DT>
 void val_brute_force(std::string name)
 {
     int64_t start = 2;
@@ -115,12 +115,12 @@ void val_brute_force(std::string name)
         //Create random problem
         F problem(n);
         problem.initialize_default();
-        MinNormPoint<double> mnp;
+        MinNormPoint<DT> mnp;
         auto A = mnp.minimize(problem, 1e-5, 1e-10, false, NULL);
-        double mnp_sol = problem.eval(A);
+        DT mnp_sol = problem.eval(A);
         
         std::unordered_set<int64_t> empty;
-        double brute_sol = brute_force_rec(problem, empty, 0, n);
+        DT brute_sol = brute_force_rec(problem, empty, 0, n);
 
         std::cout << std::setw(w) << n;
         std::cout << std::setw(w) << mnp_sol;
@@ -132,70 +132,26 @@ void val_brute_force(std::string name)
 }
 
 //Make sure log det greedy algorithm and eval function are consistent
-void val_log_det_greedy()
+template<class F, class DT>
+void val_marginal_gains(std::string name)
 {
-
-    int64_t start = 4;
-    int64_t end = 64; 
-    int64_t inc = 4; 
-
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating Log Det Greedy Algorithm Consistency" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-    int w = 18;
-    std::cout << std::setw(w) << "n";
-    std::cout << std::setw(w) << "error";
-    std::cout << std::endl;
-    for(int64_t n = start; n <= end; n += inc) {
-        LogDet<double> prob(n);
-
-        Vector<double> p1(n);
-        Vector<double> p2(n);
-        
-        std::vector<int64_t> perm(n);
-        for(int64_t i = 0; i < n; i++) perm[i] = i;
-        scramble(perm);
-
-        std::unordered_set<int64_t> A;
-        A.clear();
-        double FA_old = 0.0;
-        for(int i = 0; i < n; i++) {
-            A.insert(perm[i]);
-            double FA = prob.eval(A);
-            p1(perm[i]) = FA - FA_old;
-            FA_old = FA;
-        }
-
-        prob.marginal_gains(perm, p2);
-        p1.axpy(-1.0, p2);
-        double error = p1.norm2();
-        
-        std::cout << std::setw(w) << n;
-        print_err(error, w);
-        std::cout << std::endl;
-    }
-}
-
-void val_mincut_greedy()
-{
-
     int64_t start = 4;
     int64_t end = 256; 
     int64_t inc = 4; 
 
     std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating Min Cut Greedy Algorithm Consistency" << std::endl;
+    std::cout << "Validating " << name << " Marginal Gains" << std::endl;
     std::cout << "===========================================================" << std::endl;
     int w = 18;
     std::cout << std::setw(w) << "n";
     std::cout << std::setw(w) << "error";
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
-        MinCut<double> prob(n);
-        prob.WattsStrogatz(16, 0.25);
+        F prob(n);
+        prob.initialize_default();
 
-        Vector<double> p1(n);
-        Vector<double> p2(n);
+        Vector<DT> p1(n);
+        Vector<DT> p2(n);
         
         std::vector<int64_t> perm(n);
         for(int64_t i = 0; i < n; i++) perm[i] = i;
@@ -203,17 +159,17 @@ void val_mincut_greedy()
 
         std::unordered_set<int64_t> A;
         A.clear();
-        double FA_old = 0.0;
+        DT FA_old = 0.0;
         for(int i = 0; i < n; i++) {
             A.insert(perm[i]);
-            double FA = prob.eval(A);
+            DT FA = prob.eval(A);
             p1(perm[i]) = FA - FA_old;
             FA_old = FA;
         }
 
         prob.marginal_gains(perm, p2);
         p1.axpy(-1.0, p2);
-        double error = p1.norm2();
+        DT error = p1.norm2();
         
         std::cout << std::setw(w) << n;
         print_err(error, w);
@@ -456,13 +412,14 @@ void run_validation_suite()
     val_incremental_qr_remove_cols();
 
     //Validate consistency of marginal gains vs eval
-    val_log_det_greedy();
-    val_mincut_greedy();
+    val_marginal_gains<IwataTest<double>, double>("Iwata's Test Fn");
+    val_marginal_gains<LogDet<double>, double>("LogDet");
+    val_marginal_gains<MinCut<double>, double>("MinCut");
     val_mincut_greedy_eval();
 
     //Validate answer from mnp algorithm
-    val_brute_force<MinCut<double>>("MinCut");
-    val_brute_force<LogDet<double>>("Log Det");
+    val_brute_force<MinCut<double>, double>("MinCut");
+    val_brute_force<LogDet<double>, double>("Log Det");
 
     val_submodularity<MinCut<double>>("MinCut");
     //val_submodularity<LogDet<double>>("Log Det");

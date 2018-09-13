@@ -31,7 +31,14 @@ public:
     virtual void initialize_default(){}
 
     virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
-    virtual std::unordered_set<int64_t> get_set() const = 0;
+
+    std::unordered_set<int64_t> get_set() const {
+        std::unordered_set<int64_t> V;
+        V.reserve(n);
+        for(int i = 0; i < n; i++) 
+            V.insert(i);
+        return V;
+    }
 
     virtual DT marginal_gain(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
         std::unordered_set<int64_t> Ab = A;
@@ -106,6 +113,30 @@ public:
     }
 };
 
+template<class DT>
+class IwataTest : public SubmodularFunction<DT> {
+public:
+    int64_t n;
+    IwataTest(int64_t n) : SubmodularFunction<DT>(n), n(n) {};
+    DT eval(const std::unordered_set<int64_t>& A) {
+        DT val = A.size() * (n-A.size());
+        for(auto a : A) {
+            val -= 5*a - 2*n;
+        }
+        return val;
+    }
+    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    {
+        //_Pragma("omp parallel for")
+        for(int64_t i = 0; i < n; i++) {
+            //Cardinality term
+            x(perm[i]) = n - 2*i - 1;
+            //Index term
+            x(perm[i]) -= 5*perm[i] - 2*n;
+        }
+    }
+};
+
 //m: # of states. n: number of variables
 template<class DT>
 class LogDet : public SubmodularFunction<DT> {
@@ -171,13 +202,6 @@ public:
         return log_det;
     }
 
-    std::unordered_set<int64_t> get_set() const {
-        std::unordered_set<int64_t> V;
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
-            V.insert(i);
-        return V;
-    }
 
     void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
@@ -348,14 +372,6 @@ public:
         return log_det_ka + log_det_kac - baseline;
     }
 
-    std::unordered_set<int64_t> get_set() const {
-        std::unordered_set<int64_t> V;
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
-            V.insert(i);
-        return V;
-    }
-
 /*
     //incremental version of polyhedron greedy
     //Slow, uses l2 blas and here for posterity only
@@ -471,14 +487,6 @@ public:
             val += i / sqrt(A.size());
         }
         return val;
-    }
-
-    std::unordered_set<int64_t> get_set() const {
-        std::unordered_set<int64_t> V;
-        V.reserve(size);
-        for(int i = 0; i < size; i++) 
-            V.insert(i);
-        return V;
     }
 };
 
@@ -788,15 +796,6 @@ public:
             if(edge.index != n+1) x(edge.index) -= edge.weight;
         }
     }
-
-    std::unordered_set<int64_t> get_set() const 
-    {
-        std::unordered_set<int64_t> V;
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
-            V.insert(i);
-        return V;
-    }
 };
 
 template<class DT>
@@ -872,15 +871,6 @@ public:
                 A.insert(b);
             }
         }
-    }
-
-    std::unordered_set<int64_t> get_set() const 
-    {
-        std::unordered_set<int64_t> V;
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
-            V.insert(i);
-        return V;
     }
 };
 

@@ -17,58 +17,6 @@
 //#define SLOW_GREEDY
 //#define PRINT_HIST
 
-template<class DT>
-double time_problem_with_lemon(MinCut<DT>& problem)
-{
-    ListDigraph g;
-    ListDigraph::ArcMap<DT> capacity(g);
-    int64_t n = problem.adjacency.height();
-
-    //Add interior nodes.
-    std::vector<int> node_ids;
-    node_ids.reserve(problem.adjacency.height());
-    for(int i = 0; i < n; i++) {
-        auto node = g.addNode();
-        node_ids.push_back(g.id(node));
-    }
-
-    //Add interior edges
-    for(int i = 0; i < n; i++) {
-        for(int j = 0; j < n; j++) {
-            if(problem.adjacency(i,j) > 0.0) {
-                auto arc = g.addArc(g.nodeFromId(node_ids[i]), g.nodeFromId(node_ids[j]));
-                capacity[arc] = problem.adjacency(i,j);
-            }
-        }
-    }
-
-    //Add edges from source
-    ListDigraph::Node source = g.addNode();
-    for(int i = 0; i < n; i++) {
-        if(problem.edges_from_source(i) > 0.0) {
-           auto arc = g.addArc(source, g.nodeFromId(node_ids[i]));
-            capacity[arc] = problem.edges_from_source(i);
-        }
-    }
-
-    //Add edges to sink
-    ListDigraph::Node sink = g.addNode();
-    for(int i = 0; i < n; i++) {
-        if(problem.edges_to_sink(i) > 0.0) {
-            auto arc = g.addArc(g.nodeFromId(node_ids[i]), sink);
-            capacity[arc] = problem.edges_to_sink(i);
-        }
-    }
-
-    Preflow<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
-    //EdmondsKarp<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
-    cycles_count_start();
-    lemon_prob.run();
-    auto elapsed = cycles_count_stop().time;
-    //std::cout << "lemon prob result " << lemon_prob.flowValue() - problem.baseline << std::endl;
-    return elapsed;
-}
-
 void benchmark_logdet()
 {
     int64_t start = 500;
@@ -290,13 +238,101 @@ void benchmark_mincut()
     }
 }
 
+void benchmark_iwata()
+{
+    int64_t start = 100;
+    int64_t end = 4000;
+    int64_t inc = 100;
+    int64_t n_reps = 5;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking Iwata's test function" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "|A|"; 
+    std::cout << std::setw(2*fw) << "seconds";
+    std::cout << std::setw(2*fw) <<  "major";
+    std::cout << std::setw(2*fw) <<  "minor";
+    std::cout << std::setw(2*fw) <<  "add col %";
+    std::cout << std::setw(2*fw) <<  "del col %";
+    std::cout << std::setw(2*fw) <<  "del col qr %";
+    std::cout << std::setw(2*fw) <<  "solve %";
+    std::cout << std::setw(2*fw) <<  "vector %";
+    std::cout << std::setw(2*fw) <<  "greedy %";
+    std::cout << std::setw(2*fw) <<  "total %";
+    std::cout << std::setw(2*fw) <<  "MVM MB/S";
+    std::cout << std::setw(2*fw) <<  "TRSV MB/S";
+    std::cout << std::setw(2*fw) <<  "del cols MB/S";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            int64_t max_iter = 1000000;
+            PerfLog log;
+
+            //Initialize min norm point problem
+            IwataTest<double> problem(n);
+
+            //Initial condition    
+            Vector<double> wA(n);
+            wA.fill_rand();
+            bool done = false;
+            
+            //Time problem
+            MinNormPoint<double> mnp;
+            cycles_count_start();
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 0.04, 1e-15, false, &log);
+
+            double cycles = (double) cycles_count_stop().cycles;
+            double seconds = (double) cycles_count_stop().time;
+
+#ifdef PRINT_HIST
+            std::cout << "Num columns" << std::endl;
+            log.print_hist("NUM COLUMNS");
+            std::cout << std::endl;
+            std::cout << "Columns removed" << std::endl;
+            log.print_hist("COLUMNS REMOVED");
+#endif
+
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << A.size();
+            std::cout << std::setw(2*fw) << seconds;
+            std::cout << std::setw(2*fw) << log.get_count("MAJOR TIME");
+            std::cout << std::setw(2*fw) << log.get_count("MINOR TIME");
+            double total = 0.0;
+            for(auto p : { "ADD COL TIME", "REMOVE COLS TIME", "REMOVE COLS QR TIME", "SOLVE TIME", "VECTOR TIME", "GREEDY TIME"}) {
+                double percent = 100 * (double) log.get_total(p) / cycles;
+                total += percent;
+                std::cout << std::setw(2*fw) << percent;
+            }
+            std::cout << std::setw(2*fw) << total;
+
+            std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("MVM BYTES")) / ((double) log.get_total("MVM TIME"));
+            std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("TRSV BYTES")) / ((double) log.get_total("TRSV TIME"));
+            if(log.get_total("REMOVE COLS QR TIME") > 0) {
+                std::cout << std::setw(2*fw) << 3.6e3 * ((double) log.get_total("REMOVE COLS QR BYTES")) / ((double) log.get_total("REMOVE COLS QR TIME"));
+            }
+            else {
+                std::cout << std::setw(2*fw) << 0;
+            }
+            std::cout << std::endl;
+        }
+    }
+}
+
 int main() 
 {
     run_validation_suite();
 
 
+    benchmark_iwata();
     benchmark_mincut();
     benchmark_logdet();
+
     run_benchmark_suite();
 
     //benchmark_mnp_vs_brsmnp();
