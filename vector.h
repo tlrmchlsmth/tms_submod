@@ -197,9 +197,11 @@ public:
         std::cout << "axpby not implemented for datatype" << std::endl;
         exit(1);
     }
-    void copy(const Vector<DT> from) {
-        std::cout << "copy not implemented for datatype" << std::endl;
-        exit(1);
+    void copy(const Vector<DT>& from) {
+        assert(_len == from._len);
+        for(int i = 0; i < _len; i++) {
+            (*this)(i) = from(i);
+        }
     }
 
     void scale(const DT alpha)
@@ -385,8 +387,9 @@ inline void Vector<double>::axpby(const double alpha, const Vector<double>& othe
         perf_log->log_total("VECTOR BYTES", 3*sizeof(double)*_len);
     }
 }
+
 template<>
-void Vector<double>::copy(const Vector<double> from) {
+void Vector<double>::copy(const Vector<double>& from) {
     int64_t start = rdtsc();
 
     cblas_dcopy(_len, from._values, from._stride, _values, _stride);

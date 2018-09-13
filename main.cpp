@@ -15,6 +15,7 @@
 #include "util.h"
 
 //#define SLOW_GREEDY
+//#define PRINT_HIST
 
 template<class DT>
 double time_problem_with_lemon(MinCut<DT>& problem)
@@ -128,10 +129,22 @@ void benchmark_logdet()
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
 
-            done = false;
+#ifdef PRINT_HIST
+            auto col_hist = log.get_hist("NUM COLUMNS");
+            for(int i = 0; i < col_hist.buckets.size(); i++) {
+                std::cout << std::setw(8) << col_hist.min + col_hist.bucket_size * i;
+            }
+            std::cout << std::endl;
+            for(int i = 0; i < col_hist.buckets.size(); i++) {
+                std::cout << std::setw(8) << col_hist.buckets[i];
+            }
+            std::cout << std::endl;
+#endif
+
 #ifdef SLOW_GREEDY
+            done = false;
             cycles_count_start();
-            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-5, 1e-5, false, &slow_log);
+            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-10, 1e-10, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
 #endif
 
@@ -205,7 +218,7 @@ void benchmark_mincut()
         int64_t n = i;
 
         for(int64_t r = 0; r < n_reps; r++) {
-            int64_t max_iter = 500000;
+            int64_t max_iter = 1000000;
             PerfLog log;
 
             //Initialize min norm point problem
@@ -225,14 +238,23 @@ void benchmark_mincut()
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-5, 1e-5, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, 0.04, 1e-15, false, &log);
+
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
 
-            done = false;
+#ifdef PRINT_HIST
+            std::cout << "Num columns" << std::endl;
+            log.print_hist("NUM COLUMNS");
+            std::cout << std::endl;
+            std::cout << "Columns removed" << std::endl;
+            log.print_hist("COLUMNS REMOVED");
+#endif
+
 #ifdef SLOW_GREEDY
+            done = false;
             cycles_count_start();
-            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-5, 1e-5, false, &slow_log);
+            mnp.minimize(slow_problem, wA, &done, max_iter, 0.05, 1e-15, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
 #endif
 

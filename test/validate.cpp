@@ -31,6 +31,69 @@ DT brute_force_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, in
     return std::min(val_add_i, val_noadd_i);
 }
 
+template<class DT>
+DT submodularity_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, int64_t i, int64_t n) {
+    if(i == n - 2) {
+        DT FA = F.eval(A);
+        bool valid = true;
+        for(int j = 0; j < n; j++) {
+            if(A.count(j) == 0) {
+                std::unordered_set<int64_t> B = A;
+                B.insert(j);
+                DT FB = FA + F.marginal_gain(A, FA, j);
+                for(int k = 0; k < n; k++) {
+                    if(A.count(k) == 0 && B.count(k) == 0) {
+                        DT gain_a = F.marginal_gain(A, FA, k);
+                        DT gain_b = F.marginal_gain(B, FB, k);
+                        if(gain_b - gain_a > 1e-5) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return valid;
+    }
+    
+    bool val_noadd_i = submodularity_rec(F, A, i+1, n);
+    std::unordered_set<int64_t> B = A;
+    B.insert(i);
+    bool val_add_i = submodularity_rec(F, B, i+1, n);
+
+    return val_noadd_i && val_add_i;
+}
+
+template<class F>
+void val_submodularity(std::string name)
+{
+    int64_t start = 2;
+    int64_t end = 16;
+    int64_t inc = start;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Submodularity of " << name << " Via Brute Force" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "validity";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        //Create random problem
+        F problem(n);
+        problem.initialize_default();
+
+        std::unordered_set<int64_t> empty;
+        bool valid = submodularity_rec(problem, empty, 0, n);
+
+        std::cout << std::setw(w) << n;
+        if(valid)
+            std::cout << std::setw(w) << "true";
+        else
+            std::cout << std::setw(w) << "false";
+        std::cout << std::endl;
+    }
+}
+
 template<class F>
 void val_brute_force(std::string name)
 {
@@ -117,7 +180,7 @@ void val_mincut_greedy()
 {
 
     int64_t start = 4;
-    int64_t end = 64; 
+    int64_t end = 256; 
     int64_t inc = 4; 
 
     std::cout << "===========================================================" << std::endl;
@@ -154,6 +217,46 @@ void val_mincut_greedy()
         
         std::cout << std::setw(w) << n;
         print_err(error, w);
+        std::cout << std::endl;
+    }
+}
+
+void val_mincut_greedy_eval()
+{
+
+    int64_t start = 4;
+    int64_t end = 1024; 
+    int64_t inc = 4; 
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Min Cut Greedy Algorithm Evaluate F" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "val1";
+    std::cout << std::setw(w) << "val2";
+    std::cout << std::setw(w) << "error";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        MinCut<double> prob(n);
+        prob.WattsStrogatz(16, 0.25);
+
+        Vector<double> p(n);
+        Vector<double> x(n);
+        x.fill_rand();
+
+        double val1 = prob.polyhedron_greedy_eval(-1.0, x, p, NULL);
+
+        std::unordered_set<int64_t> A;
+        for(int64_t i = 0; i < n; i++) {
+            if(x(i) < 0.0) A.insert(i);
+        }
+        double val2 = prob.eval(A);
+        
+        std::cout << std::setw(w) << n;
+        std::cout << std::setw(w) << val1;
+        std::cout << std::setw(w) << val2;
+        print_err(val1 - val2, w);
         std::cout << std::endl;
     }
 }
@@ -265,7 +368,7 @@ void val_incremental_qr_remove_cols()
 void val_mincut()
 {
     int64_t start = 8;
-    int64_t end = 256;
+    int64_t end = 512;
     int64_t inc = 8; 
 
     std::cout << "===========================================================" << std::endl;
@@ -282,8 +385,8 @@ void val_mincut()
 
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
-        auto A = mnp.minimize(problem, 1e-5, 1e-5, false, NULL);
-        double mnp_sol = problem.eval(A) + problem.baseline;
+        auto A = mnp.minimize(problem, .04, 1e-15, false, NULL);
+        double mnp_sol = problem.eval(A);// + problem.baseline;
         
         //Solve problem with lemon
         ListDigraph g;
@@ -331,7 +434,7 @@ void val_mincut()
         Preflow<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
         //EdmondsKarp<ListDigraph, ListDigraph::ArcMap<double>> lemon_prob(g, capacity, source, sink);
         lemon_prob.run();
-        double lemon_sol = lemon_prob.flowValue();
+        double lemon_sol = lemon_prob.flowValue() - problem.baseline;
         
         std::cout << std::setw(w) << n;
         std::cout << std::setw(w) << A.size() << std::setw(w) << mnp_sol << std::setw(w) << lemon_sol;
@@ -355,9 +458,13 @@ void run_validation_suite()
     //Validate consistency of marginal gains vs eval
     val_log_det_greedy();
     val_mincut_greedy();
+    val_mincut_greedy_eval();
 
     //Validate answer from mnp algorithm
     val_brute_force<MinCut<double>>("MinCut");
     val_brute_force<LogDet<double>>("Log Det");
+
+    val_submodularity<MinCut<double>>("MinCut");
+    //val_submodularity<LogDet<double>>("Log Det");
     val_mincut();
 }

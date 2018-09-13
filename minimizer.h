@@ -6,7 +6,6 @@
 #include "perf_log.h"
 #include "perf/perf.h"
 
-
 //R is upper triangular
 template<class DT>
 DT check_STS_eq_RTR(Matrix<DT>& S, Matrix<DT>& R) 
@@ -89,6 +88,8 @@ public:
         Matrix<DT>* R_next = R_next_in;
         bool to_ret = false;
 
+        DT x_hat_nrm2 = x_hat.norm2();
+
         bool keep_going = true;
         while(keep_going) {
             int64_t minor_start = rdtsc();
@@ -104,9 +105,28 @@ public:
             mu.scale(1.0 / mu.sum());
             S.mvm(1.0, mu, 0.0, y);
             if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
-
+/*
+            if(y.norm2() <= x_hat_nrm2) {
+                std::cout << "|y| " << y.norm2() << " <= |x| " << x_hat_nrm2 << std::endl;
+            }
+            if(y.norm2() > x_hat_nrm2) {
+                std::cout << "|y| " << y.norm2() << " > |x| " << x_hat_nrm2 << std::endl;
+                DT min_r_diag = std::abs((*R)(0,0));
+                int64_t min_coord = 0;
+                for(int64_t i = 0; i < R->width(); i++) {
+                    if(std::abs((*R)(i,i)) < min_r_diag) {
+                        min_r_diag = std::abs((*R)(i,i));
+                        min_coord = i;
+                    }
+                    std::cout << "R(" << i << "," << i << ") = " << (*R)(i,i) << std::endl;
+                }
+                std::cout << "Checksum STS vs RTR " << check_STS_eq_RTR(S, *R) << std::endl;
+                std::cout << "Min R diag " << min_r_diag << " at " << min_coord << " of " << R->width() << std::endl;
+                exit(1);
+            }
+*/
             //Check to see if y is written as positive convex combination of S
-            if(mu.min() >= -tolerance) {
+            if(mu.min() > -tolerance) {
                 keep_going = false;
             } else {
                 // Step 4:
@@ -122,27 +142,56 @@ public:
                 lambda.scale(1.0 / lambda.sum());
                 if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
 
+
+                //Note: it is imperitive to not let z drift out of the convex hull of S.
                 int64_t z_start = rdtsc();
                 // Find z in conv(S) that is closest to y
-                DT beta = std::numeric_limits<DT>::max();
+//                DT beta = std::numeric_limits<DT>::max();
+                DT beta = 1.0;
                 for(int64_t i = 0; i < lambda.length(); i++) {
-                    DT bound = lambda(i) / (lambda(i) - mu(i)); 
-                    if( bound > tolerance && bound < beta) {
+                    DT bound = 1.0;
+//                      if(mu(i) < -tolerance) {
+                      if(mu(i) < tolerance) {
+                        bound = lambda(i) / (lambda(i) - mu(i));
+                    }
+                    //if(bound > tolerance && bound < beta) {
+                //    if(bound > tolerance && bound < beta) {
+                    if(bound > tolerance && bound < beta) {
                         beta = bound;
                     }
                 }
+                /*
+                std::cout << "beta = " << beta << std::endl;
+                DT min_gamma = 1.0;
+                for(int64_t i = 0; i < lambda.length(); i++) {
+                    DT gamma_i = beta * mu(i) + (1-beta) * lambda(i);
+                    std::cout << "gamma i " << gamma_i << " lambda i " << lambda(i) << " mu i " << mu(i) << " beta " << beta << std::endl;
+                    if(gamma_i < min_gamma)
+                        min_gamma = gamma_i;
+                }
+                std::cout << "MIN gamma " << min_gamma << std::endl;
+                */
                 if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - z_start);
 
                 x_hat.axpby(beta, y, (1-beta));
+//                DT z_nrm2 = x_hat.norm2();
+//                if(x_hat_nrm2 < z_nrm2) {
+//                    std::cout << "|z| " << z_nrm2 << " |x_hat| " << x_hat_nrm2 << " |y| " << y.norm2() << " beta " << beta << std::endl;
+//                }
 
                 int64_t remove_start = rdtsc();
-//                int max_to_remove = 1;
                 std::list<int64_t> toRemove; //TODO: pre initialize
-                for(int64_t i = 0; i < lambda.length(); i++){
-                    if((1-beta) * lambda(i) + beta * mu(i) < tolerance)
+//                int max_remove = 1;
+                for(int64_t i = 0; i < lambda.length() /*&& toRemove.size() < max_remove*/; i++){
+                    if((1-beta) * lambda(i) + beta * mu(i) <= 1e-12) //tolerance)
                         toRemove.push_back(i);
                 }
-                if(toRemove.size() == 0) toRemove.push_back(0);
+
+                if(perf_log) perf_log->log_hist("COLUMNS REMOVED", toRemove.size());
+                if(toRemove.size() == 0) {
+                    std::cout << "Warning: no columns to remove!" << std::endl;
+                    toRemove.push_back(0);
+                }
                 if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - remove_start);
                 
                 //Remove unnecessary columns from S and fixup R so that S = QR for some Q
@@ -153,6 +202,10 @@ public:
                 std::swap(R, R_next);
                 to_ret = !to_ret;
             }
+
+//            if(y.norm2() > x_hat_nrm2) {
+//                std::cout << "|y| " << y.norm2() << " > |x| " << x_hat_nrm2 << std::endl;
+//            }
 
             int64_t minor_end = rdtsc();
             if(perf_log) perf_log->log_total("MINOR TIME", minor_end - minor_start);
@@ -167,7 +220,7 @@ public:
         std::unordered_set<int64_t> A;
         Vector<DT> wA(F.n);
         wA.fill_rand();
-        A = minimize(F, wA, &done, 500000, eps, tolerance, print, perf_log);
+        A = minimize(F, wA, &done, 1000000, eps, tolerance, print, perf_log);
         return A;
     }
 
@@ -178,6 +231,9 @@ public:
         int64_t eval_F_freq = 10;
         int64_t cycles_since_last_F_eval = eval_F_freq;
         int64_t m = V.size();
+
+        //To return
+        std::unordered_set<int64_t> A;
 
         //Characteristic vector
         std::random_device rd;
@@ -220,22 +276,31 @@ public:
         (*R)(0,0) = first_col_s.norm2();
 
         DT F_best = std::numeric_limits<DT>::max();
+
+        if(perf_log) perf_log->add_histogram("NUM COLUMNS", 0, m, 25);
+        if(perf_log) perf_log->add_histogram("COLUMNS REMOVED", 0, 25, 25);
         
         //Step 2:
         int64_t major_cycles = 0;
         while(major_cycles++ < max_iter) {
+            if(perf_log) perf_log->log_hist("NUM COLUMNS", S.width());
             int64_t major_start = rdtsc();
 
             //Snap to zero
             DT x_hat_norm2 = x_hat->norm2();
-            if(x_hat_norm2*x_hat_norm2 < 0)
+            if(x_hat_norm2*x_hat_norm2 < tolerance)
                 (*x_hat).set_all(0.0);
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.perf_log = perf_log;
-            double F_curr = F.polyhedron_greedy(-1.0, *x_hat, p_hat, tolerance, perf_log);
-            if (F_curr < F_best) 
+            double F_curr = F.polyhedron_greedy_eval(-1.0, *x_hat, p_hat, perf_log);
+
+            if (F_curr < F_best) {
                 F_best = F_curr;
+                A.clear();
+                for(int64_t i = 0; i < x_hat->length(); i++)
+                    if((*x_hat)(i) <= 0.0) A.insert(i);
+            }
             
             // Update R to account for modifying S.
             // Let [r0 rho1]^T be the vector to add to r
@@ -255,42 +320,41 @@ public:
             S.enlarge_n(1);
             if(perf_log) { perf_log->log_total("ADD COL TIME", rdtsc() - add_col_start); }
 
-            /*
             //Slow version of checking current function value
+            /*std::unordered_set<int64_t> A_curr;
             int64_t eval_start = rdtsc();
             for(int64_t i = 0; i < x_hat->length(); i++) {
-                if((*x_hat)(i) < tolerance) A_curr.insert(i);
+                if((*x_hat)(i) <= 0.0) A_curr.insert(i);
             }
-
-            auto F_curr = F.eval(A_curr);
-            if(perf_log) perf_log->log_total("EVAL F TIME", rdtsc() - eval_start);
-            */
+            auto F_curr2 = F.eval(A_curr);
+            if(std::abs(F_curr - F_curr2) > 1e-5) std::cout << F_curr - F_curr2 << std::endl;
+            F_curr = F_curr2;
+            if (F_curr < F_best) 
+                F_best = F_curr;
+            if(perf_log) perf_log->log_total("EVAL F TIME", rdtsc() - eval_start);*/
 
             int64_t misc_start = rdtsc();
             // Get suboptimality bound
             DT sum_x_hat_lt_0 = 0.0;
             for (int64_t i = 0; i < x_hat->length(); i++) {
-                if((*x_hat)(i) < tolerance)
+                if((*x_hat)(i) <= 0.0)
                     sum_x_hat_lt_0 += (*x_hat)(i);
             }
             DT subopt = F_best - sum_x_hat_lt_0;
             if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - misc_start);
 
-            if(print) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
+//            if(print || major_cycles % 10000 == 0) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
 
-            DT xt_p = (*x_hat).dot(p_hat);
-            DT xnrm2 = (*x_hat).norm2();
-            DT xt_x = xnrm2 * xnrm2;
-            if(print)
-                std::cout << "x'p " << xt_p << " x'x " << xt_x << std::endl;
+            DT xt_p = x_hat->dot(p_hat);
+            DT xnrm = x_hat->norm2();
+            DT xt_x = xnrm * xnrm;
+//            if(print || major_cycles % 10000 == 0) std::cout << "x'p " << xt_p << " x'x " << xt_x << std::endl;
             if ((std::abs(xt_p - xt_x) < tolerance) || (subopt<eps)) {
                 // We are done: x_hat is already closest norm point
-                if (std::abs(xt_p - xt_x) < tolerance) {
-                    subopt = 0.0;
-                }
-
+                if (std::abs(xt_p - xt_x) < tolerance) subopt = 0.0;
                 break;
             } else if (std::abs(xt_p + xt_x) < tolerance) {
+                std::cout << "Setting x hat to zero" << std::endl;
                 //We had to go through 0 to get to p_hat from x_hat.
                 x_hat_next->set_all(0.0);
             } else {
@@ -305,32 +369,30 @@ public:
                 }
             }
             if(x_hat_next->has_nan()) exit(1);
+           
+            //x hat should improve every iteration. 
+//            DT x_hat_nrm2 = x_hat_next->norm2();
+//            if(x_hat_nrm2 > xnrm2) 
+//                std::cout << "x_hat isn't improving" << std::endl;
 
-            //x_hat->axpy(-1.0, *x_hat_next);
-//            if(x_hat->norm2() < eps) {
-//                std::cout << "x_hat isn't changing" << std::endl;
+//            DT xnextnrm = x_hat_next->norm2();
+//            if(xnextnrm > xnrm) {
+//                std::cout << "|xnext| " << xnextnrm << " |x| " << xnrm << std::endl;
 //            }
+
             std::swap(x_hat, x_hat_next);
 
             if(perf_log) perf_log->log_total("MAJOR TIME", rdtsc() - major_start);
         }
 
         //Return
-        std::unordered_set<int64_t> A_max;
-        std::unordered_set<int64_t> A_min;
-        for(int64_t i = 0; i < x_hat->length(); i++) {
-            if((*x_hat)(i) < tolerance) A_max.insert(i);
-            if((*x_hat)(i) < 0) A_min.insert(i);
-        }
-//        if(A_max.size() != A_min.size()) {
         if(print){
-            std::cout << "Done. |A_max| = " << A_max.size() << " F_max = " << F.eval(A_max) << std::endl;
-            std::cout << "Done. |A_min| = " << A_min.size() << " F_min = " << F.eval(A_min) << std::endl;
+            std::cout << "Done. |A| = " << A.size() << " F = " << F.eval(A) << std::endl;
         }
         if(major_cycles < max_iter) {
             *done = true;
         }
-        return A_min;
+        return A;
     }
 };
 
@@ -515,6 +577,7 @@ public:
 
                 int64_t z_start = rdtsc();
                 // Find z in conv(S) that is closest to y
+                //TODO: is this beta right
                 DT beta = 1.0;
                 for(int64_t i = 0; i < lambda.length(); i++) {
                     DT bound = lambda(i) / (lambda(i) - w(i)); 

@@ -37,64 +37,68 @@ public:
         std::unordered_set<int64_t> Ab = A;
         Ab.insert(b);
         DT FAb = this->eval(Ab);
-        return FAb;
+        return FAb - FA;
     }
 
-    virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& p) 
     {
         A.clear();
         DT FA_old = 0.0;
-        for(int i = 0; i < x.length(); i++) {
+        for(int i = 0; i < p.length(); i++) {
             DT FA = marginal_gain(A, FA_old, perm[i]);
-            x(perm[i]) = FA - FA_old;
+            p(perm[i]) = FA - FA_old;
             A.insert(perm[i]);
             FA_old = FA;
         }
     }
 
-    void polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* perf_log) 
+    void polyhedron_greedy(double alpha, const Vector<DT>& x, Vector<DT>& p, PerfLog* perf_log) 
     {
         int64_t start_a = rdtsc();
-        //sort weights
+        //sort x
         if (alpha > 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
+            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
         } else if (alpha < 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
+            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         }
         if(perf_log) {
             perf_log->log_total("SORT TIME", rdtsc() - start_a);
         }
 
         int64_t start_b = rdtsc();
-        marginal_gains(permutation, x);
+        marginal_gains(permutation, p);
         if(perf_log) {
             perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
             perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
         }
     }
 
-    double polyhedron_greedy(double alpha, const Vector<DT>& weights, Vector<DT>& x, double thresh, PerfLog* perf_log) 
+    double polyhedron_greedy_eval(double alpha, const Vector<DT>& x, Vector<DT>& p, PerfLog* perf_log) 
     {
         int64_t start_a = rdtsc();
-        //sort weights
+        //sort x
         if (alpha > 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
+            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
         } else if (alpha < 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
+            std::stable_sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         }
         if(perf_log) {
             perf_log->log_total("SORT TIME", rdtsc() - start_a);
         }
 
         int64_t start_b = rdtsc();
-        marginal_gains(permutation, x);
+        marginal_gains(permutation, p);
         if(perf_log) perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
         
         //Get current value of F(A)
         double val = 0.0;
+/*      for(int64_t i = 0; i < p.length(); i++) {
+            if(x(permutation[i]) >= 0.0) break;
+            val += p(permutation[i]);
+        }*/
+        
         for(int64_t i = 0; i < x.length(); i++) {
-            if(weights(permutation[i]) > thresh) break;
-            val += x(permutation[i]);
+            if(x(i) <= 0.0) val += p(i);
         }
 
         if(perf_log) perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
@@ -355,14 +359,14 @@ public:
 /*
     //incremental version of polyhedron greedy
     //Slow, uses l2 blas and here for posterity only
-    void polyhedron_greedy_inc(double alpha, const Vector<DT>& weights, Vector<DT>& x, PerfLog* perf_log) 
+    void polyhedron_greedy_inc(double alpha, const Vector<DT>& x, Vector<DT>& x, PerfLog* perf_log) 
     {
-        //sort weights
+        //sort x
         int64_t start_a = rdtsc();
         if (alpha > 0.0) std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
-                [&](int64_t a, int64_t b){ return weights(a) > weights(b); } );
+                [&](int64_t a, int64_t b){ return x(a) > x(b); } );
         else std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
-                [&](int64_t a, int64_t b){ return weights(a) < weights(b); } );
+                [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         if(perf_log) perf_log->log_total("SORT TIME", rdtsc() - start_a);
 
         for(auto a: SubmodularFunction<DT>::permutation) {
@@ -746,7 +750,7 @@ public:
                 loss -= adj_in[b][i].weight;
         }
 
-        return FA + gain + loss;
+        return gain + loss;
     }
 
     virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
