@@ -1645,11 +1645,6 @@ void Matrix<float>::apply_tpq(Matrix<float>& A, Matrix<float>& B, const Matrix<f
     int l = l_in;
     
     // A is k-by-n, B is m-by-n and V is m-by-k.
-    std::cout << "_m " << _m << " m " << m << std::endl;
-    std::cout << "_n " << _n << " k " << k << std::endl;
-    std::cout << "A wid " << A.width() << " n " << n << std::endl;
-    std::cout << "T hei " << T.height() << " nb_in " << nb_in << std::endl;
-    std::cout << "T wid " << T.width() << " k " << k << std::endl;
     assert(_m == m && _n == k && A.width() == n && T.height() >= nb_in && T.width() == k && "Nonconformal apply tpq");
     assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
     assert(_rs == 1 && "Only column major qr supported");

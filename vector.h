@@ -170,7 +170,8 @@ public:
     bool has_nan() const
     {
         for(int i = 0; i < _len; i++) {
-            if(std::isnan((*this)(i)))
+            DT alpha = (*this)(i);
+            if(alpha != alpha)
                 return true;
         }
         return false;
@@ -209,7 +210,7 @@ public:
         int64_t start = rdtsc();
 
         for(int i = 0; i < _len; i++) {
-            this(i) *= alpha;
+            (*this)(i) *= alpha;
         }
 
         if(perf_log) {
@@ -318,6 +319,9 @@ public:
 #include "immintrin.h"
 #include "ipps.h"
 
+//
+// Double precision vector ops
+//
 template<>
 inline double Vector<double>::norm2() const
 {
@@ -397,6 +401,91 @@ void Vector<double>::copy(const Vector<double>& from) {
     if(perf_log) {
         perf_log->log_total("VECTOR TIME", rdtsc() - start);
         perf_log->log_total("VECTOR BYTES", 2*sizeof(double)*_len);
+    }
+}
+
+//
+// Single precision vector ops
+//
+template<>
+inline float Vector<float>::norm2() const
+{
+    int64_t start = rdtsc();
+
+    float nrm = cblas_snrm2( _len, _values, _stride);
+
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 2*_len);
+        perf_log->log_total("VECTOR BYTES", sizeof(float)*_len);
+    }
+
+    return nrm;
+}
+template<>
+inline float Vector<float>::dot(const Vector<float>& other) const
+{
+    int64_t start = rdtsc();
+
+    float alpha = cblas_sdot( _len, _values, _stride, other._values, other._stride);
+
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 2*_len);
+        perf_log->log_total("VECTOR BYTES", sizeof(float)*_len);
+    }
+
+    return alpha;
+}
+template<>
+inline void Vector<float>::scale(const float alpha)
+{
+    int64_t start = rdtsc();
+
+    cblas_sscal(_len, alpha, _values, _stride);
+
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", _len);
+        perf_log->log_total("VECTOR BYTES", 2*sizeof(float)*_len);
+    }
+}
+template<>
+inline void Vector<float>::axpy(const float alpha, const Vector<float>& other)
+{
+    int64_t start = rdtsc();
+
+    cblas_saxpy(_len, alpha, other._values, other._stride, _values, _stride);
+
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 2*_len);
+        perf_log->log_total("VECTOR BYTES", 3*sizeof(float)*_len);
+    }
+}
+template<>
+inline void Vector<float>::axpby(const float alpha, const Vector<float>& other, const float beta)
+{
+    int64_t start = rdtsc();
+
+    cblas_saxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
+
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR FLOPS", 3*_len);
+        perf_log->log_total("VECTOR BYTES", 3*sizeof(float)*_len);
+    }
+}
+
+template<>
+void Vector<float>::copy(const Vector<float>& from) {
+    int64_t start = rdtsc();
+
+    cblas_scopy(_len, from._values, from._stride, _values, _stride);
+
+    if(perf_log) {
+        perf_log->log_total("VECTOR TIME", rdtsc() - start);
+        perf_log->log_total("VECTOR BYTES", 2*sizeof(float)*_len);
     }
 }
 
