@@ -1,10 +1,15 @@
-cmake_minimum_required(VERSION 3.10.2)
+cmake_minimum_required(VERSION 2.8.12.2)
 
 project(tms_submodular)
 
 #    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_LIST_DIR}
 if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -mkl=parallel -ipp -qopenmp -O3")
+endif()
+
+if (VALIDATE_WITH_LEMON)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -DVALIDATE_WITH_LEMON=\"1\"")
+    target_link_libraries(tms_submod emon)
 endif()
 
 include_directories( ${MY_SOURCE_DIR} )
@@ -22,5 +27,4 @@ set(SOURCE_FILES
 )
 
 add_executable(tms_submod ${SOURCE_FILES})
-target_link_libraries(tms_submod emon)
 

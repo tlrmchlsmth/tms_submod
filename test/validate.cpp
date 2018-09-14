@@ -9,10 +9,14 @@
 #include "../submodular.h"
 #include "../util.h"
 
+//#define VALIDATE_LEMON
+
+#ifdef VALIDATE_WITH_LEMON
 #include <lemon/list_graph.h>
 #include <lemon/preflow.h>
 #include <lemon/edmonds_karp.h>
 using namespace lemon;
+#endif
 
 //#define DEBUGGING
 
@@ -321,6 +325,7 @@ void val_incremental_qr_remove_cols()
 
 }
 
+#ifdef VALIDATE_LEMON
 void val_mincut()
 {
     int64_t start = 8;
@@ -403,6 +408,7 @@ void val_mincut()
     }
 
 }
+#endif
 
 void run_validation_suite() 
 {
@@ -426,5 +432,8 @@ void run_validation_suite()
 
     val_submodularity<MinCut<double>>("MinCut");
     //val_submodularity<LogDet<double>>("Log Det");
+   
+#ifdef VALIDATE_LEMON
     val_mincut();
+#endif
 }
