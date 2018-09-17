@@ -20,7 +20,7 @@
 void benchmark_logdet()
 {
     int64_t start = 500;
-    int64_t end = 25000;
+    int64_t end = 10000;
     int64_t inc = 500;
     int64_t n_reps = 10;
 
@@ -132,7 +132,7 @@ void benchmark_logdet()
 void benchmark_mincut()
 {
     int64_t start = 500;
-    int64_t end = 25000;
+    int64_t end = 10000;
     int64_t inc = 500;
     int64_t n_reps = 10;
 
@@ -240,9 +240,9 @@ void benchmark_mincut()
 
 void benchmark_iwata()
 {
-    int64_t start = 100;
-    int64_t end = 4000;
-    int64_t inc = 100;
+    int64_t start = 1000;
+    int64_t end = 100000;
+    int64_t inc = 1000;
     int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
@@ -327,13 +327,12 @@ void benchmark_iwata()
 int main() 
 {
     run_validation_suite();
+    run_benchmark_suite();
 
-    benchmark_mincut();
     benchmark_iwata();
     benchmark_logdet();
+    benchmark_mincut();
 
-
-    run_benchmark_suite();
 
     //benchmark_mnp_vs_brsmnp();
 

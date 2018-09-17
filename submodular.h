@@ -17,44 +17,41 @@ template<class DT>
 class SubmodularFunction {
 public:
     //Workspace for the greedy algorithm
-    std::unordered_set<int64_t> A;
+    std::vector<bool> A;
     std::vector<int64_t> permutation;
     int64_t n;
 
-    SubmodularFunction(int64_t n_in) : n(n_in)
+    SubmodularFunction(int64_t n_in) : n(n_in), A(n_in)
     {
-        A.reserve(n);
         permutation.reserve(n);
         for(int i = 0; i < n; i++) 
             permutation.push_back(i);
     }
     virtual void initialize_default(){}
 
-    virtual DT eval(const std::unordered_set<int64_t>& A) = 0;
+    virtual DT eval(const std::vector<bool>& A) = 0;
 
-    std::unordered_set<int64_t> get_set() const {
-        std::unordered_set<int64_t> V;
-        V.reserve(n);
-        for(int i = 0; i < n; i++) 
-            V.insert(i);
+    std::vector<bool> get_set() const {
+        std::vector<bool> V(n);
+        std::fill(V.begin(), V.end(), 1);
         return V;
     }
 
-    virtual DT marginal_gain(const std::unordered_set<int64_t>& A, DT FA, int64_t b) {
-        std::unordered_set<int64_t> Ab = A;
-        Ab.insert(b);
+    virtual DT marginal_gain(const std::vector<bool>& A, DT FA, int64_t b) {
+        std::vector<bool> Ab = A;
+        Ab[b] = 1;
         DT FAb = this->eval(Ab);
         return FAb - FA;
     }
 
     virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& p) 
     {
-        A.clear();
+        std::fill(A.begin(), A.end(), 0);
         DT FA_old = 0.0;
         for(int i = 0; i < p.length(); i++) {
             DT FA = marginal_gain(A, FA_old, perm[i]);
             p(perm[i]) = FA - FA_old;
-            A.insert(perm[i]);
+            A[perm[i]] = 1;
             FA_old = FA;
         }
     }
@@ -117,11 +114,16 @@ class IwataTest : public SubmodularFunction<DT> {
 public:
     int64_t n;
     IwataTest(int64_t n) : SubmodularFunction<DT>(n), n(n) {};
-    DT eval(const std::unordered_set<int64_t>& A) {
-        DT val = A.size() * (n-A.size());
-        for(auto a : A) {
-            val -= 5*a - 2*n;
+    DT eval(const std::vector<bool>& A) {
+        int64_t cardinality = 0;
+        DT val = 0.0;
+        for(int64_t i = 0; i < n; i++) {
+            if(A[i]) {
+                cardinality++;
+                val -= 5*i - 2*n;
+            }
         }
+        val += cardinality * (n-cardinality);
         return val;
     }
     void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
@@ -144,7 +146,6 @@ public:
 
     Matrix<DT> Cov;     //Covariance matrix
     Matrix<DT> U;       //Cholesky factorization of the covariance matrix of S
-   // DT baseline;        //Log determinant of covariance matrix
 
     DT log_determinant(Matrix<DT>& A)
     {
@@ -178,18 +179,20 @@ public:
         Cov.mmm(1.0, UT, U, 0.0);
     }
 
-    DT eval(const std::unordered_set<int64_t>& A) {
-        if(A.size() == 0) return 0.0;
+    DT eval(const std::vector<bool>& A) {
+        int64_t cardinality = 0;
+        for(auto a : A) { if(a) cardinality++; }
+        if(cardinality == 0) return 0.0;
 
         // Select some rows and columns and perform Cholesky factorization
-        auto Ua = U.submatrix(0,0,A.size(),A.size());
+        auto Ua = U.submatrix(0,0,cardinality,cardinality);
         Ua.set_all(0.0);
         int64_t kaj = 0;
         for(int64_t j = 0; j < n; j++) {
-            if(A.count(j) == 0) continue;
+            if(!A[j]) continue;
             int64_t kai = 0;
             for(int64_t i = 0; i <= j; i++) {
-                if(A.count(i) == 0) continue;
+                if(!A[i]) continue;
                 Ua(kai, kaj) = Cov(i,j);
                 kai++;
             }
@@ -246,246 +249,6 @@ public:
             
             x(perm[i]) = log(mu*mu);
         }
-    }
-};
-
-#if 0
-//m: # of states. n: number of variables
-template<class DT>
-class LogDetSymm : public SubmodularFunction<DT> {
-public:
-    int64_t n;
-
-    Matrix<DT> cov;     //Covariance matrix
-    Matrix<DT> KV;      //Cholesky factorization of the covariance matrix of S
-    DT baseline;     //Log determinant of KV
-
-    DT log_determinant(Matrix<DT>& A)
-    {
-        DT val = 0.0;
-        for(int64_t i = 0; i < std::min(A.height(), A.width()); i++) {
-            val += log(A(i,i)*A(i,i));
-        }
-        return val;
-    }
-
-    LogDetSymm(int64_t n_in) : SubmodularFunction<DT>(n_in),
-                                         n(n_in), cov(n_in, n_in), KV(n_in, n_in),
-                                         baseline(0.0)
-    {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
-        std::uniform_real_distribution<double> diag_dist(-1.0, 1.0);
-        std::uniform_real_distribution<double> dist(-.01, .01);
-
-        //Create a covariance matrix. 
-        //Every element must be positive and it must be symmetric positive definite
-        //
-        //We accomplish this by:
-        //  1. Start with a random upper triangular matrix
-        //  2. Multiply it with its transpose
-        //  2. Hit it with an orthogonal similarity transformation
-        //
-        KV.fill_rand(gen, dist);
-        for(int i = 0; i < n; i++) {
-            KV(i,i) = diag_dist(gen);
-        }
-        KV.set_subdiagonal(0.0);
-        auto KVT = KV.transposed();
-        cov.mmm(1.0, KVT, KV, 0.0);
-
-        baseline = log_determinant(KV);
-
-        //Our orthogonal transformation is a single reflection
-        /*
-        Vector<DT> v(n);
-        v.fill_rand(gen, dist);
-        v.scale(1.0 / v.norm2());
-        v.house_apply(v(0), cov);
-        auto cov_T = cov.transposed();
-        v.house_apply(v(0), cov_T);
-        */
-
-        //Check 
-        
-        //Get cholesky factorization of the covariance matrix
-        KV.copy(cov);
-        KV.chol('U');
-        KV.set_subdiagonal(0.0);
-        DT baseline2 = log_determinant(KV);
-        std::cout << baseline << "\t" << baseline2 << std::endl;
-
-        //Doublecheck
-        Vector<double> y(n_in);
-        y.fill_rand();
-        Vector<double> cov_y(n_in);
-        cov.mvm(1.0, y, 0.0, cov_y); 
-        auto KT = KV.transposed();
-        Vector<double> Ky(n_in);
-        Vector<double> KTKy(n_in);
-        KV.mvm(1.0, y, 0.0, Ky); 
-        KT.mvm(1.0, Ky, 0.0, KTKy);
-        KTKy.axpy(-1.0, cov_y);
-//        std::cout << "KV" << std::endl;
-//        KV.print(); std::cout << std::endl;
-        assert(KTKy.norm2() < 1e-8);
-       
-    }
-
-    DT eval(const std::unordered_set<int64_t>& A) {
-        if(A.size() == 0 || A.size() == n) return 0.0; //Fast-path so stuff doesn't break with empty matrices
-
-        //Copy rows and columns in A into KA
-//        auto KA = KA_base.submatrix(0,0,A.size(),A.size());
-        auto KA = KV.submatrix(0,0,A.size(),A.size());
-        KA.set_all(0.0);
-        int64_t kaj = 0;
-        for(int64_t j = 0; j < n; j++) {
-            if(A.count(j) == 0) continue;
-            int64_t kai = 0;
-            for(int64_t i = 0; i <= j; i++) {
-                if(A.count(i) == 0) continue;
-                KA(kai, kaj) = cov(i,j);
-                kai++;
-            }
-            kaj ++;
-        }
-        KA.chol('U');
-        DT log_det_ka = log_determinant(KA);
-
-        auto KAc = KV.submatrix(0,0,n-A.size(),n-A.size());
-        KAc.set_all(0.0);
-        kaj = 0;
-        for(int64_t j = 0; j < n; j++) {
-            if(A.count(j) > 0) continue;
-            int64_t kai = 0;
-            for(int64_t i = 0; i <= j; i++) {
-                if(A.count(i) > 0) continue;
-                KAc(kai, kaj) = cov(i,j);
-                kai++;
-            }
-            kaj ++;
-        }
-        KAc.chol('U');
-        DT log_det_kac = log_determinant(KAc);
-        return log_det_ka + log_det_kac - baseline;
-    }
-
-/*
-    //incremental version of polyhedron greedy
-    //Slow, uses l2 blas and here for posterity only
-    void polyhedron_greedy_inc(double alpha, const Vector<DT>& x, Vector<DT>& x, PerfLog* perf_log) 
-    {
-        //sort x
-        int64_t start_a = rdtsc();
-        if (alpha > 0.0) std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
-                [&](int64_t a, int64_t b){ return x(a) > x(b); } );
-        else std::sort(SubmodularFunction<DT>::permutation.begin(), SubmodularFunction<DT>::permutation.end(), 
-                [&](int64_t a, int64_t b){ return x(a) < x(b); } );
-        if(perf_log) perf_log->log_total("SORT TIME", rdtsc() - start_a);
-
-        for(auto a: SubmodularFunction<DT>::permutation) {
-            std::cout << a << ", ";
-        } std::cout << std::endl;
-
-        int64_t start_b = rdtsc();
-       
-        //Get initial KA 
-        Vector<DT> t_a(n);
-        auto KA = KV.submatrix(0,0,1,1);
-        KA(0,0) = std::sqrt(cov(SubmodularFunction<DT>::permutation[0], SubmodularFunction<DT>::permutation[0]));
-
-        //Get initial KAc 
-        Matrix<DT> T_ac(2, n);
-        auto KAc = KAc_base.submatrix(0,0,n,n);
-        KAc.copy(KV);
-        KAc.remove_column_iqr_givens(SubmodularFunction<DT>::permutation[0], T_ac, 64);
-
-        //Create list of column ids to remove for KAc
-        std::vector<int64_t> shifted_cols_to_remove = SubmodularFunction<DT>::permutation;
-        for(int64_t i = 0; i < n; i++) {
-            int64_t index = shifted_cols_to_remove[i];
-            for(int64_t j = i+1; j < n; j++) {
-                if(index < shifted_cols_to_remove[j])
-                    shifted_cols_to_remove[j] -= 1;
-            }
-        }
-
-        //Evaluate initial FA
-        DT FA_old = log_determinant(KA) + log_determinant(KAc) - baseline;
-        x(SubmodularFunction<DT>::permutation[0]) = FA_old;
-
-        //Evaluate the rest of FAs
-        for(int64_t i = 1; i < n-1; i++) {
-            //
-            //Add column to KA
-            //
-            auto c1 = KV.subcol(0, i, i);
-            int64_t cov_i = SubmodularFunction<DT>::permutation[i]; 
-            for(int64_t j = 0; j < i; j++) {
-                c1(j) = cov(cov_i, SubmodularFunction<DT>::permutation[j]);
-            }
-            KA.transpose(); KA.trsv(CblasLower, c1); KA.transpose();
-            DT mu = sqrt(std::abs(cov(cov_i, cov_i) - c1.dot(c1)));
-            KA.enlarge_n(1); KA.enlarge_m(1);
-            KA(i,i) = mu;
-            
-            // 
-            //Remove column from KAc
-            //
-            KAc.remove_column_iqr_givens(shifted_cols_to_remove[i], T_ac, 64);
-
-            //Evaluate
-            DT FA = log_determinant(KA) + log_determinant(KAc) - baseline;
-            x(cov_i) = FA - FA_old;
-
-            FA_old = FA;
-        }
-
-        if(perf_log) {
-            perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
-            perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
-        }
-    }*/
-
-    void marginal_gains(std::vector<int64_t>& perm, Vector<DT>& x) 
-    {
-        //Permute rows and columns of covariance matrix
-        auto Ua = U.submatrix(0,0,n,n);
-        Ua.copy_permute_rc(cov, perm);
-        
-        //Do cholestky factorization of permuted matrix
-        Ua.chol('U');
-        for(int64_t i = 0; i < n; i++) {
-            x(perm[i]) = log(Ua(i,i) * Ua(i,i));
-        }
-
-        //Reverse permutation of rows and columns of covariance matrix
-        auto rev = perm;
-        std::reverse(rev.begin(), rev.end());
-        Ua.copy_permute_rc(cov, rev);
-
-        //Do cholesky factorization of reverse permuted matrix
-        Ua.chol('U');
-        for(int64_t i = 0; i < n; i++) {
-            x(perm[i]) -= log(Ua(n-i-1, n-i-1)* Ua(n-i-1, n-i-1));
-        }
-    }
-};
-#endif
-
-template<class DT>
-class IDivSqrtSize : public SubmodularFunction<DT> {
-public:
-    int64_t size;
-    IDivSqrtSize(int64_t n) : size(n), SubmodularFunction<DT>(n) {}
-
-    DT eval(const std::unordered_set<int64_t>& A) {
-        DT val = 0.0;
-        for(auto i : A) {
-            val += i / sqrt(A.size());
-        }
-        return val;
     }
 };
 
@@ -724,36 +487,37 @@ public:
         this->sanity_check();
     }
 
-    DT eval(const std::unordered_set<int64_t>& A) 
+    DT eval(const std::vector<bool>& A) 
     {
         DT val = 0.0;
-        for(auto a : A) {
-            for(auto b : adj_out[a]) {
-                if(A.count(b.index) == 0)
+        for(int64_t i = 0; i < n; i++) {
+            if(!A[i]) continue;
+            for(auto b : adj_out[i]) {
+                if(b.index == n+1 || !A[b.index])
                     val += b.weight;
             }
         }
         for(auto b : adj_out[n]) {
-            if(A.count(b.index) == 0)
+            if(b.index == n+1 || !A[b.index])
                 val += b.weight;
         }
 
         return val - baseline;
     }
 
-    DT marginal_gain(const std::unordered_set<int64_t>& A, DT FA, int64_t b) 
+    DT marginal_gain(const std::vector<bool>& A, DT FA, int64_t b) 
     {
         //Gain from adding b
         DT gain = 0.0;
         for(int64_t i = 0; i < adj_out[b].size(); i++) {
-            if(A.count(adj_out[b][i].index) == 0)
+            if(!A[adj_out[b][i].index])
                 gain += adj_out[b][i].weight;
         }
 
         //Loss from adding b
         DT loss = 0.0;
         for(int64_t i = 0; i < adj_in[b].size(); i++) {
-            if(adj_in[b][i].index == n || A.count(adj_in[b][i].index) != 0)
+            if(adj_in[b][i].index == n || A[adj_in[b][i].index])
                 loss -= adj_in[b][i].weight;
         }
 
@@ -815,17 +579,19 @@ public:
         baseline = other.baseline;
     }
 
-    DT eval(const std::unordered_set<int64_t>& A) 
+    DT eval(const std::vector<bool>& A) 
     {
         DT val = 0.0;
-        for(auto a : A) {
-            for(auto b : adj_out[a]) {
-                if(A.count(b.index) == 0)
+        for(int64_t i = 0; i < n; i++) {
+            if(!A[i]) continue;
+            for(auto b : adj_out[i]) {
+                if(b.index == n+1 || !A[b.index])
                     val += b.weight;
+                //if(!A[b.index])
             }
         }
         for(auto b : adj_out[n]) {
-            if(A.count(b.index) == 0)
+            if(b.index == n+1 || !A[b.index])
                 val += b.weight;
         }
 
@@ -845,9 +611,9 @@ public:
             int64_t end = std::min(start + n_per_thread, n);
 
             //Each thread must maintain its own set A
-            std::unordered_set<int64_t> A;
-            A.reserve(perm.size());
-            for(int64_t i = 0; i < std::min(start, n); i++) A.insert(perm[i]);
+            std::vector<bool> A(perm.size());
+            std::fill(A.begin(), A.end(), 0);
+            for(int64_t i = 0; i < std::min(start, n); i++) A[perm[i]] = 1;
 
             for(int64_t j = start; j < end; j++) {
                 int64_t b = perm[j];
@@ -855,19 +621,19 @@ public:
                 //Gain from adding b
                 DT gain = 0.0;
                 for(int64_t i = 0; i < adj_out[b].size(); i++) {
-                    if(A.count(adj_out[b][i].index) == 0)
+                    if(!A[adj_out[b][i].index])
                         gain += adj_out[b][i].weight;
                 }
 
                 //Loss from adding b
                 DT loss = 0.0;
                 for(int64_t i = 0; i < adj_in[b].size(); i++) {
-                    if(adj_in[b][i].index == n || A.count(adj_in[b][i].index) != 0)
+                    if(adj_in[b][i].index == n || A[adj_in[b][i].index] != 0)
                         loss -= adj_in[b][i].weight;
                 }
 
                 x(b) = gain + loss;
-                A.insert(b);
+                A[b] = 1;
             }
         }
     }

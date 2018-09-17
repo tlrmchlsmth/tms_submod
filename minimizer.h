@@ -1,5 +1,3 @@
-#include <unordered_set>
-
 #include "matrix.h"
 #include "vector.h"
 #include "submodular.h"
@@ -57,16 +55,16 @@ template<class DT>
 class Minimizer
 {
 public:
-    virtual std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* perf_log) = 0;
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
+    virtual std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* perf_log) = 0;
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
     {
         return this->minimize(F, eps, tolerance, print, NULL);
     }
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance) 
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance) 
     {
         return this->minimize(F, eps, tolerance, false, NULL);
     }
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F) 
+    std::vector<bool> minimize(SubmodularFunction<DT>& F) 
     {
         return this->minimize(F, 1e-10, 1e-10, false, NULL);
     }
@@ -174,27 +172,23 @@ public:
         return to_ret;
     }
     
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print_in, PerfLog* perf_log)
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print_in, PerfLog* perf_log)
     {
         bool done = false;
         bool print = print_in;
-        std::unordered_set<int64_t> A;
         Vector<DT> wA(F.n);
         wA.fill_rand();
-        A = minimize(F, wA, &done, 1000000, eps, tolerance, print, perf_log);
-        return A;
+        return  minimize(F, wA, &done, 1000000, eps, tolerance, print, perf_log);
     }
 
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* perf_log) 
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* perf_log) 
     {
-        std::unordered_set<int64_t> V = F.get_set();
-
         int64_t eval_F_freq = 10;
         int64_t cycles_since_last_F_eval = eval_F_freq;
-        int64_t m = V.size();
+        int64_t m = F.n;
 
         //To return
-        std::unordered_set<int64_t> A;
+        std::vector<bool> A(m);
 
         //Characteristic vector
         std::random_device rd;
@@ -258,9 +252,9 @@ public:
 
             if (F_curr < F_best) {
                 F_best = F_curr;
-                A.clear();
+                std::fill(A.begin(), A.end(), 0);
                 for(int64_t i = 0; i < x_hat->length(); i++)
-                    if((*x_hat)(i) <= 0.0) A.insert(i);
+                    if((*x_hat)(i) <= 0.0) A[i] = 1;
             }
             
             // Update R to account for modifying S.
@@ -358,6 +352,7 @@ public:
     }
 };
 
+#if 0
 template<class DT>
 class BRSMinNormPoint : Minimizer<DT>
 {
@@ -592,7 +587,7 @@ public:
         return to_ret;
     }
 
-    std::unordered_set<int64_t> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
     {
         std::unordered_set<int64_t> V = F.get_set();
 
@@ -614,7 +609,6 @@ public:
         /*for(int64_t i = 0; i < m; i++) {
             if(dist(gen) > .5) {
                 wA(i) = 1.0;
-                A.insert(i);
             } else {
                 wA(i) = 0.0;
             }
@@ -836,3 +830,4 @@ public:
         return A_curr;
     }
 };
+#endif

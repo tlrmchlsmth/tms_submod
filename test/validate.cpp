@@ -17,32 +17,32 @@ using namespace lemon;
 //#define DEBUGGING
 
 template<class DT>
-DT brute_force_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, int64_t i, int64_t n) {
+DT brute_force_rec(SubmodularFunction<DT>& F, std::vector<bool>& A, int64_t i, int64_t n) {
     if(i == n) { 
         return F.eval(A);
     } 
     
     DT val_noadd_i = brute_force_rec(F, A, i+1, n);
 
-    std::unordered_set<int64_t> B = A;
-    B.insert(i);
+    std::vector<bool> B = A;
+    B[i] = 1;
     DT val_add_i = brute_force_rec(F, B, i+1, n);
 
     return std::min(val_add_i, val_noadd_i);
 }
 
 template<class DT>
-DT submodularity_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, int64_t i, int64_t n) {
+DT submodularity_rec(SubmodularFunction<DT>& F, std::vector<bool>& A, int64_t i, int64_t n) {
     if(i == n - 2) {
         DT FA = F.eval(A);
         bool valid = true;
         for(int j = 0; j < n; j++) {
-            if(A.count(j) == 0) {
-                std::unordered_set<int64_t> B = A;
-                B.insert(j);
+            if(!A[j]) {
+                std::vector<bool> B = A;
+                B[j] = 1;
                 DT FB = FA + F.marginal_gain(A, FA, j);
                 for(int k = 0; k < n; k++) {
-                    if(A.count(k) == 0 && B.count(k) == 0) {
+                    if(!A[k] && !B[k]) {
                         DT gain_a = F.marginal_gain(A, FA, k);
                         DT gain_b = F.marginal_gain(B, FB, k);
                         if(gain_b - gain_a > 1e-5) {
@@ -56,8 +56,8 @@ DT submodularity_rec(SubmodularFunction<DT>& F, std::unordered_set<int64_t>& A, 
     }
     
     bool val_noadd_i = submodularity_rec(F, A, i+1, n);
-    std::unordered_set<int64_t> B = A;
-    B.insert(i);
+    std::vector<bool> B = A;
+    B[i] = 1;
     bool val_add_i = submodularity_rec(F, B, i+1, n);
 
     return val_noadd_i && val_add_i;
@@ -82,7 +82,8 @@ void val_submodularity(std::string name)
         F problem(n);
         problem.initialize_default();
 
-        std::unordered_set<int64_t> empty;
+        std::vector<bool> empty(n);
+        std::fill(empty.begin(), empty.end(), 0);
         bool valid = submodularity_rec(problem, empty, 0, n);
 
         std::cout << std::setw(w) << n;
@@ -119,7 +120,8 @@ void val_brute_force(std::string name)
         auto A = mnp.minimize(problem, 1e-5, 1e-10, false, NULL);
         DT mnp_sol = problem.eval(A);
         
-        std::unordered_set<int64_t> empty;
+        std::vector<bool> empty(n);
+        std::fill(empty.begin(), empty.end(), 0);
         DT brute_sol = brute_force_rec(problem, empty, 0, n);
 
         std::cout << std::setw(w) << n;
@@ -157,11 +159,12 @@ void val_marginal_gains(std::string name)
         for(int64_t i = 0; i < n; i++) perm[i] = i;
         scramble(perm);
 
-        std::unordered_set<int64_t> A;
-        A.clear();
+        std::vector<bool> A(n);
+        std::fill(A.begin(), A.end(), 0);
+
         DT FA_old = 0.0;
         for(int i = 0; i < n; i++) {
-            A.insert(perm[i]);
+            A[perm[i]] = 1;
             DT FA = prob.eval(A);
             p1(perm[i]) = FA - FA_old;
             FA_old = FA;
@@ -203,9 +206,13 @@ void val_mincut_greedy_eval()
 
         double val1 = prob.polyhedron_greedy_eval(-1.0, x, p, NULL);
 
-        std::unordered_set<int64_t> A;
+        std::vector<bool> A(n);
         for(int64_t i = 0; i < n; i++) {
-            if(x(i) < 0.0) A.insert(i);
+            if(x(i) < 0.0) {
+                A[i] = 1;
+            } else {
+                A[i] = 0;
+            }
         }
         double val2 = prob.eval(A);
         
