@@ -17,7 +17,8 @@
 //#define SLOW_GREEDY
 //#define PRINT_HIST
 
-void benchmark_logdet()
+template<class DT>
+void benchmark_logdet(DT eps, DT tol)
 {
     int64_t start = 500;
     int64_t end = 10000;
@@ -59,21 +60,21 @@ void benchmark_logdet()
             PerfLog log;
 
             //Initialize min norm point problem
-            LogDet<double> problem(n);
+            LogDet<DT> problem(n);
 #ifdef SLOW_GREEDY
             PerfLog slow_log;
-            SlowLogDet<double> slow_problem(problem);
+            SlowLogDet<DT> slow_problem(problem);
 #endif
         
             //Initial condition    
-            Vector<double> wA(n);
+            Vector<DT> wA(n);
             wA.fill_rand();
             bool done = false;
 
             //Time problem
-            MinNormPoint<double> mnp;
+            MinNormPoint<DT> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-10, 1e-10, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, eps, tol, false, &log);
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
 
@@ -92,7 +93,7 @@ void benchmark_logdet()
 #ifdef SLOW_GREEDY
             done = false;
             cycles_count_start();
-            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-10, 1e-10, false, &slow_log);
+            mnp.minimize(slow_problem, wA, &done, max_iter, eps, tol, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
 #endif
 
@@ -129,7 +130,8 @@ void benchmark_logdet()
     }
 }
 
-void benchmark_mincut()
+template<class DT>
+void benchmark_mincut(DT eps, DT tol)
 {
     int64_t start = 500;
     int64_t end = 10000;
@@ -170,23 +172,23 @@ void benchmark_mincut()
             PerfLog log;
 
             //Initialize min norm point problem
-            MinCut<double> problem(n);
+            MinCut<DT> problem(n);
             problem.WattsStrogatz(16, 0.25);
 //            problem.Geometric(.05);
 #ifdef SLOW_GREEDY
             PerfLog slow_log;
-            SlowMinCut<double> slow_problem(problem);
+            SlowMinCut<DT> slow_problem(problem);
 #endif
 
             //Initial condition    
-            Vector<double> wA(n);
+            Vector<DT> wA(n);
             wA.fill_rand();
             bool done = false;
             
             //Time problem
-            MinNormPoint<double> mnp;
+            MinNormPoint<DT> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-10, 1e-10, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, eps, tol, false, &log);
 
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
@@ -202,7 +204,7 @@ void benchmark_mincut()
 #ifdef SLOW_GREEDY
             done = false;
             cycles_count_start();
-            mnp.minimize(slow_problem, wA, &done, max_iter, 1e-10, 1e-10, false, &slow_log);
+            mnp.minimize(slow_problem, wA, &done, max_iter, eps, tol, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
 #endif
 
@@ -238,11 +240,18 @@ void benchmark_mincut()
     }
 }
 
-void benchmark_iwata()
+template<class DT>
+void benchmark_iwata(DT eps, DT tol)
 {
+<<<<<<< HEAD
     int64_t start = 1000;
     int64_t end = 100000;
     int64_t inc = 1000;
+=======
+    int64_t start = 100;
+    int64_t end = 10000;
+    int64_t inc = 100;
+>>>>>>> dad1f72ddcfbd2606db503063e6458e1231b1b8b
     int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
@@ -275,17 +284,17 @@ void benchmark_iwata()
             PerfLog log;
 
             //Initialize min norm point problem
-            IwataTest<double> problem(n);
+            IwataTest<DT> problem(n);
 
             //Initial condition    
-            Vector<double> wA(n);
+            Vector<DT> wA(n);
             wA.fill_rand();
             bool done = false;
             
             //Time problem
-            MinNormPoint<double> mnp;
+            MinNormPoint<DT> mnp;
             cycles_count_start();
-            auto A = mnp.minimize(problem, wA, &done, max_iter, 1e-10, 1e-10, false, &log);
+            auto A = mnp.minimize(problem, wA, &done, max_iter, eps, tol, false, &log);
 
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
@@ -329,10 +338,13 @@ int main()
     run_validation_suite();
     run_benchmark_suite();
 
-    benchmark_iwata();
-    benchmark_logdet();
-    benchmark_mincut();
+    benchmark_mincut<double>(1e-10, 1e-10);
+    benchmark_iwata<double>(1e-10, 1e-10);
+    benchmark_logdet<double>(1e-10, 1e-10);
 
+    benchmark_mincut<float>(1e-5, 1e-5);
+    benchmark_iwata<float>(1e-5, 1e-5);
+    benchmark_logdet<float>(1e-5, 1e-5);
 
     //benchmark_mnp_vs_brsmnp();
 

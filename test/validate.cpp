@@ -9,10 +9,14 @@
 #include "../submodular.h"
 #include "../util.h"
 
+//#define VALIDATE_LEMON
+
+#ifdef VALIDATE_WITH_LEMON
 #include <lemon/list_graph.h>
 #include <lemon/preflow.h>
 #include <lemon/edmonds_karp.h>
 using namespace lemon;
+#endif
 
 //#define DEBUGGING
 
@@ -117,7 +121,7 @@ void val_brute_force(std::string name)
         F problem(n);
         problem.initialize_default();
         MinNormPoint<DT> mnp;
-        auto A = mnp.minimize(problem, 1e-5, 1e-10, false, NULL);
+        auto A = mnp.minimize(problem, 1e-5, 1e-5, false, NULL);
         DT mnp_sol = problem.eval(A);
         
         std::vector<bool> empty(n);
@@ -328,6 +332,7 @@ void val_incremental_qr_remove_cols()
 
 }
 
+#ifdef VALIDATE_LEMON
 void val_mincut()
 {
     int64_t start = 8;
@@ -348,7 +353,7 @@ void val_mincut()
 
         //Solve problem via min norm point
         MinNormPoint<double> mnp;
-        auto A = mnp.minimize(problem, 1e-10, 1e-15, false, NULL);
+        auto A = mnp.minimize(problem, 1e-5, 1e-5, false, NULL);
         double mnp_sol = problem.eval(A);// + problem.baseline;
         
         //Solve problem with lemon
@@ -410,6 +415,7 @@ void val_mincut()
     }
 
 }
+#endif
 
 void run_validation_suite() 
 {
@@ -419,16 +425,22 @@ void run_validation_suite()
     val_incremental_qr_remove_cols();
 
     //Validate consistency of marginal gains vs eval
-    val_marginal_gains<IwataTest<double>, double>("Iwata's Test Fn");
-    val_marginal_gains<LogDet<double>, double>("LogDet");
-    val_marginal_gains<MinCut<double>, double>("MinCut");
+    val_marginal_gains<IwataTest<float>, float>("Iwata's Test Fn Float");
+    val_marginal_gains<IwataTest<double>, double>("Iwata's Test Fn Double");
+    val_marginal_gains<LogDet<double>, double>("LogDet Double");
+    val_marginal_gains<LogDet<float>, float>("LogDet Float");
+    val_marginal_gains<MinCut<double>, double>("MinCut Double");
+    val_marginal_gains<MinCut<float>, float>("MinCut Float");
     val_mincut_greedy_eval();
 
     //Validate answer from mnp algorithm
-    val_brute_force<MinCut<double>, double>("MinCut");
-    val_brute_force<LogDet<double>, double>("Log Det");
+    val_brute_force<MinCut<double>, double>("MinCut Double");
+    val_brute_force<LogDet<double>, double>("Log Det Double");
 
     val_submodularity<MinCut<double>>("MinCut");
     //val_submodularity<LogDet<double>>("Log Det");
+   
+#ifdef VALIDATE_LEMON
     val_mincut();
+#endif
 }
