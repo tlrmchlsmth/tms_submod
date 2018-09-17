@@ -243,15 +243,9 @@ void benchmark_mincut(DT eps, DT tol)
 template<class DT>
 void benchmark_iwata(DT eps, DT tol)
 {
-<<<<<<< HEAD
     int64_t start = 1000;
     int64_t end = 100000;
     int64_t inc = 1000;
-=======
-    int64_t start = 100;
-    int64_t end = 10000;
-    int64_t inc = 100;
->>>>>>> dad1f72ddcfbd2606db503063e6458e1231b1b8b
     int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
