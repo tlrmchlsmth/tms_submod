@@ -102,11 +102,33 @@ public:
             //Find minimum norm point in affine hull spanned by S
             int64_t solve_start = rdtsc();
             mu.set_all(1.0);
+                int64_t trsv1_start = rdtsc();
             R->transpose(); R->trsv(CblasLower, mu); R->transpose();
+                if(perf_log) { 
+                    perf_log->log_total("SOLVE1 TRSV1 TIME", rdtsc() - trsv1_start); 
+                    perf_log->log_total("SOLVE1 TRSV1 FLOPS", R->width() * R->width()); 
+                    perf_log->log_total("SOLVE1 TRSV1 BYTES", sizeof(DT) * (R->width() * R->width() / 2.0 + 2.0*R->width())); 
+                }
+
+                int64_t trsv2_start = rdtsc();
             R->trsv(CblasUpper, mu);
+                if(perf_log) { 
+                    perf_log->log_total("SOLVE1 TRSV2 TIME", rdtsc() - trsv2_start); 
+                    perf_log->log_total("SOLVE1 TRSV2 FLOPS", R->width() * R->width()); 
+                    perf_log->log_total("SOLVE1 TRSV2 BYTES", sizeof(DT) * (R->width() * R->width() / 2.0 + 2.0*R->width())); 
+                }
+
             mu.scale(1.0 / mu.sum());
+                int64_t mvm_start = rdtsc();
             S.mvm(1.0, mu, 0.0, y);
+                if(perf_log) { 
+                    perf_log->log_total("SOLVE1 MVM TIME", rdtsc() - mvm_start); 
+                    perf_log->log_total("SOLVE1 MVM FLOPS", 2*S.width() * S.height()); 
+                    perf_log->log_total("SOLVE1 MVM BYTES", sizeof(DT) * (S.width() * S.height() + 2.0*S.height() + S.width())); 
+                }
             if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
+                if(perf_log) perf_log->log_total("SOLVE1 TIME", rdtsc() - solve_start);
+
             //Check to see if y is written as positive convex combination of S
             if(mu.min() > -tolerance) {
                 keep_going = false;
@@ -119,10 +141,27 @@ public:
                 // affine combination (i.e., sum(lambda)==1)
                 int64_t solve_start = rdtsc();
                 S.transpose(); S.mvm(1.0, x_hat, 0.0, lambda); S.transpose();
+                    if(perf_log) { 
+                        perf_log->log_total("SOLVE2 MVM TIME", rdtsc() - solve_start); 
+                        perf_log->log_total("SOLVE2 MVM FLOPS", 2*S.width() * S.height()); 
+                        perf_log->log_total("SOLVE2 MVM BYTES", sizeof(DT) * (S.width() * S.height() + 2.0*S.height() + S.width())); 
+                    }
+                    int64_t trsv1_start = rdtsc();
                 R->transpose(); R->trsv(CblasLower, lambda); R->transpose();
+                    if(perf_log) { 
+                        perf_log->log_total("SOLVE2 TRSV1 TIME", rdtsc() - trsv1_start); 
+                        perf_log->log_total("SOLVE2 TRSV1 FLOPS", R->width() * R->width()); 
+                        perf_log->log_total("SOLVE2 TRSV1 BYTES", sizeof(DT) * (R->width() * R->width() / 2.0 + 2.0*R->width())); 
+                    }
+                    int64_t trsv2_start = rdtsc();
                 R->trsv(CblasUpper, lambda);
+                    if(perf_log) { 
+                        perf_log->log_total("SOLVE2 TRSV2 TIME", rdtsc() - trsv2_start); 
+                        perf_log->log_total("SOLVE2 TRSV2 FLOPS", R->width() * R->width()); 
+                        perf_log->log_total("SOLVE2 TRSV2 BYTES", sizeof(DT) * (R->width() * R->width() / 2.0 + 2.0*R->width())); 
+                    }
                 lambda.scale(1.0 / lambda.sum());
-                if(perf_log) perf_log->log_total("SOLVE TIME", rdtsc() - solve_start);
+                if(perf_log) perf_log->log_total("SOLVE2 TIME", rdtsc() - solve_start);
 
 
                 //Note: it is imperitive to not let z drift out of the convex hull of S.
@@ -232,8 +271,8 @@ public:
 
         DT F_best = std::numeric_limits<DT>::max();
 
-        if(perf_log) perf_log->add_histogram("NUM COLUMNS", 0, m, 25);
-        if(perf_log) perf_log->add_histogram("COLUMNS REMOVED", 0, 25, 25);
+        if(perf_log) perf_log->add_histogram("NUM COLUMNS", 0, m, 50);
+        if(perf_log) perf_log->add_histogram("COLUMNS REMOVED", 0, m/4, 50);
         
         //Step 2:
         int64_t major_cycles = 0;
@@ -262,8 +301,22 @@ public:
             // r0 = R' \ (S' * p_hat)
             int64_t add_col_start = rdtsc();
             Vector<DT> r0 = R_base->subcol(0, R->width(), R->height()); r0.perf_log = perf_log;
+
+                int64_t add_col_mvm_start = rdtsc();
             S.transpose(); S.mvm(1.0, p_hat, 0.0, r0); S.transpose();
+                if(perf_log) { 
+                    perf_log->log_total("ADD COL MVM TIME", rdtsc() - add_col_mvm_start); 
+                    perf_log->log_total("ADD COL MVM FLOPS", 2*S.width() * S.height()); 
+                    perf_log->log_total("ADD COL MVM BYTES", sizeof(DT) * (S.width() * S.height() + 2.0*S.height() + S.width())); 
+                }
+
+                int64_t add_col_trsv_start = rdtsc();
             R->transpose(); R->trsv(CblasLower, r0); R->transpose();
+                if(perf_log) { 
+                    perf_log->log_total("ADD COL TRSV TIME", rdtsc() - add_col_trsv_start); 
+                    perf_log->log_total("ADD COL TRSV FLOPS", R->width() * R->width()); 
+                    perf_log->log_total("ADD COL TRSV BYTES", sizeof(DT) * (R->width() * R->width() / 2.0 + 2.0*R->width())); 
+                }
 
             // rho1^2 = p_hat' * p_hat - r0' * r0;
             DT phat_norm2 = p_hat.norm2();
@@ -342,9 +395,9 @@ public:
         }
 
         //Return
-        if(print){
-            std::cout << "Done. |A| = " << A.size() << " F = " << F.eval(A) << std::endl;
-        }
+//        if(print){
+//            std::cout << "Done. |A| = " << A.size() << " F = " << F.eval(A) << std::endl;
+//        }
         if(major_cycles < max_iter) {
             *done = true;
         }

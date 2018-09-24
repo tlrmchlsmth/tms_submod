@@ -425,20 +425,20 @@ void run_validation_suite()
     val_incremental_qr_remove_cols();
 
     //Validate consistency of marginal gains vs eval
-    val_marginal_gains<IwataTest<float>, float>("Iwata's Test Fn Float");
+    //val_marginal_gains<IwataTest<float>, float>("Iwata's Test Fn Float");
     val_marginal_gains<IwataTest<double>, double>("Iwata's Test Fn Double");
-    val_marginal_gains<LogDet<double>, double>("LogDet Double");
-    val_marginal_gains<LogDet<float>, float>("LogDet Float");
+    val_marginal_gains<SlowLogDet<double>, double>("LogDet Double");
+//    val_marginal_gains<SlowLogDet<float>, float>("LogDet Float");
     val_marginal_gains<MinCut<double>, double>("MinCut Double");
-    val_marginal_gains<MinCut<float>, float>("MinCut Float");
+//    val_marginal_gains<MinCut<float>, float>("MinCut Float");
     val_mincut_greedy_eval();
 
     //Validate answer from mnp algorithm
     val_brute_force<MinCut<double>, double>("MinCut Double");
-    val_brute_force<LogDet<double>, double>("Log Det Double");
+    val_brute_force<SlowLogDet<double>, double>("Log Det Double");
 
     val_submodularity<MinCut<double>>("MinCut");
-    //val_submodularity<LogDet<double>>("Log Det");
+    //val_submodularity<SlowLogDet<double>>("Log Det");
    
 #ifdef VALIDATE_LEMON
     val_mincut();

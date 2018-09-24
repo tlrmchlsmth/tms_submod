@@ -117,18 +117,20 @@ public:
     DT eval(const std::vector<bool>& A) {
         int64_t cardinality = 0;
         DT val = 0.0;
+        _Pragma("omp parallel for reduction(+:val, cardinality)")
         for(int64_t i = 0; i < n; i++) {
             if(A[i]) {
                 cardinality++;
                 val -= 5*i - 2*n;
             }
         }
+
         val += cardinality * (n-cardinality);
         return val;
     }
     void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
-        //_Pragma("omp parallel for")
+        _Pragma("omp parallel for")
         for(int64_t i = 0; i < n; i++) {
             //Cardinality term
             x(perm[i]) = n - 2*i - 1;
@@ -505,29 +507,11 @@ public:
         return val - baseline;
     }
 
-    DT marginal_gain(const std::vector<bool>& A, DT FA, int64_t b) 
-    {
-        //Gain from adding b
-        DT gain = 0.0;
-        for(int64_t i = 0; i < adj_out[b].size(); i++) {
-            if(!A[adj_out[b][i].index])
-                gain += adj_out[b][i].weight;
-        }
-
-        //Loss from adding b
-        DT loss = 0.0;
-        for(int64_t i = 0; i < adj_in[b].size(); i++) {
-            if(adj_in[b][i].index == n || A[adj_in[b][i].index])
-                loss -= adj_in[b][i].weight;
-        }
-
-        return gain + loss;
-    }
 
     virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         std::vector<int64_t> perm_lookup(n);
-        _Pragma("omp parallel for")
+//        _Pragma("omp parallel for")
         for(int64_t i = 0; i < n; i++) {
             perm_lookup[perm[i]] = i;
         }
@@ -598,11 +582,29 @@ public:
         return val - baseline;
     }
 
+    DT marginal_gain(const std::vector<bool>& A, int64_t b) 
+    {
+        //Gain from adding b
+        DT gain = 0.0;
+        for(int64_t i = 0; i < adj_out[b].size(); i++) {
+            if(!A[adj_out[b][i].index])
+                gain += adj_out[b][i].weight;
+        }
+
+        //Loss from adding b
+        DT loss = 0.0;
+        for(int64_t i = 0; i < adj_in[b].size(); i++) {
+            if(adj_in[b][i].index == n || A[adj_in[b][i].index])
+                loss -= adj_in[b][i].weight;
+        }
+
+        return gain + loss;
+    }
+
     void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         _Pragma("omp parallel") 
         {
-
             int64_t t_id = omp_get_thread_num();
             int64_t nt = omp_get_num_threads();
 
@@ -617,22 +619,7 @@ public:
 
             for(int64_t j = start; j < end; j++) {
                 int64_t b = perm[j];
-
-                //Gain from adding b
-                DT gain = 0.0;
-                for(int64_t i = 0; i < adj_out[b].size(); i++) {
-                    if(!A[adj_out[b][i].index])
-                        gain += adj_out[b][i].weight;
-                }
-
-                //Loss from adding b
-                DT loss = 0.0;
-                for(int64_t i = 0; i < adj_in[b].size(); i++) {
-                    if(adj_in[b][i].index == n || A[adj_in[b][i].index] != 0)
-                        loss -= adj_in[b][i].weight;
-                }
-
-                x(b) = gain + loss;
+                x(b) = marginal_gain(A, b);
                 A[b] = 1;
             }
         }

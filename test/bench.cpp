@@ -132,9 +132,9 @@ void benchmark_remove_cols()
 void benchmark_logdet_marginal_gains()
 {
     int64_t start = 128;
-    int64_t end = 1024;
+    int64_t end = 4096;
     int64_t inc = 128;
-    int64_t n_reps = 3;
+    int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking LogDet Marginal Gains" << std::endl;
@@ -156,34 +156,32 @@ void benchmark_logdet_marginal_gains()
         Vector<double> p1(n);
         Vector<double> p2(n);
 
-        std::vector<double> cycles1;
-        std::vector<double> cycles2;
-
         for(int64_t r = 0; r < n_reps; r++) {
             scramble(perm);
 
             cycles_count_start();
             fast.marginal_gains(perm, p1);
-            cycles1.push_back(cycles_count_stop().time);
+            auto fast_time = cycles_count_stop().time;
 
             cycles_count_start();
             slow.marginal_gains(perm, p2);
-            cycles2.push_back(cycles_count_stop().time);
+            auto slow_time = cycles_count_stop().time;
+
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << n*n*n/3.0 / fast_time / 1e9;
+            std::cout << std::setw(fw) << n*n*n/3.0 / slow_time / 1e9;
+            std::cout << std::endl;
         }
 
-        std::cout << std::setw(fw) << n;
-        std::cout << std::setw(fw) << n*n*n/3.0 / mean(cycles1) / 1e9;
-        std::cout << std::setw(fw) << n*n*n/3.0 / mean(cycles2) / 1e9;
-        std::cout << std::endl;
     }
 }
 
 void benchmark_mincut_marginal_gains()
 {
     int64_t start = 128;
-    int64_t end = 8192;
+    int64_t end = 2*8192;
     int64_t inc = 128;
-    int64_t n_reps = 3;
+    int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking Min Cut Marginal Gains" << std::endl;
@@ -207,25 +205,22 @@ void benchmark_mincut_marginal_gains()
         Vector<double> p1(n);
         Vector<double> p2(n);
 
-        std::vector<double> cycles1;
-        std::vector<double> cycles2;
-
         for(int64_t r = 0; r < n_reps; r++) {
             scramble(perm);
 
             cycles_count_start();
             fast.marginal_gains(perm, p1);
-            cycles1.push_back(cycles_count_stop().time);
+            auto fast_time = cycles_count_stop().time;
 
             cycles_count_start();
             slow.marginal_gains(perm, p2);
-            cycles2.push_back(cycles_count_stop().time);
-        }
+            auto slow_time = cycles_count_stop().time;
 
-        std::cout << std::setw(fw) << n;
-        std::cout << std::setw(fw) << 16*n / mean(cycles1) / 1e6;
-        std::cout << std::setw(fw) << 16*n / mean(cycles2) / 1e6;
-        std::cout << std::endl;
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << 16*n / fast_time / 1e6;
+            std::cout << std::setw(fw) << 16*n / slow_time / 1e6;
+            std::cout << std::endl;
+        }
     }
 }
 

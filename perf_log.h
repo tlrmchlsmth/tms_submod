@@ -27,13 +27,13 @@ public:
     double bucket_size;
 
     PerfHist() : min(0), max(100), bucket_size(1), buckets(100){}
-    PerfHist(double min, double max, double num_buckets) : min(min), max(max), bucket_size((max - min) / (double) num_buckets), buckets(num_buckets) 
+    PerfHist(double min, double max, int64_t num_buckets) : min(min), max(max), bucket_size((max - min) / (double) num_buckets), buckets(num_buckets) 
     { 
         std::fill(buckets.begin(), buckets.end(), 0);
     }
     inline void log_hist(double x) {
         int64_t bucket = (x - min) / bucket_size;
-        bucket = std::max(bucket, (int64_t)buckets.size() - 1);
+        bucket = std::min(bucket, (int64_t)buckets.size() - 1);
         buckets[bucket]++;
     }
 };
