@@ -69,7 +69,7 @@ void benchmark_logdet(DT eps, DT tol)
             //Initial condition    
             Vector<DT> wA(n);
             wA.fill_rand();
-            bool done = false;
+            bool done;
 
             //Time problem
             MinNormPoint<DT> mnp;
@@ -91,7 +91,6 @@ void benchmark_logdet(DT eps, DT tol)
 #endif
 
 #ifdef SLOW_GREEDY
-            done = false;
             cycles_count_start();
             mnp.minimize(slow_problem, wA, &done, max_iter, eps, tol, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
@@ -195,7 +194,7 @@ void benchmark_mincut(DT eps, DT tol)
             //Initial condition    
             Vector<DT> wA(n);
             wA.fill_rand();
-            bool done = false;
+            bool done;
             
             //Time problem
             MinNormPoint<DT> mnp;
@@ -214,7 +213,6 @@ void benchmark_mincut(DT eps, DT tol)
 #endif
 
 #ifdef SLOW_GREEDY
-            done = false;
             cycles_count_start();
             mnp.minimize(slow_problem, wA, &done, max_iter, eps, tol, false, &slow_log);
             double slow_seconds = (double) cycles_count_stop().time;
@@ -326,7 +324,7 @@ void benchmark_iwata(DT eps, DT tol)
             //Initial condition    
             Vector<DT> wA(n);
             wA.fill_rand();
-            bool done = false;
+            bool done;
             
             //Time problem
             MinNormPoint<DT> mnp;
@@ -385,60 +383,12 @@ void benchmark_iwata(DT eps, DT tol)
     }
 }
 
-int main() 
-{
-    run_validation_suite();
 
-    benchmark_mincut<double>(1e-10, 1e-10);
-    exit(1);
-    benchmark_logdet<double>(1e-10, 1e-10);
-    benchmark_iwata<double>(1e-10, 1e-10);
-/*
-    benchmark_mincut<float>(1e-5, 1e-5);
-    benchmark_iwata<float>(1e-5, 1e-5);
-    benchmark_logdet<float>(1e-5, 1e-5);
-*/
-    run_benchmark_suite();
-    //benchmark_mnp_vs_brsmnp();
-
-
-
-//    BRSMinNormPoint<double> brsmnp(8);
-//    MinCut<double> max_flow_problem(10);
-//    max_flow_problem.WattsStrogatz(16, 0.25);
-//    brsmnp.minimize(max_flow_problem, 1e-10, 1e-10, true, NULL); 
-
-
-/*
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Running some examples" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    MinNormPoint<double> mnp;
-    std::cout << "Log Det problem\n";
-    LogDet<double> logdet_problem(100);
-    mnp.minimize(logdet_problem, 1e-10, 1e-10, true, NULL);
-
-    std::cout << "Min cut problem\n";
-    MinCut<double> max_flow_problem(1000, 15, 0.5, 0.05);
-    mnp.minimize(max_flow_problem, 1e-10, 1e-10, true, NULL);
-
-    std::cout << "Cardinality problem\n";
-    IDivSqrtSize<double> F(500);
-    mnp.minimize(F, 1e-10, 1e-10, true, NULL); 
-*/
-
-
-
-
-}
-
-#if 0
 void benchmark_mnp_vs_brsmnp()
 {
-    int64_t start = 4;
-    int64_t end = 64;
-    int64_t inc = 4;
+    int64_t start = 100;
+    int64_t end = 10000;
+    int64_t inc = 100;
     int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
@@ -450,8 +400,6 @@ void benchmark_mnp_vs_brsmnp()
     std::cout << std::setw(fw) << "b"; 
     std::cout << std::setw(2*fw) <<  "mean_s_mnp";
     std::cout << std::setw(2*fw) <<  "mean_s_brsmnp";
-    //std::cout << std::setw(2*fw) <<  "med_s_mnp";
-    //std::cout << std::setw(2*fw) <<  "med_s_brsmnp";
     std::cout << std::setw(2*fw) <<  "major_mnp";
     std::cout << std::setw(2*fw) <<  "major_brsmnp";
     std::cout << std::setw(2*fw) <<  "minor_mnp";
@@ -459,23 +407,15 @@ void benchmark_mnp_vs_brsmnp()
     std::cout << std::setw(2*fw) <<  "F A_mnp";
     std::cout << std::setw(2*fw) <<  "F A_brs_mnp";
 
-//    std::cout << std::setw(2*fw) <<  "BLAS_s_mnp %";
-//    std::cout << std::setw(2*fw) <<  "BLAS_s_brsmnp %";
     std::cout << std::endl;
 
+    int64_t max_iter = 1e5;
+    double tolerance = 1e-10;
+    double eps = 1e-5;
+
     for(int64_t i = start; i <= end; i += inc) {
-        int64_t n = 100;
-        int64_t b = i;
-
-        std::vector<double> cpu_cycles_mnp;
-        std::vector<double> major_cycles_mnp;
-        std::vector<double> minor_cycles_mnp;
-        std::vector<double> blas_s_mnp;
-
-        std::vector<double> cpu_cycles_brsmnp;
-        std::vector<double> major_cycles_brsmnp;
-        std::vector<double> minor_cycles_brsmnp;
-        std::vector<double> blas_s_brsmnp;
+        int64_t n = i;
+        int64_t b = 512;
 
         for(int64_t r = 0; r < n_reps; r++) {
             PerfLog mnp_log;
@@ -484,28 +424,27 @@ void benchmark_mnp_vs_brsmnp()
             //Initialize min norm point problem
             MinCut<double> problem(n);
             problem.WattsStrogatz(16, 0.25);
-            //problem.Geometric(0.05);
+            
+            //Initial Condidion
+            Vector<double> wA(n);
+            wA.fill_rand();
+            bool done;
             
             //Time problem
             MinNormPoint<double> mnp;
             cycles_count_start();
-            auto A_mnp = mnp.minimize(problem, 1e-10, 1e-5, false, &mnp_log);
+
+            auto A_mnp = mnp.minimize(problem, wA, &done, max_iter, eps, tolerance, false, &mnp_log);
             double cycles = (double) cycles_count_stop().cycles;
             double mnp_time = cycles_count_stop().time;
-            cpu_cycles_mnp.push_back(cycles_count_stop().time);
-//            major_cycles_mnp.push_back(mnp_log.get_count("MAJOR TIME"));
-//            minor_cycles_mnp.push_back(mnp_log.get_count("MINOR TIME"));
             double FA_mnp = problem.eval(A_mnp);
 
             //Time problem
             BRSMinNormPoint<double> brsmnp(b);
             cycles_count_start();
-            auto A_brsmnp = brsmnp.minimize(problem, 1e-10, 1e-5, false, &brsmnp_log);
+            auto A_brsmnp = brsmnp.minimize(problem, wA, &done, max_iter, eps, tolerance, false, &brsmnp_log);
             cycles = (double) cycles_count_stop().cycles;
-            cpu_cycles_mnp.push_back(cycles_count_stop().time);
             double brsmnp_time = cycles_count_stop().time;
-//            major_cycles_brsmnp.push_back(brsmnp_log.get_count("MAJOR TIME"));
-//            minor_cycles_brsmnp.push_back(brsmnp_log.get_count("MINOR TIME"));
             double FA_brsmnp = problem.eval(A_brsmnp);
 
             std::cout << std::setw(fw) << n;
@@ -520,21 +459,22 @@ void benchmark_mnp_vs_brsmnp()
             std::cout << std::setw(2*fw) << FA_brsmnp;
             std::cout << std::endl;
         }
-/*
-        std::cout << std::setw(fw) << n;
-        std::cout << std::setw(2*fw) << mean(cpu_cycles);
-        std::cout << std::setw(2*fw) << median(cpu_cycles);
-        std::cout << std::setw(2*fw) << mean(major_cycles);
-        std::cout << std::setw(2*fw) << mean(minor_cycles);
-        std::cout << std::setw(2*fw) << 100 * mean(mvm_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(trsv_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(remove_cols_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(eval_f_percent);
-        std::cout << std::setw(2*fw) << 100 * mean(greedy_percent);
-        std::cout << std::setw(2*fw) << 3.6e3 * mean(mvm_bw);
-        std::cout << std::setw(2*fw) << 3.6e3 * mean(trsv_bw);
-        std::cout << std::setw(2*fw) << 3.6e3 * mean(remove_cols_bw);
-        std::cout << std::endl;*/
     }
 }
-#endif
+
+int main() 
+{
+    run_validation_suite();
+
+//    benchmark_mincut<double>(1e-10, 1e-10);
+    benchmark_mnp_vs_brsmnp();
+    exit(1);
+    benchmark_logdet<double>(1e-10, 1e-10);
+    benchmark_iwata<double>(1e-10, 1e-10);
+/*
+    benchmark_mincut<float>(1e-5, 1e-5);
+    benchmark_iwata<float>(1e-5, 1e-5);
+    benchmark_logdet<float>(1e-5, 1e-5);
+*/
+    run_benchmark_suite();
+}

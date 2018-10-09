@@ -55,18 +55,33 @@ template<class DT>
 class Minimizer
 {
 public:
-    virtual std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* perf_log) = 0;
+    virtual std::vector<bool> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* perf_log)  = 0;
     std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
     {
-        return this->minimize(F, eps, tolerance, print, NULL);
+        bool done = false;
+        bool print = print_in;
+        Vector<DT> wA(F.n);
+        wA.fill_rand();
+
+        return this->minimize(F, wA, &done, 1000000, eps, tolerance, print, NULL);
     }
     std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance) 
     {
-        return this->minimize(F, eps, tolerance, false, NULL);
+        bool done = false;
+        bool print = print_in;
+        Vector<DT> wA(F.n);
+        wA.fill_rand();
+
+        return this->minimize(F, wA, &done, 1000000, eps, tolerance, false, NULL);
     }
     std::vector<bool> minimize(SubmodularFunction<DT>& F) 
     {
-        return this->minimize(F, 1e-10, 1e-10, false, NULL);
+        bool done = false;
+        bool print = print_in;
+        Vector<DT> wA(F.n);
+        wA.fill_rand();
+
+        return this->minimize(F, wA, &done, 1000000, 1e-10, 1e-10, false, NULL);
     }
 };
 
@@ -225,9 +240,11 @@ public:
         int64_t eval_F_freq = 10;
         int64_t cycles_since_last_F_eval = eval_F_freq;
         int64_t m = F.n;
+        *done = false;
 
         //To return
         std::vector<bool> A(m);
+        DT F_best = std::numeric_limits<DT>::max();
 
         //Characteristic vector
         std::random_device rd;
@@ -269,7 +286,6 @@ public:
         (*x_hat).copy(first_col_s);
         (*R)(0,0) = first_col_s.norm2();
 
-        DT F_best = std::numeric_limits<DT>::max();
 
         if(perf_log) perf_log->add_histogram("NUM COLUMNS", 0, m, 50);
         if(perf_log) perf_log->add_histogram("COLUMNS REMOVED", 0, m/4, 50);
@@ -287,13 +303,14 @@ public:
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.perf_log = perf_log;
-            double F_curr = F.polyhedron_greedy_eval(-1.0, *x_hat, p_hat, perf_log);
+            DT F_curr = F.polyhedron_greedy_eval(-1.0, *x_hat, p_hat, perf_log);
 
             if (F_curr < F_best) {
                 F_best = F_curr;
-                std::fill(A.begin(), A.end(), 0);
+//                std::fill(A.begin(), A.end(), 0);
                 for(int64_t i = 0; i < x_hat->length(); i++)
-                    if((*x_hat)(i) <= 0.0) A[i] = 1;
+                    A[i] = (*x_hat)(i) <= 0.0;
+                   // if((*x_hat)(i) <= 0.0) A[i] = 1;
             }
             
             // Update R to account for modifying S.
@@ -348,7 +365,7 @@ public:
                 if((*x_hat)(i) <= 0.0)
                     sum_x_hat_lt_0 += (*x_hat)(i);
             }
-            DT subopt = F_best - sum_x_hat_lt_0;
+//            DT subopt = F_best - sum_x_hat_lt_0;
             if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - misc_start);
 
 //            if(print || major_cycles % 100 == 0) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
@@ -360,7 +377,7 @@ public:
 //            if (std::abs(xt_p - xt_x) < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
             if( xt_x - xt_p  < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
                 // We are done: x_hat is already closest norm point
-                if (std::abs(xt_p - xt_x) < tolerance) subopt = 0.0;
+//                if (std::abs(xt_p - xt_x) < tolerance) subopt = 0.0;
                 break;
             } else if (std::abs(xt_p + xt_x) < tolerance) {
                 std::cout << "Setting x hat to zero" << std::endl;
@@ -405,7 +422,7 @@ public:
     }
 };
 
-#if 0
+//Blocked Randomized S? I can't remember what BRS was supposed to stand for
 template<class DT>
 class BRSMinNormPoint : Minimizer<DT>
 {
@@ -423,11 +440,11 @@ public:
         }
     }
 
-    void speculate(SubmodularFunction<DT>& F, Matrix<DT>& P_hat, Vector<DT>& x_hat, DT alpha, PerfLog* log)
+    DT speculate(SubmodularFunction<DT>& F, Matrix<DT>& P_hat, Vector<DT>& x_hat, DT alpha, PerfLog* perf_log)
     {
         //Determine first col of P_hat with Edmonds greedy
         auto p_hat_0 = P_hat.subcol(0);
-        F.polyhedron_greedy(alpha, x_hat, p_hat_0, perf_log);
+        DT F_curr = F.polyhedron_greedy_eval(alpha, x_hat, p_hat_0, perf_log);
 
         //Add more columns to P. We want each of them to be extreme points
         //x in B(f) is an extreme point in B(f) iff for some maximal chain 0 = S0 subset of S1 subset of ... subset of Sn = V
@@ -440,6 +457,8 @@ public:
             F.marginal_gains(F.permutation, p_hat_j);
         }
         if(perf_log) perf_log->log_total("SPECULATION TIME", rdtsc() - start_spec);
+
+        return F_curr;
     }
 
     //At the end, y is equal to the new value of x_hat
@@ -451,7 +470,7 @@ public:
             Matrix<DT>& S, Matrix<DT>* R_in, Matrix<DT>* R_next_in, DT tolerance,
             Matrix<DT>& T, Matrix<DT>& H, int64_t nb,
             Matrix<DT>& QR_ws,
-            PerfLog* log)
+            PerfLog* perf_log)
     {
 
         Matrix<DT>* R = R_in;
@@ -510,22 +529,20 @@ public:
 
         //Take the best column of Y that is written as a positive convex combination of S
         int64_t best = -1;
-//        DT best_val = -1.0;
-        DT best_val = std::numeric_limits<DT>::max();
+        DT best_norm = std::numeric_limits<DT>::max();
         for(int64_t j = 0; j < b; j++) {
             auto w = W.subcol(j);
             if((j==0 && w.min() >= -tolerance) || w.min() > 1e-10) {
                 auto yj = Y.subcol(j);
                 DT y_norm = yj.norm2();
-                if(y_norm < best_val) {
-//                if(w.min() > best_min) {
+                if(y_norm < best_norm) {
                     best = j;
-                    best_val = y_norm;
+                    best_norm = y_norm;
                 }
             }
         }
         if(best > -1) {
-            //We're going to take it, and throw away the rest.
+            //We're going to take the best value, and throw away the rest.
             toRemove.clear(); 
             auto y_best = Y.subcol(best);
             for(int64_t j = 0; j < b; j++) {
@@ -538,23 +555,19 @@ public:
             assert(R->height() == R->width());
 
             //Doublecheck that STS q = RTR q
-            DT error = check_STS_eq_RTR(S, *R); 
-            if(error > 1e-10) {
-                std::cout << "In xhat update: ||STS q - RTR q|| " << error << std::endl;
-                exit(1);
-            }
+//            DT error = check_STS_eq_RTR(S, *R); 
+//            if(error > 1e-10) {
+//                std::cout << "In xhat update: ||STS q - RTR q|| " << error << std::endl;
+//                exit(1);
+//            }
 
             y.copy(y_best);
-/*            std::cout << "Xhat update A" << std::endl;
-            std::cout << "xt_x " << x_hat.dot(x_hat) << std::endl;
-            std::cout << "yt_y " << y.dot(y) << std::endl;*/
-//            assert(y.dot(y) < x_hat.dot(x_hat));
-//            std::cout << std::endl;
         } else {
             // 
             //Step 4. 
-            //x_hat isn't in the convex hull of S plus any of the candidates 
-            //In this case, we choose the 0th candidate.
+            //None of the candidates are in the convex hull of S
+            //Right now, we choose the 0th candidate.
+            //TODO: Change this. We should choose the candidate that yields the minimum norm z
             //
             S.enlarge_n(-b+1);
             R->enlarge_n(-b+1);
@@ -582,24 +595,23 @@ public:
                 lambda.scale(1.0 / lambda.sum());
                
                 DT error = check_STS_eq_RTR(S, *R);
-//                std::cout << "STS RTR checksum is " << error << std::endl;
-                //assert(error < 1e-10);
 
                 int64_t z_start = rdtsc();
                 // Find z in conv(S) that is closest to y
                 //TODO: is this beta right
                 DT beta = 1.0;
                 for(int64_t i = 0; i < lambda.length(); i++) {
-                    DT bound = lambda(i) / (lambda(i) - w(i)); 
+                    DT bound = 1.0;
+                    if(w(i) < tolerance) {
+                        bound = lambda(i) / (lambda(i) - w(i));
+                    }
                     if( bound > tolerance && bound < beta) {
                         beta = bound;
                     }
                 }
                 if(perf_log) perf_log->log_total("MISC TIME", rdtsc() - z_start);
-/*                std::cout << x_hat.dot(x_hat) << std::endl;
-                std::cout << "beta is " << beta << std::endl;*/
+
                 x_hat.axpby(beta, y, (1-beta));
-//                std::cout << x_hat.dot(x_hat) << std::endl;
 
                 int64_t remove_start = rdtsc();
                 toRemove.clear();
@@ -628,44 +640,29 @@ public:
                 
                 x_hat_in_conv_S = w.min() >= -tolerance;
             }
-
-/*            std::cout << "Xhat update B" << std::endl;
-            std::cout << "xt_x " << x_hat.dot(x_hat) << std::endl;
-            std::cout << "yt_y " << y.dot(y) << std::endl;
-            assert(y.dot(y) < x_hat.dot(x_hat));
-            std::cout << std::endl;*/
         }
 
         if(perf_log) perf_log->log_total("MINOR TIME", rdtsc() - minor_start);
         return to_ret;
     }
 
-    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* log) 
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* perf_log)
     {
-        std::unordered_set<int64_t> V = F.get_set();
-
         int64_t eval_F_freq = 10;
         int64_t cycles_since_last_F_eval = eval_F_freq;
-        int64_t m = V.size();
+        int64_t m = F.n;
+        *done = false;
+
+        //To return
+        std::vector<bool> A(m);
+        DT F_best = std::numeric_limits<DT>::max();
 
         //Step 1: Initialize by picking a point in the polytiope.
-        std::unordered_set<int64_t> A;
-        A.reserve(m);
 
         //Characteristic vector
         std::random_device rd;
         std::mt19937 gen{rd()};
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-
-        Vector<DT> wA(m);
-        wA.set_all(0.0);
-        /*for(int64_t i = 0; i < m; i++) {
-            if(dist(gen) > .5) {
-                wA(i) = 1.0;
-            } else {
-                wA(i) = 0.0;
-            }
-        }*/
 
         //Workspace for X_hat and next X_hat
         Vector<DT> xh1(m); xh1.perf_log = perf_log;
@@ -701,32 +698,31 @@ public:
         (*x_hat).copy(first_col_s);
         (*R)(0,0) = first_col_s.norm2();
 
-        //Initialize A_best and F_best
-        std::unordered_set<int64_t> A_best;
-        A_best.reserve(m);
-        DT F_best = std::numeric_limits<DT>::max();
-        std::unordered_set<int64_t> A_curr;
-        A_curr.reserve(m);
         
         //Step 2:
-        int64_t max_iter = 1e6;
         int64_t major_cycles = 0;
         while(major_cycles++ < max_iter) {
             int64_t major_start = rdtsc();
 
             //Snap to zero
-            //TODO: Krause's code uses xhat->norm2() < 0,
             DT x_hat_norm2 = x_hat->norm2();
             if(x_hat_norm2*x_hat_norm2 < tolerance) {
                 (*x_hat).set_all(0.0);
             }
 
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
+            // Get the rest of the vectors in P_hat by executing the Edmonds greedy algorithm
+            // with a random ordering of marginal gains
             auto P_hat = S_base.submatrix(0, S.width(), S.height(), b); P_hat.perf_log = perf_log;
-            speculate(F, P_hat, *x_hat, -1.0, log);
+            DT F_curr = speculate(F, P_hat, *x_hat, -1.0, perf_log);
             auto p_hat_0 = P_hat.subcol(0);
             int64_t b_added = P_hat.width();
 
+            if (F_curr < F_best) {
+                F_best = F_curr;
+                for(int64_t i = 0; i < x_hat->length(); i++)
+                    A[i] = (*x_hat)(i) <= 0.0;
+            }
 
             // Update R to account for modifying S.
             // Let [R0 r1 0]' be the vectors to add to R
@@ -758,57 +754,13 @@ public:
                 DT rho = sqrt(std::abs(p_j_norm2*p_j_norm2 - r0_j_norm2*r0_j_norm2));
                 r1(j) = rho;
             }
-            //
-            //
-/*
-            //Old math that tried to enforce R'R = S'S
-            auto P_hatT = P_hat.transposed();
-            auto R0T = R0.transposed();
-            R1.syrk(CblasUpper,  1.0, P_hatT, 0.0);
-            R1.syrk(CblasUpper, -1.0, R0T, 1.0);
-            R1.chol('U');
-*/
+            
             S.enlarge_n(b_added);
             R->enlarge_n(b_added);
             R->enlarge_m(1);
 
             //Doublecheck that STS y = RTR y
             DT error = check_STS_eq_RTR(S, *R);
-
-//            std::cout << "||STS y - RTR y|| " << error << std::endl;
-/*            if(error > 1e-5) {
-                //Sometimes this will happen because I choose columns of P randomly.
-                std::cout << "R" << std::endl;
-                R->print();
-                std::cout << std::endl;
-                exit(1);
-            }*/
-           
-            // Check current function value
-            A_curr.clear();
-            bool compute_f_cur = false;
-            for(int64_t i = 0; i < x_hat->length(); i++) {
-                if((*x_hat)(i) < tolerance) {
-                    A_curr.insert(i);
-                    if(A_best.count(i) == 0) 
-                        compute_f_cur = true;
-                }
-            }
-            compute_f_cur = compute_f_cur || A_curr.size() != A_best.size();
-            
-            if(compute_f_cur) {
-                int64_t eval_start = rdtsc();
-                auto F_curr = F.eval(A_curr);
-                if(perf_log) { perf_log->log_total("EVAL F TIME", rdtsc() - eval_start); }
-
-                int64_t misc_start = rdtsc();
-                if (F_curr < F_best) {
-                    // Save best F and get the unique minimal minimizer
-                    F_best = F_curr;
-                    A_best = A_curr;
-                }
-                if(perf_log) { perf_log->log_total("MISC TIME", rdtsc() - misc_start); }
-            }
 
             // Get suboptimality bound
             int64_t misc_start = rdtsc();
@@ -817,40 +769,27 @@ public:
                 if((*x_hat)(i) < tolerance)
                     sum_x_hat_lt_0 += (*x_hat)(i);
             }
-            DT subopt = F_best - sum_x_hat_lt_0;
+//            DT subopt = F_best - sum_x_hat_lt_0;
             if(perf_log) { perf_log->log_total("MISC TIME", rdtsc() - misc_start); }
 
-            if(print) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
+//            if(print) { std::cout << "Suboptimality bound: " << F_best-subopt << " <= min_A F(A) <= F(A_best) = " << F_best << "; delta <= " << subopt << std::endl; }
 
             DT xt_p = (*x_hat).dot(p_hat_0);
             DT xnrm2 = (*x_hat).norm2();
             DT xt_x = xnrm2 * xnrm2;
             if(print)
                 std::cout << "x'p " << xt_p << " x'x " << xt_x << std::endl;
-            if ((std::abs(xt_p - xt_x) < tolerance) || (subopt<eps)) {
-/*                std::cout << "Stopping because ";
-                if(subopt < eps) std::cout << " subopt " << subopt << " is less than eps " << std::endl;
-                else {
-                    std::cout << " xt_p - xt_x " << xt_p - xt_x << " is less than tolerance " << std::endl;
-                    std::cout << "||x|| " << x_hat->norm2() << " ||p|| " << p_hat_0.norm2() << std::endl;
-                    std::cout << "xt_p " << x_hat->dot(p_hat_0) << " xt_x " << x_hat->dot(*x_hat) << std::endl;
-
-                }*/
+            if ((xt_x - xt_p < tolerance) || std::abs(F_best - sum_x_hat_lt_0) < eps ) {
                 // We are done: x_hat is already closest norm point
-                if (std::abs(xt_p - xt_x) < tolerance) {
-                    subopt = 0.0;
-                }
+//                if (std::abs(xt_p - xt_x) < tolerance) {
+//                    subopt = 0.0;
+//                }
 
                 break;
             } else if (std::abs(xt_p + xt_x) < tolerance) {
                 //We had to go through 0 to get to p_hat from x_hat.
                 x_hat_next->set_all(0.0);
             } else {
-/*                bool switch_R = min_norm_point_update_xhat(*x_hat, *x_hat_next,
-                        mu_ws, lambda_ws,
-                        S, R, R_next, tolerance,
-                        T, H, nb, QR_ws,
-                        log);*/
                 bool switch_R = min_norm_point_update_xhat(*x_hat, *x_hat_next, Y_ws, b_added,
                         Mu_ws, Lambda_ws,
                         S, R, R_next, tolerance,
@@ -864,23 +803,21 @@ public:
             }
             if(x_hat_next->has_nan()) {std::cout << "X has a nan. exiting. "; exit(1); }
 
-            x_hat->axpy(-1.0, *x_hat_next);
-            if(x_hat->norm2() < eps) {
-                std::cout << "x_hat isn't changing" << std::endl;
-            }
+//            x_hat->axpy(-1.0, *x_hat_next);
+//            if(x_hat->norm2() < eps) {
+//                std::cout << "x_hat isn't changing" << std::endl;
+//            }
             std::swap(x_hat, x_hat_next);
 
             if(perf_log) perf_log->log_total("MAJOR TIME", rdtsc() - major_start);
         }
-        if(print) {
-            std::cout << "Done. |A| = " << A_curr.size() << " F_best = " << F.eval(A_curr) << std::endl;
-        }
 //        if(major_cycles > max_iter) {
 //            std::cout << "Timed out." << std::endl;
 //        }
+        if(major_cycles < max_iter) {
+            *done = true;
+        }
 
-//        return A_best;
-        return A_curr;
+        return A;
     }
 };
-#endif
