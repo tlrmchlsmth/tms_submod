@@ -7,8 +7,8 @@
 #include <functional>
 #include <cmath>
 
-#include "vector.h"
-#include "matrix.h"
+#include "la/vector.h"
+#include "la/matrix.h"
 #include "perf_log.h"
 
 #include <omp.h>
@@ -181,6 +181,155 @@ public:
         Cov.mmm(1.0, UT, U, 0.0);
     }
 
+    std::vector<bool> greedy_maximize2() {
+        std::vector<bool> A(n);
+        auto U0 = LogDet<DT>::U.submatrix(0,0,0,0);
+        Matrix<DT> C_base(n,n);
+        auto C = C_base.submatrix(0,0,0,n);
+        Vector<DT> d_base(n);
+
+        std::list<int64_t> columns;
+        for(int64_t j = 0; j < n; j++) {
+            columns.push_back(j);
+        }
+
+        //Add one element at a time
+        for(int64_t i = 0; i < n; i++) {
+            assert(U0.height() == i);
+            assert(U0.height() == C.height());
+            assert(C.width() == n-i);
+            
+            auto d = d_base.subvector(0, n-i);
+            d.set_all(0.0);
+            if(i > 0) {
+                auto U1 = U.submatrix(0, i, U0.height(), C.width());
+                U1.copy(C);
+                U0.transpose(); U0.trsm(CblasLower, CblasLeft, U1); U0.transpose();
+                for(int64_t j = 0; j < U1.width(); j++) {
+                    auto uj = U1.subcol(j);
+                    d(j) = uj.dot(uj);
+                }
+            }
+            int64_t j;
+            std::list<int64_t>::iterator cov_j;
+
+            //for(int64_t j = 0; j < d.length(); j++) {
+            for(j = 0, cov_j = columns.begin(); j < d.length(); j++, cov_j++) {
+                d(j) = sqrt(std::abs(Cov(*cov_j, *cov_j) - d(j)));
+            }
+            
+//            int64_t best_j = d.index_of_max();
+            int64_t best_j = 0; auto best_cov_j = columns.begin();
+            for(j = 0, cov_j = columns.begin(); j < d.length(); j++, cov_j++) {
+                if(d(j) > d(best_j)) {
+                    best_j = j;
+                    best_cov_j = cov_j;
+                }
+            }
+            if(d(best_j) > 1.0) {
+                A[*best_cov_j] = true;
+            } else {
+                break;
+            }
+
+            //Copy best column of U to where it belongs
+//            if(best_j != i+1 && i > 0) {
+            if(best_j != 0 && i > 0) {
+                auto U1 = U.submatrix(0, i, U0.height(), C.width());
+                auto to   = U1.subcol(0);
+                auto from = U1.subcol(best_j);
+                to.copy(from);
+            }
+
+            //Enlarge U, remove row,col from C
+            U0.enlarge_m(1); U0.enlarge_n(1);
+            C.enlarge_m(1);
+            assert(U0.height() == C.height());
+
+            U0(i,i) = d(best_j);
+            C.remove_col(best_j);
+            columns.erase(best_cov_j);
+            for(j = 0, cov_j = columns.begin(); j < C.width(); j++, cov_j++) {
+                C(i,j) = Cov(*best_cov_j, *cov_j);
+            }
+        }
+
+        return A;
+    }
+
+    std::vector<bool> greedy_maximize1() {
+        std::vector<bool> A(n);
+        for(int64_t i = 0; i < n; i++) {
+            A[i] = false;
+        }
+        auto U0 = LogDet<DT>::U.submatrix(0,0,0,0);
+        Matrix<DT> C_base(n,n);
+        Matrix<DT> C = C_base.submatrix(0,0,0,n);
+
+        std::list<int64_t> columns;
+        for(int64_t j = 0; j < n; j++) {
+            columns.push_back(j);
+        }
+
+        //Add one element at a time
+        for(int64_t i = 0; i < n; i++) {
+            assert(U0.height() == i);
+            assert(U0.height() == C.height());
+
+            int64_t best_j = 0; auto best_cov_j = columns.begin();
+            DT best_mu = std::numeric_limits<DT>::min();
+            int64_t j;
+            std::list<int64_t>::iterator cov_j;
+
+            for(j = 0, cov_j = columns.begin(); j < C.width(); j++, cov_j++) {
+                DT u1_nrm_sqr = 0.0;
+                if(U0.height() > 0) { 
+                    auto u1 = U.subcol(0, i+j, U0.height());
+                    auto c1 = C.subcol(0, j, U0.height());
+                    u1.copy(c1);
+                    U0.transpose(); U0.trsv(CblasLower, u1); U0.transpose();
+                    u1_nrm_sqr = u1.dot(u1);
+                }
+                DT mu = sqrt(std::abs(Cov(*cov_j,*cov_j) - u1_nrm_sqr));
+                
+                if(mu > best_mu) {
+                    best_mu = mu;
+                    best_j = j;
+                    best_cov_j = cov_j;
+                }
+            }
+            
+            if(best_mu > 1.0) {
+                A[*best_cov_j] = true;
+            } else {
+                break;
+            }
+
+            //Copy best column of U to where it belongs
+            if(best_j != 0 && i > 0) {
+                auto to   = U.subcol(0, i, U0.height());
+                auto from = U.subcol(0, i+best_j, U0.height());
+                to.copy(from);
+            }
+
+            assert(U0.height() == C.height());
+            //Enlarge U, C, remove row,col from C
+            U0.enlarge_m(1); U0.enlarge_n(1);
+            C.enlarge_m(1);
+            assert(U0.height() == C.height());
+
+            U0(i,i) = best_mu;
+
+            C.remove_col(best_j);
+            columns.erase(best_cov_j);
+            for(j = 0, cov_j = columns.begin(); j < C.width(); j++, cov_j++) {
+                C(i,j) = Cov(*best_cov_j, *cov_j);
+            }
+        }
+
+        return A;
+    }
+
     DT eval(const std::vector<bool>& A) {
         int64_t cardinality = 0;
         for(auto a : A) { if(a) cardinality++; }
@@ -205,7 +354,6 @@ public:
 
         return log_det;
     }
-
 
     void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {

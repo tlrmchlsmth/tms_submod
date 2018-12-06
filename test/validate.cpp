@@ -3,9 +3,9 @@
 #include <list>
 #include <set>
 
-#include "../vector.h"
-#include "../matrix.h"
-#include "../minimizer.h"
+#include "../la/vector.h"
+#include "../la/matrix.h"
+#include "../minimizers/fujishige_wolfe.h"
 #include "../submodular.h"
 #include "../util.h"
 

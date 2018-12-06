@@ -4,8 +4,8 @@
 #include <set>
 #include <algorithm>
 
-#include "../vector.h"
-#include "../matrix.h"
+#include "../la/vector.h"
+#include "../la/matrix.h"
 #include "../perf/perf.h"
 #include "../util.h"
 #include "../submodular.h"
@@ -132,7 +132,7 @@ void benchmark_remove_cols()
 void benchmark_logdet_marginal_gains()
 {
     int64_t start = 128;
-    int64_t end = 4096;
+    int64_t end = 1024;
     int64_t inc = 128;
     int64_t n_reps = 10;
 
@@ -179,7 +179,7 @@ void benchmark_logdet_marginal_gains()
 void benchmark_mincut_marginal_gains()
 {
     int64_t start = 128;
-    int64_t end = 2*8192;
+    int64_t end = 4096;
     int64_t inc = 128;
     int64_t n_reps = 10;
 

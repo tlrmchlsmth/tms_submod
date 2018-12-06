@@ -5,17 +5,20 @@
 
 #include <random>
 #include "submodular.h"
-#include "minimizer.h"
+#include "minimizers/fujishige_wolfe.h"
+#include "minimizers/frank_wolfe.h"
+#include "minimizers/away_steps.h"
+
 #include "perf/perf.h"
 #include "test/validate.h"
 #include "test/bench.h"
 
-#include "vector.h"
-#include "matrix.h"
+#include "la/vector.h"
+#include "la/matrix.h"
 #include "util.h"
 
 //#define SLOW_GREEDY
-#define PRINT_HIST
+//#define PRINT_HIST
 
 template<class DT>
 void benchmark_logdet(DT eps, DT tol)
@@ -462,19 +465,147 @@ void benchmark_mnp_vs_brsmnp()
     }
 }
 
+
+template<class DT>
+void frank_wolfe_wolfe_mincut()
+{
+    int64_t start = 8;
+    int64_t end = 2048;
+    int64_t inc = 8;
+    int64_t n_reps = 10;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking min cut" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "|A|"; 
+    std::cout << std::setw(2*fw) << "MNP F(A)"; 
+    std::cout << std::setw(2*fw) << "FrankWolfe F(A)"; 
+    std::cout << std::setw(2*fw) << "AwaySteps F(A)"; 
+    std::cout << std::setw(2*fw) << "Wolfe";
+    std::cout << std::setw(2*fw) << "FrankWolfe";
+    std::cout << std::setw(2*fw) << "AwaySteps";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            int64_t max_iter = 1e6;
+            PerfLog log;
+
+            //Initialize min norm point problem
+            MinCut<DT> problem(n);
+            problem.WattsStrogatz(16, 0.25);
+
+            //MNP
+            MinNormPoint<DT> mnp;
+            cycles_count_start();
+            auto mnp_A = mnp.minimize(problem);
+            double mnp_fa = problem.eval(mnp_A);
+            double cycles = (double) cycles_count_stop().cycles;
+            double mnp_seconds = (double) cycles_count_stop().time;
+            
+            //Vanilla FW
+            cycles_count_start();
+            auto fw_A = FrankWolfe(problem, 1e-5);
+            double fw_seconds = (double) cycles_count_stop().time;
+            double fw_fa = problem.eval(fw_A);
+
+            //Away Steps FW
+            cycles_count_start();
+            auto as_A = AwaySteps(problem, 1e-5);
+            double as_seconds = (double) cycles_count_stop().time;
+            double as_fa = problem.eval(as_A);
+
+            int64_t cardinality = 0;
+            for(int i = 0; i < n; i++) {
+                if(mnp_A[i]) cardinality++;
+            }
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << cardinality;
+            std::cout << std::setw(2*fw) << mnp_fa;
+            std::cout << std::setw(2*fw) << fw_fa;
+            std::cout << std::setw(2*fw) << as_fa;
+            std::cout << std::setw(2*fw) << mnp_seconds;
+            std::cout << std::setw(2*fw) << fw_seconds;
+            std::cout << std::setw(2*fw) << as_seconds;
+            std::cout << std::endl;
+        }
+    }
+}
+
+template<class DT>
+void test_greedy_maximize()
+{
+    int64_t start = 8;
+    int64_t end = 2048;
+    int64_t inc = 8;
+    int64_t n_reps = 10;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking greedy maximization" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "|A1|"; 
+    std::cout << std::setw(fw) << "|A2|"; 
+    std::cout << std::setw(2*fw) << "maximize 1 F(A)"; 
+    std::cout << std::setw(2*fw) << "maximize 2 F(A)"; 
+    std::cout << std::setw(2*fw) << "maximize 1";
+    std::cout << std::setw(2*fw) << "maximize 2";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            LogDet<DT> problem(n);
+
+            //unfused
+            cycles_count_start();
+            auto A1 = problem.greedy_maximize1();
+            double seconds1 = (double) cycles_count_stop().time;
+            double fA1 = problem.eval(A1);
+            
+            //fused
+            cycles_count_start();
+            auto A2 = problem.greedy_maximize2();
+            double seconds2 = (double) cycles_count_stop().time;
+            double fA2 = problem.eval(A2);
+
+            int64_t cardinality = 0;
+            int64_t cardinality2 = 0;
+            for(int i = 0; i < n; i++) {
+                if(A1[i]) cardinality++;
+                if(A2[i]) cardinality2++;
+            }
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << cardinality;
+            std::cout << std::setw(fw) << cardinality2;
+            std::cout << std::setw(2*fw) << fA1;
+            std::cout << std::setw(2*fw) << fA2;
+            std::cout << std::setw(2*fw) << seconds1;
+            std::cout << std::setw(2*fw) << seconds2;
+            std::cout << std::endl;
+            if(std::abs(fA1 - fA2) > 1e-10)
+                exit(1);
+        }
+    }
+}
+
 int main() 
 {
-    run_validation_suite();
+    frank_wolfe_wolfe_mincut<double>();
+    test_greedy_maximize<double>();
+    //run_validation_suite();
+    //run_benchmark_suite();
 
-//    benchmark_mincut<double>(1e-10, 1e-10);
-    benchmark_mnp_vs_brsmnp();
-    exit(1);
+    benchmark_mincut<double>(1e-10, 1e-10);
     benchmark_logdet<double>(1e-10, 1e-10);
     benchmark_iwata<double>(1e-10, 1e-10);
-/*
-    benchmark_mincut<float>(1e-5, 1e-5);
-    benchmark_iwata<float>(1e-5, 1e-5);
-    benchmark_logdet<float>(1e-5, 1e-5);
-*/
-    run_benchmark_suite();
+
 }

@@ -3,8 +3,8 @@
 
 #include <assert.h>
 #include "mkl.h"
-#include "perf_log.h"
-#include "perf/perf.h"
+#include "../perf_log.h"
+#include "../perf/perf.h"
 
 template<class DT> class Matrix;
 
@@ -100,7 +100,7 @@ public:
     void fill_rand() {
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::normal_distribution<> normal(0.0, 1.0);
+        std::normal_distribution<> normal(-1.0, 1.0);
         this->fill_rand(gen, normal);
     }
 
@@ -139,32 +139,37 @@ public:
     }
     DT min() const
     {
-        int64_t start = rdtsc();
-
-        DT min = _values[0*_stride];
-        for(int i = 1; i < _len; i++)
-            min = std::min(min, _values[i*_stride]);
-
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-            perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
-        }
-
-        return min;
+        return _values[index_of_min()*_stride];
     }
     DT max() const
     {
-        int64_t start = rdtsc();
-
+        return _values[index_of_max()*_stride];
+    }
+    int64_t index_of_max() const
+    {
+        int64_t index = 0;
         DT max = _values[0*_stride];
-        for(int i = 1; i < _len; i++)
-            max = std::max(max, _values[i*_stride]);
-
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-            perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
+        for(int i = 1; i < _len; i++) {
+            if(_values[i*_stride] > max) {
+                max = _values[i*_stride];
+                index = i;
+            }
         }
-        return max;
+
+        return index;
+    }
+    int64_t index_of_min() const
+    {
+        int64_t index = 0;
+        DT min = _values[0*_stride];
+        for(int i = 1; i < _len; i++) {
+            if(_values[i*_stride] < min) {
+                min = _values[i*_stride];
+                index = i;
+            }
+        }
+
+        return index;
     }
 
     bool has_nan() const

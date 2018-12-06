@@ -1,19 +1,16 @@
 #ifndef TMS_SUBMOD_MATRIX_H
 #define TMS_SUBMOD_MATRIX_H
-
 #include <random>
 #include <list>
 
 #include "mkl.h"
 #include <assert.h>
 #include <iomanip>
-#include "perf/perf.h"
-#include "perf_log.h"
-#include "util.h"
+#include "../perf/perf.h"
+#include "../perf_log.h"
+#include "../util.h"
 
 template<class DT> class Vector;
-
-enum Tag {gen, symm_l, symm_u, tri_l, tri_u};
 
 template<class DT>
 class Matrix {
@@ -30,9 +27,6 @@ public:
     int64_t _base_n;
     bool _mem_manage;
 
-    Tag _tag;
-
-
     PerfLog* perf_log;
 
 //public:
@@ -40,7 +34,7 @@ public:
     //
     // Constructors
     //
-    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), _tag(gen), perf_log(NULL)
+    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), perf_log(NULL)
     {
         //TODO: Pad so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
@@ -51,8 +45,8 @@ public:
         }
     }
 
-    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, Tag tag, bool mem_manage, PerfLog* perf_log) :
-        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _tag(tag), _mem_manage(mem_manage), perf_log(perf_log)
+    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, bool mem_manage, PerfLog* perf_log) :
+        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage), perf_log(perf_log)
     {
     }
     ~Matrix()
@@ -103,11 +97,8 @@ public:
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
-        Tag subtag = gen;
-        if(row == col && mc == nc)
-            subtag = _tag;
 
-        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _base_m, _base_n, subtag, false, perf_log);
+        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _base_m, _base_n, false, perf_log);
     }
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
@@ -137,10 +128,7 @@ public:
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
-        Tag subtag = gen;
-        if(row == col && mc == nc)
-            subtag = _tag;
-        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, subtag, false, perf_log);
+        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, false, perf_log);
     }
     inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
@@ -201,6 +189,7 @@ public:
     }
 
     void set_subdiagonal(DT alpha) {
+        #pragma omp parallel for
         for(int64_t i = 0; i < _m; i++) {
             for(int64_t j = 0; j < i && j < _n; j++) {
                 (*this)(i,j) = alpha;
@@ -278,13 +267,11 @@ public:
 
     Matrix<DT> transposed()
     {
-        Tag ttag = gen;
-        if(_tag == symm_l) { ttag = symm_u; }
-        else if(_tag == symm_u) { ttag = symm_l; }
-        else if(_tag == tri_l) { ttag = tri_u; }
-        else if(_tag == tri_u) { ttag = tri_l; }
-
-        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, ttag, false, perf_log);
+        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false, perf_log);
+    }
+    const Matrix<DT> transposed() const
+    {
+        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false, perf_log);
     }
 
     void print(std::string name) const
@@ -416,6 +403,11 @@ public:
         }
     }
 
+    void remove_col(int64_t col) {
+        std::list<int64_t> tmp;
+        tmp.push_back(col);
+        remove_cols(tmp);
+    }
     void remove_cols(const std::list<int64_t>& cols_to_remove)
     {
         int64_t start, end;

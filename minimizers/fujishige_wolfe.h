@@ -1,8 +1,8 @@
-#include "matrix.h"
-#include "vector.h"
-#include "submodular.h"
-#include "perf_log.h"
-#include "perf/perf.h"
+#include "../la/matrix.h"
+#include "../la/vector.h"
+#include "../submodular.h"
+#include "../perf_log.h"
+#include "../perf/perf.h"
 
 //R is upper triangular
 template<class DT>
@@ -52,41 +52,7 @@ DT check_S_eq_RTR(Matrix<DT>& S, Matrix<DT>& R)
 }
 
 template<class DT>
-class Minimizer
-{
-public:
-    virtual std::vector<bool> minimize(SubmodularFunction<DT>& F, Vector<DT>& wA, bool* done, int64_t max_iter, DT eps, DT tolerance, bool print, PerfLog* perf_log)  = 0;
-    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
-    {
-        bool done = false;
-        bool print = print_in;
-        Vector<DT> wA(F.n);
-        wA.fill_rand();
-
-        return this->minimize(F, wA, &done, 1000000, eps, tolerance, print, NULL);
-    }
-    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance) 
-    {
-        bool done = false;
-        bool print = print_in;
-        Vector<DT> wA(F.n);
-        wA.fill_rand();
-
-        return this->minimize(F, wA, &done, 1000000, eps, tolerance, false, NULL);
-    }
-    std::vector<bool> minimize(SubmodularFunction<DT>& F) 
-    {
-        bool done = false;
-        bool print = print_in;
-        Vector<DT> wA(F.n);
-        wA.fill_rand();
-
-        return this->minimize(F, wA, &done, 1000000, 1e-10, 1e-10, false, NULL);
-    }
-};
-
-template<class DT>
-class MinNormPoint : Minimizer<DT>
+class MinNormPoint
 {
 public:
     MinNormPoint() {}
@@ -225,11 +191,36 @@ public:
         }
         return to_ret;
     }
-    
-    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print_in, PerfLog* perf_log)
+
+    std::vector<bool> minimize(SubmodularFunction<DT>& F) 
     {
         bool done = false;
-        bool print = print_in;
+        Vector<DT> wA(F.n);
+        wA.fill_rand();
+
+        return this->minimize(F, wA, &done, 1000000, 1e-10, 1e-10, false, NULL);
+    }
+
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print) 
+    {
+        bool done = false;
+        Vector<DT> wA(F.n);
+        wA.fill_rand();
+
+        return this->minimize(F, wA, &done, 1000000, eps, tolerance, print, NULL);
+    }
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance) 
+    {
+        bool done = false;
+        Vector<DT> wA(F.n);
+        wA.fill_rand();
+
+        return this->minimize(F, wA, &done, 1000000, eps, tolerance, false, NULL);
+    }
+    
+    std::vector<bool> minimize(SubmodularFunction<DT>& F, DT eps, DT tolerance, bool print, PerfLog* perf_log)
+    {
+        bool done = false;
         Vector<DT> wA(F.n);
         wA.fill_rand();
         return  minimize(F, wA, &done, 1000000, eps, tolerance, print, perf_log);
@@ -289,7 +280,9 @@ public:
 
         if(perf_log) perf_log->add_histogram("NUM COLUMNS", 0, m, 50);
         if(perf_log) perf_log->add_histogram("COLUMNS REMOVED", 0, m/4, 50);
-        
+    
+        DT pj_max = 0.0;
+
         //Step 2:
         int64_t major_cycles = 0;
         while(major_cycles++ < max_iter) {
@@ -304,6 +297,7 @@ public:
             // Get p_hat by going from x_hat towards the origin until we hit boundary of polytope P
             Vector<DT> p_hat = S_base.subcol(S.width()); p_hat.perf_log = perf_log;
             DT F_curr = F.polyhedron_greedy_eval(-1.0, *x_hat, p_hat, perf_log);
+            pj_max = std::max(p_hat.dot(p_hat), pj_max);
 
             if (F_curr < F_best) {
                 F_best = F_curr;
@@ -375,7 +369,8 @@ public:
             DT xt_x = xnrm * xnrm;
 //            if(print || major_cycles % 100 == 0) std::cout << "x'p " << xt_p << " x'x " << xt_x << std::endl;
 //            if (std::abs(xt_p - xt_x) < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
-            if( xt_x - xt_p  < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
+//            if( xt_x - xt_p  < tolerance || std::abs(F_best - sum_x_hat_lt_0) < eps) {
+            if( xt_p > xt_x - tolerance * pj_max || std::abs(F_best - sum_x_hat_lt_0) < eps) {
                 // We are done: x_hat is already closest norm point
 //                if (std::abs(xt_p - xt_x) < tolerance) subopt = 0.0;
                 break;
@@ -424,7 +419,7 @@ public:
 
 //Blocked Randomized S? I can't remember what BRS was supposed to stand for
 template<class DT>
-class BRSMinNormPoint : Minimizer<DT>
+class BRSMinNormPoint
 {
     int64_t b;
 public:
