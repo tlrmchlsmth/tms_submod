@@ -5,7 +5,7 @@
 
 //R is upper triangular
 template<class DT>
-DT check_STS_eq_RTR(Matrix<DT>& S, IncQRMatrix<DT>& R_in) 
+DT check_STS_eq_RTR(const Matrix<DT>& S, const IncQRMatrix<DT>& R_in) 
 {
     assert(R_in._n > 0);
     auto R = R_in.current_matrix();
@@ -32,43 +32,55 @@ DT check_STS_eq_RTR(Matrix<DT>& S, IncQRMatrix<DT>& R_in)
 }
 
 template<class DT>
+DT check_Sa_eq_x(const Matrix<DT>& S, const Vector<DT>& a, const Vector<DT>& x) 
+{
+    assert(S.width() == a.length());
+    assert(S.height() == x.length());
+
+    Vector<DT> t(S.height());
+    S.mvm(1.0, a, 0.0, t);
+    t.axpy(-1.0, x);
+    return t.norm2();
+}
+
+template<class DT>
 std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
 {
     int64_t k = 1;
+    int64_t max_away = 2048;
 
     //Iterates
     Vector<DT> x(F.n);
-    Vector<DT> a_base(F.n); // x = S a
-    Vector<DT> a = a_base.subvector(0, 1);
+    Vector<DT> a_base(max_away); // x = S a
+    auto a = a_base.subvector(0, 1);
 
-    Matrix<DT> S_base(F.n,F.n);
-    IncQRMatrix<DT> R_base(F.n);
-
-    Matrix<DT> S = S_base.submatrix(0, 0, F.n, 1);
-    IncQRMatrix<DT> R = R_base.submatrix(0,1); //S = QR (implicit Q)
+    Matrix<DT> S_base(F.n,max_away);
+    auto S = S_base.submatrix(0, 0, F.n, 1);
 
     //Workspace
-    Vector<DT> v(F.n);
-    Vector<DT> STx_base(F.n);
+    Vector<DT> STx_base(max_away);
     Vector<DT> dFW(F.n); //Frank-Wolfe direction
     Vector<DT> dA(F.n);  //Away direction
-    std::list<int64_t> to_remove;
+
+    Vector<DT> tmp(F.n);
     
-    //Initialize x, a, S, and R
+    //Initialize x, a, S
     Vector<DT> s0 = S.subcol(0);
     s0.fill_rand();
     F.polyhedron_greedy(1.0, s0, x, NULL); 
     s0.copy(x);
-    R(0,0) = s0.norm2();
     a(0) = 1.0;
 
     DT duality_gap = 1.0;
     while(duality_gap > eps) {
         assert(S.width() > 0);
         assert(S.width() < S_base.width());
+        assert(a.has_nan() == false);
+        assert(a.max() <= 1.0);
+        assert(a.min() >= 0.0);
 
         //Get s
-        Vector<DT> s = S_base.subcol(S.width());
+        auto s = S_base.subcol(S.width());
         DT F_curr = F.polyhedron_greedy_eval(-1.0, x, s, NULL);
 
         //Test for termination
@@ -80,84 +92,95 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
         //v = argmax x^T v, v in S
         auto STx = STx_base.subvector(0, S.width());
         S.transpose(); S.mvm(1.0, x, 0.0, STx); S.transpose();
-        auto v = S.subcol(STx.index_of_max());
-        auto alpha_v = a(STx.index_of_max());
+        int64_t v_index = STx.index_of_max();
+        const auto v = S.subcol(v_index);
+        auto alpha_v = a(v_index);
         dA.copy(x); dA.axpy(-1.0, v);
 
-        Vector<DT>* d;
-        DT gamma_max;
-        if(x.dot(dFW) < x.dot(dA)) {
+        //Get rid of minimum (don't keep track of it) 
+        if(S.width()+1 >= S_base.width()) {
+            int64_t min_index = STx.index_of_min();
+            if(min_index == v_index) {
+                STx.print("STx");
+                x.print("x");
+                a.print("a");
+                S.print("S");
+            }
+            assert(min_index != v_index);
+            if(v_index > min_index) 
+                v_index--;
+            S.remove_col(min_index);
+            a.remove(min_index);
+            auto s_to = S_base.subcol(S.width());
+            s_to.copy(s);
+            s = s_to;
+        }
+
+        if(x.dot(dFW) <= x.dot(dA)) {
             //Forward direction
-            d = &dFW;
-            gamma_max = 1.0;
+            DT gamma = std::min(std::max(-dFW.dot(x) / dFW.dot(dFW), 0.0), 1.0);
+
+            //Update weights and S
+            if(gamma == 1.0) {
+                //S = {s}
+                S = S_base.submatrix(0,0,F.n,1);
+                auto s0 = S.subcol(0);
+                s0.copy(s);
+
+                //a = [1]
+                a = a_base.subvector(0,1);
+                a(0) = 1.0;
+
+                //update x
+                x.copy(s);
+            } else {
+                //Check to see if s is in S already
+                bool s_already_in_S = false;
+                int64_t index_s = -1;
+                for(int64_t i = 0; i < S.width(); i++) {
+                    const auto si = S.subcol(i);
+                    tmp.copy(s);
+                    tmp.axpy(-1.0, si);
+                    if(tmp.norm2() < 1e-2) {
+                        s_already_in_S = true;
+                        index_s = i;
+                        break;
+                    }
+                }
+                
+                //Update a and S
+                a.scale(1.0-gamma);
+                if( s_already_in_S ) {
+                    a(index_s) += gamma;
+                } else {
+                    S.enlarge_n(1);
+                    a = a_base.subvector(0, a.length()+1);
+                    a(a.length() - 1) = gamma;
+                }
+                
+                //update x
+                x.axpy(gamma, dFW);
+            }
         } else {
             //Away direction
-            d = &dA;
-            gamma_max = alpha_v / (1.0 - alpha_v);
-        }
+            DT gamma_max = alpha_v / (1.0 - alpha_v);
+            DT gamma = std::min(std::max(-dA.dot(x) / dA.dot(dA), 0.0), gamma_max);
+            bool drop_step = (gamma == gamma_max);
 
-        //Update X
-        //Find gamma that minimizes norm of (x + gamma d)
-        // gamma = -d^T x / d^T d
-        DT gamma = std::min(std::max(-d->dot(x) / d->dot(*d), 0.0), gamma_max);
-        if(gamma > 0.0) {
-            x.axpy(gamma, *d);
-        } else {
-            std::cout << "gamma is zero" << std::endl;
-        }
-
-        //Update duality gap
-        DT sum_x_lt_0 = 0.0;
-        for (int64_t i = 0; i < F.n; i++) { if(x(i) <= 0.0) sum_x_lt_0 += x(i); }
-        duality_gap = std::abs(F_curr - sum_x_lt_0);
-        if(duality_gap <= eps) break;
-
-        // Update S and R
-        bool updated_r = R.add_col_inc_qr(S,s);
-        if(updated_r) {
-            S.enlarge_n(1);
-
-            //Update a. S a = x
-            //Use R^T R a = S^T x
-            a = a_base.subvector(0, S.width());
-            a.copy(STx);
-            R.transpose(); R.trsv(a); R.transpose();
-            R.trsv(a);
+            if(drop_step) {
+                S.remove_col(v_index);
+                a.remove(v_index);
+            }
             
-            //Remove bad columns from S and R.
-            bool removed = true;
-            do {
-                to_remove.clear();
-                for(int64_t i = 0; i < a.length() && to_remove.size() < S.width(); i++) {
-                    if(a(i) < 0) to_remove.push_back(i);
-                }
-                if(to_remove.size() == S.width()) {
-                    std::cout << "removing all of S" << std::endl;
-                    a.print("a");
-                }
-                if(to_remove.size() == 0 && S.width() == S_base.width()) to_remove.push_back(0);
-                removed = to_remove.size() > 0;
-                if(to_remove.size() > 0) {
-                    //Remove columns from S and R
-                    S.remove_cols(to_remove);
-                    R.remove_cols_inc_qr(to_remove);
-
-                    //Update a
-                    auto STx = STx_base.subvector(0, S.width());
-                    a = a_base.subvector(0, S.width());
-                    S.transpose(); S.mvm(1.0, x, 0.0, STx); S.transpose();
-                    a.copy(STx);
-                    R.transpose(); R.trsv(a); R.transpose();
-                    R.trsv(a);
-                }
-            } while(removed == true);
-        } else {
-            std::cout << "Could not update R" << std::endl;
-            R.print("R");
-            DT err = check_STS_eq_RTR(S,R);
-            std::cout << "R checksum " << err << std::endl;
+            //Update a
+            a.scale(1+gamma);
+            if(!drop_step) {
+                a(v_index) -= gamma;
+            }
+            
+            //Update x
+            x.axpy(gamma, dA);
         }
-
         k++;
     }
 
@@ -166,6 +189,142 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
     for(int64_t i = 0; i < F.n; i++){ A[i] = x(i) <= 0.0; }
     return A;
 }
+
+/*template<class DT>
+std::vector<bool> AwaySteps2(SubmodularFunction<DT>& F, DT eps)
+{
+    int64_t mult = 4;
+    int64_t k = 1;
+
+    //Iterates
+    Vector<DT> x(F.n);
+    Vector<DT> a_base(mult*F.n); // x = S a
+    auto a = a_base.subvector(0, 1);
+
+    Matrix<DT> S_base(F.n,mult*F.n);
+    auto S = S_base.submatrix(0, 0, F.n, 1);
+
+    //Workspace
+    Vector<DT> STx_base(mult*F.n);
+    Vector<DT> dFW(F.n); //Frank-Wolfe direction
+    Vector<DT> dA(F.n);  //Away direction
+
+    Vector<DT> tmp(F.n);
+    
+    //Initialize x, a, S
+    Vector<DT> s0 = S.subcol(0);
+    s0.fill_rand();
+    F.polyhedron_greedy(1.0, s0, x, NULL); 
+    s0.copy(x);
+    a(0) = 1.0;
+   
+    //Incremental QR factorization of S 
+    IncQRMatrix<DT> R_base(mult*F.n);
+    IncQRMatrix<DT> R = R_base.submatrix(0,1); //S = QR (implicit Q)
+    R(0,0) = s0.norm2();
+
+    DT duality_gap = 1.0;
+    while(duality_gap > eps) {
+        assert(S.width() > 0);
+        assert(S.width() < S_base.width());
+        assert(S.width() == a.length()); 
+
+        //Get s
+        auto s = S_base.subcol(S.width());
+        DT F_curr = F.polyhedron_greedy_eval(-1.0, x, s, NULL);
+
+        //Test for termination
+        DT xtx_minus_xts = x.dot(x) - x.dot(s);
+        if(xtx_minus_xts < 1e-5) break;
+
+        //Get Frank-Wolfe and Away directions
+        dFW.copy(s); dFW.axpy(-1.0, x);
+        //v = argmax x^T v, v in S
+        auto STx = STx_base.subvector(0, S.width());
+        S.transpose(); S.mvm(1.0, x, 0.0, STx); S.transpose();
+        int64_t v_index = STx.index_of_max();
+        const auto v = S.subcol(v_index);
+        auto alpha_v = a(v_index);
+        dA.copy(x); dA.axpy(-1.0, v);
+
+        if(x.dot(dFW) < x.dot(dA)) {
+            //Forward direction
+            DT gamma = std::min(std::max(-dFW.dot(x) / dFW.dot(dFW), 0.0), 1.0);
+
+            //Update weights and S
+            if(gamma == 1.0) {
+                //S = {s}
+                S = S_base.submatrix(0,0,F.n,1);
+                auto s0 = S.subcol(0);
+                s0.copy(s);
+
+                //a = [1]
+                a = a_base.subvector(0,1);
+                a(0) = 1.0;
+
+                //update x
+                x.copy(s);
+            } else {
+                //Check to see if s is in span S already
+                bool s_already_in_S = !R.add_col_inc_qr(S, s);
+                if(s_already_in_S) {
+                    //Update x.
+                    x.axpy(gamma, dFW);
+
+                    //Do a solve to maintain S a = x
+                    S.transpose(); S.mvm(1.0, x, 0.0, a); S.transpose();
+                    R.transpose(); R.trsv(a); R.transpose();
+                    R.trsv(a);
+                } else {
+                    //S was not in the span of S
+                    
+                    //Update a and S
+                    a.scale(1.0-gamma);
+                    S.enlarge_n(1);
+                    a = a_base.subvector(0, a.length()+1);
+                    a(a.length()-1) = gamma;
+                    //update x
+                    x.axpy(gamma, dFW);
+                }
+            }
+        } else {
+            //Away direction
+            DT gamma_max = alpha_v / (1.0 - alpha_v);
+            DT gamma = std::min(std::max(-dA.dot(x) / dA.dot(dA), 0.0), gamma_max);
+
+            if(gamma == gamma_max) {
+                //Drop step. get rid of vector of s and element of a
+                S.remove_col(v_index);
+                R.remove_col_inc_qr(v_index);
+
+                //copy trailing part of a into tmp vector
+                if(v_index != a.length() - 1) {
+                    auto t = tmp.subvector(0, a.length() - v_index - 1);
+                    const auto a2 = a.subvector(v_index+1, a.length() - v_index - 1);
+                    t.copy(a2);
+                    auto a1 = a.subvector(v_index, a.length() - v_index - 1);
+                    a1.copy(t);
+                }
+                a = a_base.subvector(0, a.length() - 1);
+            }
+            
+            //Update a
+            a.scale(1+gamma);
+            if(gamma != gamma_max) {
+                a(v_index) -= gamma;
+            }
+            
+            //Update x
+            x.axpy(gamma, dA);
+        }
+        k++;
+    }
+
+    //Return A, minimizer of F
+    std::vector<bool> A(F.n);
+    for(int64_t i = 0; i < F.n; i++){ A[i] = x(i) <= 0.0; }
+    return A;
+}*/
 /*
 template<class DT>
 std::vector<bool> AwaySteps2(SubmodularFunction<DT>& F, DT eps)

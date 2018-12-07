@@ -22,10 +22,11 @@ public:
 
     PerfLog* perf_log;
 
+    int64_t _base_len;
     bool _mem_manage;
 
 //public:
-    Vector(int64_t s) : _len(s), _stride(1), _mem_manage(true), perf_log(NULL)
+    Vector(int64_t s) : _len(s), _base_len(s), _stride(1), _mem_manage(true), perf_log(NULL)
     {
         auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
         if(ret != 0){
@@ -34,8 +35,8 @@ public:
         }
     }
 
-    Vector(DT* values, int64_t len, int64_t stride, bool mem_manage) :
-        _values(values), _len(len), _stride(stride), _mem_manage(mem_manage), perf_log(NULL)
+    Vector(DT* values, int64_t len, int64_t base_len, int64_t stride, bool mem_manage) :
+        _values(values), _len(len), _base_len(len), _stride(stride), _mem_manage(mem_manage), perf_log(NULL)
     {
     }
 
@@ -51,14 +52,14 @@ public:
         assert(start < _len && "Vector index out of bounds.");
         auto length = std::min(blksz, _len - start);
 
-        return Vector(_values + start*_stride, length, _stride, false);
+        return Vector(_values + start*_stride, length, _len, _stride, false);
     }
     const Vector<DT> subvector(int64_t start, int64_t blksz) const
     {
         assert(start < _len && "Vector index out of bounds.");
         auto length = std::min(blksz, _len - start);
 
-        return Vector(_values + start*_stride, length, _stride, false);
+        return Vector(_values + start*_stride, length, _len, _stride, false);
     }
 
     inline DT& operator() (int64_t index)
@@ -180,6 +181,22 @@ public:
                 return true;
         }
         return false;
+    }
+
+    void enlarge(int64_t l_inc) {
+       assert(_len + l_inc <= _base_len);
+       _len += l_inc; 
+    }
+
+    void remove(int64_t index) {
+        if(index != _len - 1) {
+            Vector<DT> t(_len - index - 1);
+            const auto a2 = subvector(index+1, _len - index - 1);
+            t.copy(a2);
+            auto a1 = subvector(index, _len - index - 1);
+            a1.copy(t);
+        }
+        _len--;
     }
 
     // Routines for later specialization

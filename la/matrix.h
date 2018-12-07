@@ -98,29 +98,29 @@ public:
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
 
-        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _base_m, _base_n, false, perf_log);
+        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _m, _n, false, perf_log);
     }
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto width  = std::min(nc, _n - col);
-        return Vector<DT>(&_values[row*_rs + col*_cs], width, _cs, false);
+        return Vector<DT>(&_values[row*_rs + col*_cs], width, _n, _cs, false);
     }
     inline Vector<DT> subrow(int64_t row)
     {
         assert(row < _m && "Matrix index out of bounds.");
-        return Vector<DT>(&_values[row*_rs], _n, _cs, false);
+        return Vector<DT>(&_values[row*_rs], _n, _n, _cs, false);
     }
     inline Vector<DT> subcol(int64_t row, int64_t col, int64_t mc)
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
-        return Vector<DT>(&_values[row*_rs + col*_cs], height, _rs, false);
+        return Vector<DT>(&_values[row*_rs + col*_cs], height, _m, _rs, false);
     }
     inline Vector<DT> subcol(int64_t col)
     {
         assert(col < _n && "Matrix index out of bounds.");
-        return Vector<DT>(&_values[col*_cs], _m, _rs, false);
+        return Vector<DT>(&_values[col*_cs], _m, _m, _rs, false);
     }
 
     inline const Matrix<DT> submatrix(int64_t row, int64_t col, int64_t mc, int64_t nc) const
@@ -128,29 +128,29 @@ public:
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
-        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _base_m, _base_n, false, perf_log);
+        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _m, _n, false, perf_log);
     }
     inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto width  = std::min(nc, _n - col);
-        return Vector<DT>(&_values[row*_rs + col*_cs], width, _cs, false);
+        return Vector<DT>(&_values[row*_rs + col*_cs], width, _n, _cs, false);
     }
     inline const Vector<DT> subrow(int64_t row) const
     {
         assert(row < _m && "Matrix index out of bounds.");
-        return Vector<DT>(&_values[row*_rs], _n, _cs, false);
+        return Vector<DT>(&_values[row*_rs], _n, _n, _cs, false);
     }
     inline const Vector<DT> subcol(int64_t row, int64_t col, int64_t mc) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
-        return Vector<DT>(&_values[row*_rs + col*_cs], height, _rs, false);
+        return Vector<DT>(&_values[row*_rs + col*_cs], height, _m, _rs, false);
     }
     inline const Vector<DT> subcol(int64_t col) const
     {
         assert(col < _n && "Matrix index out of bounds.");
-        return Vector<DT>(&_values[col*_cs], _m, _rs, false);
+        return Vector<DT>(&_values[col*_cs], _m, _m, _rs, false);
     }
 
     //
@@ -312,18 +312,18 @@ public:
     //
     // BLAS, LAPACK routines
     //
-    void mvm(DT alpha, const Vector<DT>& x, DT beta, Vector<DT>& y)
+    void mvm(DT alpha, const Vector<DT>& x, DT beta, Vector<DT>& y) const
     {
         std::cout << "Gemv not implemented for datatype" << std::endl;
         exit(1);
     }
-    void trsv(CBLAS_UPLO uplo, Vector<DT>& x)
+    void trsv(CBLAS_UPLO uplo, Vector<DT>& x) const
     {
         std::cout << "Trsv not implemented for datatype" << std::endl;
         exit(1);
     }
 
-    void trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<DT>& x)
+    void trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<DT>& x) const
     {
         std::cout << "Trsv not implemented for datatype" << std::endl;
         exit(1);
@@ -1066,7 +1066,7 @@ public:
 };
 
 template<>
-void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y)
+void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const
 {
     assert(_m == y._len && _n == x._len && "Nonconformal mvm.");
 
@@ -1095,7 +1095,7 @@ void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vec
     }
 }
 template<>
-void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
+void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x) const
 {
     assert(_m == _n && _m == x._len && "Nonconformal trsv.");
 
@@ -1123,7 +1123,7 @@ void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x)
 }
 
 template<>
-void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X)
+void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X) const
 {
     if(side == CblasLeft) assert(_m == X.height() && "Nonconformal trsm");
     else assert (_m == X.width() && "Nonconformal trsm");
@@ -1392,7 +1392,7 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
 }
 
 template<>
-void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<float>& y)
+void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<float>& y) const
 {
     assert(_m == y._len && _n == x._len && "Nonconformal mvm.");
 
@@ -1421,7 +1421,7 @@ void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<
     }
 }
 template<>
-void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x)
+void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x) const
 {
     assert(_m == _n && _m == x._len && "Nonconformal trsv.");
 
@@ -1449,7 +1449,7 @@ void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x)
 }
 
 template<>
-void Matrix<float>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<float>& X)
+void Matrix<float>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<float>& X) const
 {
     if(side == CblasLeft) assert(_m == X.height() && "Nonconformal trsm");
     else assert (_m == X.width() && "Nonconformal trsm");

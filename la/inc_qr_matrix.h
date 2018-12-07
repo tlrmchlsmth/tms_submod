@@ -260,6 +260,18 @@ public:
         }
     }
 
+    inline const Matrix<DT> current_matrix() const {
+        if( _am_half_a ) {
+            assert(_half_a._m == _n);
+            assert(_half_a._n == _n);
+            return _half_a.submatrix(0,0,_n,_n);
+        } else {
+            assert(_half_b._m == _n);
+            assert(_half_b._n == _n);
+            return _half_b.submatrix(0,0,_n,_n);
+        }
+    }
+
     //
     // Acquiring submatrices, subvectors
     //
@@ -360,6 +372,11 @@ public:
     }
 
 
+    void remove_col_inc_qr(int64_t col) {
+        std::list<int64_t> cols_to_remove;
+        cols_to_remove.push_back(col);
+        remove_cols_inc_qr(cols_to_remove);
+    }
     void remove_cols_inc_qr(const std::list<int64_t>& cols_to_remove)
     {
         if(cols_to_remove.size() == 0) return;
@@ -396,14 +413,14 @@ public:
         
         // Let [r0 rho1]^T be the vector to add to r
         // r0 = R' \ (S' * s)
-        Vector<DT> r0(r0_buffer, _n, stride, false);
+        Vector<DT> r0(r0_buffer, _n, _n, stride, false);
         auto ST = S.transposed();
         ST.mvm(1.0, s, 0.0, r0);
         this->transpose(); this->trsv(r0); this->transpose();
 
         // rho1^2 = s' * s - r0' * r0;
         DT rho1 = sqrt(std::abs(s.dot(s) - r0.dot(r0)));
-        if(rho1 < 1e-12) {
+        if(rho1 < 1e-3) {
             return false;
         } else {
             this->enlarge_n(1);
