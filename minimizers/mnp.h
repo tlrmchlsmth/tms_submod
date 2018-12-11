@@ -1,3 +1,6 @@
+#ifndef TMS_SUBMOD_MNP_H
+#define TMS_SUBMOD_MNP_H
+
 #include "../la/matrix.h"
 #include "../la/vector.h"
 #include "../submodular.h"
@@ -816,3 +819,6 @@ public:
         return A;
     }
 };
+
+
+#endif

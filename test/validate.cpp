@@ -5,7 +5,7 @@
 
 #include "../la/vector.h"
 #include "../la/matrix.h"
-#include "../minimizers/fujishige_wolfe.h"
+#include "../minimizers/mnp.h"
 #include "../submodular.h"
 #include "../util.h"
 

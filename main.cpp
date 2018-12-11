@@ -5,9 +5,10 @@
 
 #include <random>
 #include "submodular.h"
-#include "minimizers/fujishige_wolfe.h"
+#include "minimizers/mnp.h"
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
+#include "minimizers/pairwise.h"
 
 #include "perf/perf.h"
 #include "test/validate.h"
@@ -484,9 +485,11 @@ void frank_wolfe_wolfe_mincut()
     std::cout << std::setw(2*fw) << "MNP F(A)"; 
     std::cout << std::setw(2*fw) << "FrankWolfe F(A)"; 
     std::cout << std::setw(2*fw) << "AwaySteps F(A)"; 
-    std::cout << std::setw(2*fw) << "Wolfe";
+    std::cout << std::setw(2*fw) << "Pairwise F(A)"; 
+    std::cout << std::setw(2*fw) << "MNP";
     std::cout << std::setw(2*fw) << "FrankWolfe";
     std::cout << std::setw(2*fw) << "AwaySteps";
+    std::cout << std::setw(2*fw) << "Pairwise";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -520,6 +523,12 @@ void frank_wolfe_wolfe_mincut()
             double as_seconds = (double) cycles_count_stop().time;
             double as_fa = problem.eval(as_A);
 
+            //Pairwise
+            cycles_count_start();
+            auto pw_A = Pairwise(problem, 1e-5, mnp_fa);
+            double pw_seconds = (double) cycles_count_stop().time;
+            double pw_fa = problem.eval(pw_A);
+
             int64_t cardinality = 0;
             for(int i = 0; i < n; i++) {
                 if(mnp_A[i]) cardinality++;
@@ -529,9 +538,11 @@ void frank_wolfe_wolfe_mincut()
             std::cout << std::setw(2*fw) << mnp_fa;
             std::cout << std::setw(2*fw) << fw_fa;
             std::cout << std::setw(2*fw) << as_fa;
+            std::cout << std::setw(2*fw) << pw_fa;
             std::cout << std::setw(2*fw) << mnp_seconds;
             std::cout << std::setw(2*fw) << fw_seconds;
             std::cout << std::setw(2*fw) << as_seconds;
+            std::cout << std::setw(2*fw) << pw_seconds;
             std::cout << std::endl;
         }
     }

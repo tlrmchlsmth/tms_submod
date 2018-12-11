@@ -38,8 +38,7 @@ public:
     {
         //TODO: Pad so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
-        if (ret == 0) {
-        } else {
+        if (ret != 0) {
             std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
             exit(1);
         }
@@ -54,6 +53,38 @@ public:
         if(_mem_manage){
             free(_values);
         }
+    }
+    
+    void realloc(int64_t m, int64_t n) {
+        //Can only reallocate "base object"
+        assert(_mem_manage == true);
+        assert(m >= _m && n >= _n);
+        assert(_base_m >= _m && _base_n >= _n);
+        
+        //Allocate new array
+        DT* array;
+        const int ret = posix_memalign((void **) &array, 4096, m * n * sizeof(DT));
+        if (ret != 0) {
+            std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
+            exit(1);
+        }
+        
+        //Copy old array over
+        Matrix<DT> tmp(array, m, n, 1, m, m, n, false, NULL);
+        auto tmp_partition = tmp.submatrix(0,0,_m,_n);
+        tmp_partition.copy(*this);
+
+        //Free old array
+        free(_values); 
+
+        //Setup fields
+        _values = array;
+        _m = m;
+        _n = n;
+        _rs = 1;
+        _cs = m;
+        _base_m = m;
+        _base_n = n;
     }
 
     inline int64_t height() const 

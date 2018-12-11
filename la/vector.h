@@ -47,6 +47,35 @@ public:
         }
     }
 
+    void realloc(int64_t len) {
+        //Can only reallocate "base object"
+        assert(_mem_manage == true);
+        assert(len >= _len);
+        assert(_base_len == _len);
+        
+        //Allocate new array
+        DT* array;
+        const int ret = posix_memalign((void **) &array, 4096, len * sizeof(DT));
+        if (ret != 0) {
+            std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
+            exit(1);
+        }
+        
+        //Copy old array over
+        Vector<DT> tmp(array, len, len, 1, false);
+        auto tmp_partition = tmp.subvector(0,_len);
+        tmp_partition.copy(*this);
+
+        //Free old array
+        free(_values); 
+
+        //Setup fields
+        _values = array;
+        _len = len;
+        _stride = 1;
+        _base_len = len;
+    }
+
     Vector<DT> subvector(int64_t start, int64_t blksz)
     {
         assert(start < _len && "Vector index out of bounds.");
