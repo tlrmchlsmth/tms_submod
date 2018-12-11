@@ -129,7 +129,7 @@ void benchmark_remove_cols()
     }
 }
 
-void benchmark_logdet_marginal_gains()
+void benchmark_logdet_gains()
 {
     int64_t start = 128;
     int64_t end = 1024;
@@ -160,11 +160,11 @@ void benchmark_logdet_marginal_gains()
             scramble(perm);
 
             cycles_count_start();
-            fast.marginal_gains(perm, p1);
+            fast.gains(perm, p1);
             auto fast_time = cycles_count_stop().time;
 
             cycles_count_start();
-            slow.marginal_gains(perm, p2);
+            slow.gains(perm, p2);
             auto slow_time = cycles_count_stop().time;
 
             std::cout << std::setw(fw) << n;
@@ -176,7 +176,7 @@ void benchmark_logdet_marginal_gains()
     }
 }
 
-void benchmark_mincut_marginal_gains()
+void benchmark_mincut_gains()
 {
     int64_t start = 128;
     int64_t end = 4096;
@@ -209,11 +209,11 @@ void benchmark_mincut_marginal_gains()
             scramble(perm);
 
             cycles_count_start();
-            fast.marginal_gains(perm, p1);
+            fast.gains(perm, p1);
             auto fast_time = cycles_count_stop().time;
 
             cycles_count_start();
-            slow.marginal_gains(perm, p2);
+            slow.gains(perm, p2);
             auto slow_time = cycles_count_stop().time;
 
             std::cout << std::setw(fw) << n;
@@ -231,7 +231,7 @@ void run_benchmark_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     benchmark_gemm();
     benchmark_remove_cols();
-    benchmark_mincut_marginal_gains();
-    benchmark_logdet_marginal_gains();
+    benchmark_mincut_gains();
+    benchmark_logdet_gains();
 }
 

@@ -452,7 +452,7 @@ public:
         for(int64_t j = 1; j < P_hat.width(); j++) {
             auto p_hat_j = P_hat.subcol(j);
             scramble(F.permutation);
-            F.marginal_gains(F.permutation, p_hat_j);
+            F.gains(F.permutation, p_hat_j);
         }
         if(perf_log) perf_log->log_total("SPECULATION TIME", rdtsc() - start_spec);
 

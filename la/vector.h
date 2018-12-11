@@ -36,7 +36,7 @@ public:
     }
 
     Vector(DT* values, int64_t len, int64_t base_len, int64_t stride, bool mem_manage) :
-        _values(values), _len(len), _base_len(len), _stride(stride), _mem_manage(mem_manage), perf_log(NULL)
+        _values(values), _len(len), _base_len(base_len), _stride(stride), _mem_manage(mem_manage), perf_log(NULL)
     {
     }
 

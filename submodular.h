@@ -20,8 +20,9 @@ public:
     std::vector<bool> A;
     std::vector<int64_t> permutation;
     int64_t n;
+    Vector<DT> ws;
 
-    SubmodularFunction(int64_t n_in) : n(n_in), A(n_in)
+    SubmodularFunction(int64_t n_in) : n(n_in), A(n_in), ws(n)
     {
         permutation.reserve(n);
         for(int i = 0; i < n; i++) 
@@ -37,24 +38,25 @@ public:
         return V;
     }
 
-    virtual DT marginal_gain(const std::vector<bool>& A, DT FA, int64_t b) {
+    virtual DT gain(const std::vector<bool>& A, DT FA, int64_t b) {
         std::vector<bool> Ab = A;
         Ab[b] = 1;
         DT FAb = this->eval(Ab);
         return FAb - FA;
     }
 
-    virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& p) 
+    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& p) 
     {
         std::fill(A.begin(), A.end(), 0);
         DT FA_old = 0.0;
         for(int i = 0; i < p.length(); i++) {
-            DT FA = marginal_gain(A, FA_old, perm[i]);
+            DT FA = gain(A, FA_old, perm[i]);
             p(perm[i]) = FA - FA_old;
             A[perm[i]] = 1;
             FA_old = FA;
         }
     }
+
 
     void polyhedron_greedy(double alpha, const Vector<DT>& x, Vector<DT>& p, PerfLog* perf_log) 
     {
@@ -70,7 +72,7 @@ public:
         }
 
         int64_t start_b = rdtsc();
-        marginal_gains(permutation, p);
+        gains(permutation, p);
         if(perf_log) {
             perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
             perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
@@ -90,7 +92,7 @@ public:
         }
 
         int64_t start_b = rdtsc();
-        marginal_gains(permutation, p);
+        gains(permutation, p);
         if(perf_log) perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
         
         //Get current value of F(A)
@@ -128,7 +130,7 @@ public:
         val += cardinality * (n-cardinality);
         return val;
     }
-    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         _Pragma("omp parallel for")
         for(int64_t i = 0; i < n; i++) {
@@ -355,7 +357,7 @@ public:
         return log_det;
     }
 
-    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         //Permute rows and columns of covariance matrix and perform cholesky factorization
         auto Ua = U.submatrix(0,0,n,n);
@@ -377,7 +379,7 @@ public:
 
     SlowLogDet(int64_t n_in) : LogDet<DT>(n_in) {}
 
-    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         //Get initial KA 
         auto Ua = LogDet<DT>::U.submatrix(0,0,1,1);
@@ -656,7 +658,7 @@ public:
     }
 
 
-    virtual void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         std::vector<int64_t> perm_lookup(n);
 //        _Pragma("omp parallel for")
@@ -730,7 +732,7 @@ public:
         return val - baseline;
     }
 
-    DT marginal_gain(const std::vector<bool>& A, int64_t b) 
+    DT gain(const std::vector<bool>& A, int64_t b) 
     {
         //Gain from adding b
         DT gain = 0.0;
@@ -749,7 +751,7 @@ public:
         return gain + loss;
     }
 
-    void marginal_gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         _Pragma("omp parallel") 
         {
@@ -767,7 +769,7 @@ public:
 
             for(int64_t j = start; j < end; j++) {
                 int64_t b = perm[j];
-                x(b) = marginal_gain(A, b);
+                x(b) = gain(A, b);
                 A[b] = 1;
             }
         }

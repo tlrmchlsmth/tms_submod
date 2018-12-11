@@ -44,11 +44,11 @@ DT submodularity_rec(SubmodularFunction<DT>& F, std::vector<bool>& A, int64_t i,
             if(!A[j]) {
                 std::vector<bool> B = A;
                 B[j] = 1;
-                DT FB = FA + F.marginal_gain(A, FA, j);
+                DT FB = FA + F.gain(A, FA, j);
                 for(int k = 0; k < n; k++) {
                     if(!A[k] && !B[k]) {
-                        DT gain_a = F.marginal_gain(A, FA, k);
-                        DT gain_b = F.marginal_gain(B, FB, k);
+                        DT gain_a = F.gain(A, FA, k);
+                        DT gain_b = F.gain(B, FB, k);
                         if(gain_b - gain_a > 1e-5) {
                             return false;
                         }
@@ -139,7 +139,7 @@ void val_brute_force(std::string name)
 
 //Make sure log det greedy algorithm and eval function are consistent
 template<class F, class DT>
-void val_marginal_gains(std::string name)
+void val_gains(std::string name)
 {
     int64_t start = 4;
     int64_t end = 256; 
@@ -174,7 +174,7 @@ void val_marginal_gains(std::string name)
             FA_old = FA;
         }
 
-        prob.marginal_gains(perm, p2);
+        prob.gains(perm, p2);
         p1.axpy(-1.0, p2);
         DT error = p1.norm2();
         
@@ -424,13 +424,13 @@ void run_validation_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     val_incremental_qr_remove_cols();
 
-    //Validate consistency of marginal gains vs eval
-    //val_marginal_gains<IwataTest<float>, float>("Iwata's Test Fn Float");
-    val_marginal_gains<IwataTest<double>, double>("Iwata's Test Fn Double");
-    val_marginal_gains<SlowLogDet<double>, double>("LogDet Double");
-//    val_marginal_gains<SlowLogDet<float>, float>("LogDet Float");
-    val_marginal_gains<MinCut<double>, double>("MinCut Double");
-//    val_marginal_gains<MinCut<float>, float>("MinCut Float");
+    //Validate consistency of gains vs eval
+    //val_gains<IwataTest<float>, float>("Iwata's Test Fn Float");
+    val_gains<IwataTest<double>, double>("Iwata's Test Fn Double");
+    val_gains<SlowLogDet<double>, double>("LogDet Double");
+//    val_gains<SlowLogDet<float>, float>("LogDet Float");
+    val_gains<MinCut<double>, double>("MinCut Double");
+//    val_gains<MinCut<float>, float>("MinCut Float");
     val_mincut_greedy_eval();
 
     //Validate answer from mnp algorithm

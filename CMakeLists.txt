@@ -24,6 +24,9 @@ set(SOURCE_FILES
     #
     test/validate.cpp
     test/bench.cpp
+    #
+    fujishige/wrapper.cpp
+    fujishige/fw.c
 )
 
 add_executable(tms_submod ${SOURCE_FILES})
