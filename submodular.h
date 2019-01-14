@@ -58,55 +58,22 @@ public:
     }
 
 
-    void polyhedron_greedy(double alpha, const Vector<DT>& x, Vector<DT>& p, PerfLog* perf_log) 
+    void polyhedron_greedy_decending(const Vector<DT>& x, Vector<DT>& p) 
     {
-        int64_t start_a = rdtsc();
-        //sort x
-        if (alpha > 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
-        } else if (alpha < 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
-        }
-        if(perf_log) {
-            perf_log->log_total("SORT TIME", rdtsc() - start_a);
-        }
-
-        int64_t start_b = rdtsc();
+        std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
         gains(permutation, p);
-        if(perf_log) {
-            perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
-            perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
-        }
     }
 
-    double polyhedron_greedy_eval(double alpha, const Vector<DT>& x, Vector<DT>& p, PerfLog* perf_log) 
+    double polyhedron_greedy_ascending(const Vector<DT>& x, Vector<DT>& p) 
     {
-        int64_t start_a = rdtsc(); //sort x
-        if (alpha > 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );
-        } else if (alpha < 0.0) {
-            std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
-        }
-        if(perf_log) {
-            perf_log->log_total("SORT TIME", rdtsc() - start_a);
-        }
-
-        int64_t start_b = rdtsc();
+        std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         gains(permutation, p);
-        if(perf_log) perf_log->log_total("MARGINAL GAIN TIME", rdtsc() - start_b);
         
         //Get current value of F(A)
         double val = 0.0;
-/*      for(int64_t i = 0; i < p.length(); i++) {
-            if(x(permutation[i]) >= 0.0) break;
-            val += p(permutation[i]);
-        }*/
-        
         for(int64_t i = 0; i < x.length(); i++) {
             if(x(i) <= 0.0) val += p(i);
         }
-
-        if(perf_log) perf_log->log_total("GREEDY TIME", rdtsc() - start_a);
         return val;
     }
 };

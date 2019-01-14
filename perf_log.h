@@ -5,8 +5,8 @@
 #include <map>
 #include <string>
 #include <iomanip>
+#include <iostream>
 
-//In the future we may add histogram/list support
 class PerfTotal {
 public:
     int64_t total;
@@ -15,6 +15,10 @@ public:
     PerfTotal() : total(0), count(0) { }
     inline void log_total(int64_t x) {
         total += x;
+        count++;
+    }
+    inline void set_total(int64_t x) {
+        total = x;
         count++;
     }
 };
@@ -36,6 +40,16 @@ public:
         bucket = std::min(bucket, (int64_t)buckets.size() - 1);
         buckets[bucket]++;
     }
+    void print(std::string s) {
+        for(int i = 0; i < buckets.size(); i++) {
+            std::cout << "\033[1;34m" << std::setw(8) << min + bucket_size * i << "\033[0m";
+        }
+        std::cout << std::endl;
+        for(int i = 0; i < buckets.size(); i++) {
+            std::cout << "\033[1;34m" << std::setw(8) << buckets[i] << "\033[0m";
+        }
+        std::cout << std::endl;
+    }
 };
 
 class PerfLog {
@@ -43,11 +57,22 @@ public:
     std::map<std::string, PerfTotal> tot_classes;
     std::map<std::string, PerfHist> hist_classes;
 
-    PerfLog(){}
+    static PerfLog& get() 
+    {
+        static PerfLog instance;
+        return instance;
+    }
 
+    void clear() {
+        tot_classes.clear();
+        hist_classes.clear();
+    }
 
     void log_total(std::string s, int64_t x) {
         tot_classes[s].log_total(x);
+    }
+    void set_total(std::string s, int64_t x) {
+        tot_classes[s].set_total(x);
     }
 
 
@@ -63,21 +88,6 @@ public:
         return tot_classes.at(s).count;
     }
 
-    void print_total(std::string tag) {
-        for(auto a : tot_classes) {
-            if(a.first.find(tag) != std::string::npos) {
-                std::cout << a.first << " : " << a.second.count << " : " << a.second.total << " : " << (double) a.second.total / (double) a.second.count << std::endl;
-            }
-        }
-    }
-
-    void print_total(std::string tag, int64_t total) {
-        for(auto a : tot_classes) {
-            if(a.first.find(tag) != std::string::npos) {
-                std::cout << a.first << " : " << a.second.count  << " : " << a.second.total << " : " << (double) a.second.total / (double) a.second.count  << " : " << (double) a.second.total / (double) total << std::endl;
-            }
-        }
-    }
 
     void add_histogram(std::string s, double min, double max, int num_buckets) {
         hist_classes.emplace(s,PerfHist(min, max, num_buckets));
@@ -95,18 +105,11 @@ public:
         return to_ret;
     }
 
-    void print_hist(std::string s) {
-        auto hist = get_hist(s);
-
-        for(int i = 0; i < hist.buckets.size(); i++) {
-            std::cout << "\033[1;34m" << std::setw(8) << hist.min + hist.bucket_size * i << "\033[0m";
-        }
-        std::cout << std::endl;
-        for(int i = 0; i < hist.buckets.size(); i++) {
-            std::cout << "\033[1;34m" << std::setw(8) << hist.buckets[i] << "\033[0m";
-        }
-        std::cout << std::endl;
-    }
+private:
+    PerfLog(){}
+public:
+    PerfLog(PerfLog const&) = delete;
+    void operator=(PerfLog const&) = delete;
 };
 
 #endif

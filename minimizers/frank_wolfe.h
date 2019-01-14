@@ -10,13 +10,13 @@ std::vector<bool> FrankWolfe(SubmodularFunction<DT>& F, DT eps)
 
     //Initialize x with something in B(F)
     s.fill_rand();
-    F.polyhedron_greedy(1.0, s, x, NULL); 
+    F.polyhedron_greedy_decending(s, x); 
 
     DT F_best = std::numeric_limits<DT>::max();
     DT duality_gap = 1.0;
     while(duality_gap > eps) {
         //Find s
-        DT F_curr = F.polyhedron_greedy_eval(-1.0, x, s, NULL);
+        DT F_curr = F.polyhedron_greedy_ascending(x, s);
         F_best = std::min(F_curr, F_best);
 
         //Test for termination
@@ -49,13 +49,13 @@ std::vector<bool> FrankWolfeLineSearchGamma(SubmodularFunction<DT>& F, DT eps)
 
     //Initialize x with something in B(F)
     s.fill_rand();
-    F.polyhedron_greedy(1.0, s, x, NULL); 
+    F.polyhedron_greedy_decending(s, x); 
 
     DT F_best = std::numeric_limits<DT>::max();
     DT duality_gap = 1.0;
     while(duality_gap > eps) {
         //Find s
-        DT F_curr = F.polyhedron_greedy_eval(-1.0, x, s, NULL);
+        DT F_curr = F.polyhedron_greedy_ascending(x, s);
         F_best = std::min(F_curr, F_best);
 
         //Test for termination

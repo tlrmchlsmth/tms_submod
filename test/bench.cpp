@@ -12,14 +12,20 @@
 
 void benchmark_gemm()
 {
-    int64_t start = 256;
-    int64_t end = 1024;
-    int64_t inc = 256;
+    int64_t start = 64;
+    int64_t end = 256;
+    int64_t inc = 64;
     int64_t n_reps = 3;
+//    int64_t cache_size = 2*1024*1024;
+//    int64_t n_matrices = 10*cache_size/8/start/start/start;
+    int64_t n_matrices = 1;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking GEMM" << std::endl;
     std::cout << "===========================================================" << std::endl;
+    
+    std::random_device rd;
+    std::mt19937 gen{rd()};
 
     int fw = 20;
     std::cout << std::setw(fw) << "n" << std::setw(fw) << "GFLOPS";
@@ -27,27 +33,41 @@ void benchmark_gemm()
     for(int64_t i = start; i <= end; i += inc) {
         int64_t n = i;
 
-        std::vector<double> cycles1;
-        cycles1.reserve(n_reps);
+        std::vector<Matrix<double>> matrices_a;
+        std::vector<Matrix<double>> matrices_b;
+        std::vector<Matrix<double>> matrices_c;
+        matrices_a.reserve(n_matrices);
+        matrices_b.reserve(n_matrices);
+        matrices_c.reserve(n_matrices);
 
-        for(int64_t r = 0; r < n_reps; r++) {
+        for(int64_t i = 0; i < n_matrices; i++) {
+            matrices_a.emplace_back(n,n);
+            matrices_b.emplace_back(n,n);
+            matrices_c.emplace_back(n,n);
+        }
+
+        for(auto &a: matrices_a) { a.fill_rand(); }
+        for(auto &b: matrices_b) { b.fill_rand(); }
+        for(auto &c: matrices_c) { c.fill_rand(); }
+
+        std::uniform_int_distribution<int64_t> uniform(0, n_matrices-1);
+
+        for(int64_t r = 0; r < n_reps + 1; r++) {
             //Create R to remove columns from
-            Matrix<double> A(n,n);
-            Matrix<double> B(n,n);
-            Matrix<double> C(n,n);
-            A.fill_rand();
-            B.fill_rand();
-            C.fill_rand();
+            Matrix<double>& A = matrices_a.at(uniform(gen));
+            Matrix<double>& B = matrices_b.at(uniform(gen));
+            Matrix<double>& C = matrices_c.at(uniform(gen));
 
             //Time various implementations of remove_cols_incremental_QR
             cycles_count_start();
-            C.mmm(1.0, A, B, 0.0);
-            cycles1.push_back(cycles_count_stop().time);
+            C.mmm(1.0, A, B, 1.0);
+            auto time = cycles_count_stop().time;
+            if(r != 0) {
+                std::cout << std::setw(fw) << n;
+                std::cout << std::setw(fw) << 2*n*n*n / time / 1e9;
+                std::cout << std::endl;
+            }
         }
-
-        std::cout << std::setw(fw) << n;
-        std::cout << std::setw(fw) << 2*n*n*n / mean(cycles1) / 1e9;
-        std::cout << std::endl;
     }
 }
 

@@ -27,14 +27,12 @@ public:
     int64_t _base_n;
     bool _mem_manage;
 
-    PerfLog* perf_log;
-
 //public:
 
     //
     // Constructors
     //
-    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n), perf_log(NULL)
+    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n)
     {
         //TODO: Pad so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
@@ -44,8 +42,8 @@ public:
         }
     }
 
-    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, bool mem_manage, PerfLog* perf_log) :
-        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage), perf_log(perf_log)
+    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, bool mem_manage) :
+        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage)
     {
     }
     ~Matrix()
@@ -70,7 +68,7 @@ public:
         }
         
         //Copy old array over
-        Matrix<DT> tmp(array, m, n, 1, m, m, n, false, NULL);
+        Matrix<DT> tmp(array, m, n, 1, m, m, n, false);
         auto tmp_partition = tmp.submatrix(0,0,_m,_n);
         tmp_partition.copy(*this);
 
@@ -129,7 +127,7 @@ public:
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
 
-        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _m, _n, false, perf_log);
+        return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _m, _n, false);
     }
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
@@ -159,7 +157,7 @@ public:
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
-        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _m, _n, false, perf_log);
+        return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _m, _n, false);
     }
     inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
@@ -298,11 +296,11 @@ public:
 
     Matrix<DT> transposed()
     {
-        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false, perf_log);
+        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false);
     }
     const Matrix<DT> transposed() const
     {
-        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false, perf_log);
+        return Matrix<DT>(_values, _n, _m, _cs, _rs, _base_n, _base_m, false);
     }
 
     void print(std::string name) const
@@ -464,10 +462,8 @@ public:
         this->enlarge_n(-cols_to_remove.size());
 
         end = rdtsc();
-        if(perf_log != NULL) {
-            perf_log->log_total("REMOVE COLS BYTES", 2 * _m * _n);
-            perf_log->log_total("REMOVE COLS TIME", end - start);
-        }
+        PerfLog::get().log_total("REMOVE COLS BYTES", 2 * _m * _n);
+        PerfLog::get().log_total("REMOVE COLS TIME", end - start);
     }
 
     void remove_cols_trap(const std::list<int64_t>& cols_to_remove)
@@ -820,7 +816,7 @@ public:
                     int64_t block_m = std::min(task_size, trap_n - i);
                     int64_t block_begin = trap_begin + i;
 
-                    auto V1 = V.submatrix(0, block_begin, n_removed, block_m); V.perf_log = perf_log;
+                    auto V1 = V.submatrix(0, block_begin, n_removed, block_m);
                     auto T1 = T.submatrix(0, block_begin, T.height(), block_m);
 
                     //Factorization
@@ -850,10 +846,8 @@ public:
 
         end = rdtsc();
         end++;
-        if(perf_log) {
-            perf_log->log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
-            perf_log->log_total("REMOVE COLS QR TIME", end - start);
-        }
+        PerfLog::get().log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
+        PerfLog::get().log_total("REMOVE COLS QR TIME", end - start);
     }
 
     void remove_cols_incremental_qr_kressner(Matrix<DT>& dest, const std::list<int64_t>& cols_to_remove, Matrix<DT>& T, Matrix<DT>& Vin, int64_t nb, Matrix<DT>& ws) const
@@ -884,8 +878,8 @@ public:
             }
 
             //TPQR along the diagonal
-            auto V1 = V.submatrix(0, trap_begin, n_removed, trap_n); V1.perf_log = perf_log;
-            auto R11 = dest.submatrix(trap_begin, trap_begin, trap_n, trap_n); R11.perf_log = perf_log;
+            auto V1 = V.submatrix(0, trap_begin, n_removed, trap_n);
+            auto R11 = dest.submatrix(trap_begin, trap_begin, trap_n, trap_n);
             auto T1 = T.submatrix(0, trap_begin, T.height(), trap_n);
             R11.tpqr(V1, T1, 0, nb, ws);
 
@@ -901,10 +895,8 @@ public:
         }
 
         end = rdtsc();
-        if(perf_log) {
-            perf_log->log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
-            perf_log->log_total("REMOVE COLS QR TIME", end - start);
-        }
+        PerfLog::get().log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
+        PerfLog::get().log_total("REMOVE COLS QR TIME", end - start);
     }
 
     void remove_cols_incremental_qr_householder(const std::list<int64_t>& cols_to_remove, Vector<DT>& t)
@@ -945,10 +937,8 @@ public:
         this->enlarge_m(-cols_to_remove.size());
 
         end = rdtsc();
-        if(perf_log) {
-            perf_log->log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
-            perf_log->log_total("REMOVE COLS QR TIME", end - start);
-        }
+        PerfLog::get().log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
+        PerfLog::get().log_total("REMOVE COLS QR TIME", end - start);
     }
 
     void remove_cols_incremental_qr_blocked_householder(const std::list<int64_t>& cols_to_remove, Vector<DT>& t, int64_t nb)
@@ -1039,10 +1029,8 @@ public:
         this->enlarge_m(-cols_to_remove.size());
 
         end = rdtsc();
-        if(perf_log) {
-            perf_log->log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
-            perf_log->log_total("REMOVE COLS QR TIME", end - start);
-        }
+        PerfLog::get().log_total("REMOVE COLS QR BYTES", 2 * _m * _n);
+        PerfLog::get().log_total("REMOVE COLS QR TIME", end - start);
     }
 
     //Use givens rotations to annihilate the element below each diagonal element
@@ -1118,12 +1106,9 @@ void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vec
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("MVM FLOPS", 2 * _m * _n);
-        perf_log->log_total("MVM TIME", end - start);
-        perf_log->log_total("MVM BYTES", sizeof(double) * (_m * _n + 2*_m + _n));
-    }
+    PerfLog::get().log_total("MVM FLOPS", 2 * _m * _n);
+    PerfLog::get().log_total("MVM TIME", end - start);
+    PerfLog::get().log_total("MVM BYTES", sizeof(double) * (_m * _n + 2*_m + _n));
 }
 template<>
 void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x) const
@@ -1145,12 +1130,9 @@ void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x) const
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("TRSV FLOPS", _n*_n);
-        perf_log->log_total("TRSV TIME", end - start);
-        perf_log->log_total("TRSV BYTES", sizeof(double) * (_n*_n / 2 + 2*_n));
-    }
+    PerfLog::get().log_total("TRSV FLOPS", _n*_n);
+    PerfLog::get().log_total("TRSV TIME", end - start);
+    PerfLog::get().log_total("TRSV BYTES", sizeof(double) * (_n*_n / 2 + 2*_n));
 }
 
 template<>
@@ -1198,11 +1180,9 @@ void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X) c
 
     end = rdtsc();
 
-    if(perf_log) {
-        perf_log->log_total("TRSM FLOPS", _n*_n*X.width());
-        perf_log->log_total("TRSM TIME", end - start);
-        perf_log->log_total("TRSM BYTES", sizeof(double) * (_n*_n/2 + 2*_n*X.width()));
-    }
+    PerfLog::get().log_total("TRSM FLOPS", _n*_n*X.width());
+    PerfLog::get().log_total("TRSM TIME", end - start);
+    PerfLog::get().log_total("TRSM BYTES", sizeof(double) * (_n*_n/2 + 2*_n*X.width()));
 }
 
 template<>
@@ -1234,11 +1214,9 @@ void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<dou
                 beta, _values, _rs);
     }
 
-    if(perf_log) {
-        perf_log->log_total("MMM FLOPS", 2 * _m * _n * A._n);
-        perf_log->log_total("MMM TIME", rdtsc() - start);
-        perf_log->log_total("MMM BYTES", sizeof(double) * (2*_m *_n + _m * A._n + A._n * _n)); 
-    }
+    PerfLog::get().log_total("MMM FLOPS", 2 * _m * _n * A._n);
+    PerfLog::get().log_total("MMM TIME", rdtsc() - start);
+    PerfLog::get().log_total("MMM BYTES", sizeof(double) * (2*_m *_n + _m * A._n + A._n * _n)); 
 }
 
 template<>
@@ -1282,11 +1260,8 @@ void Matrix<double>::qr(Vector<double>& t)
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
-        perf_log->log_total("QR TIME", end - start);
-    }
+    PerfLog::get().log_total("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
+    PerfLog::get().log_total("QR TIME", end - start);
 }
 
 template<>
@@ -1368,11 +1343,7 @@ void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, in
             ws._values, &info);
 
     end = rdtsc();
-
-    if(perf_log) {
-//        perf_log->log_total("TPQR FLOPS", 2*_m(_n*_n - 2*_n/3));
-        perf_log->log_total("TPQR TIME", end - start);
-    }
+    PerfLog::get().log_total("TPQR TIME", end - start);
 }
 
 template<>
@@ -1414,12 +1385,8 @@ void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matri
             ws._values, &info);
 
     end = rdtsc();
-
-    if(perf_log) {
-        assert(l == 0); //TODO: Flop count is unknown when l == 0
-        perf_log->log_total("APPLY TPQR FLOPS", k*k*n + 4*m*k);
-        perf_log->log_total("APPLY TPQR TIME", end - start);
-    }
+    PerfLog::get().log_total("APPLY TPQR FLOPS", k*k*n + 4*m*k);
+    PerfLog::get().log_total("APPLY TPQR TIME", end - start);
 }
 
 template<>
@@ -1444,12 +1411,9 @@ void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("MVM FLOPS", 2 * _m * _n);
-        perf_log->log_total("MVM TIME", end - start);
-        perf_log->log_total("MVM BYTES", sizeof(float) * (_m * _n + 2*_m + _n));
-    }
+    PerfLog::get().log_total("MVM FLOPS", 2 * _m * _n);
+    PerfLog::get().log_total("MVM TIME", end - start);
+    PerfLog::get().log_total("MVM BYTES", sizeof(float) * (_m * _n + 2*_m + _n));
 }
 template<>
 void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x) const
@@ -1471,12 +1435,9 @@ void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x) const
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("TRSV FLOPS", _m * _n);
-        perf_log->log_total("TRSV TIME", end - start);
-        perf_log->log_total("TRSV BYTES", sizeof(float) * (_m * _n / 2 + 2*_m + _n));
-    }
+    PerfLog::get().log_total("TRSV FLOPS", _m * _n);
+    PerfLog::get().log_total("TRSV TIME", end - start);
+    PerfLog::get().log_total("TRSV BYTES", sizeof(float) * (_m * _n / 2 + 2*_m + _n));
 }
 
 template<>
@@ -1523,12 +1484,9 @@ void Matrix<float>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<float>& X) con
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("TRSM FLOPS", _n*_n*X.width());
-        perf_log->log_total("TRSM TIME", end - start);
-        perf_log->log_total("TRSM BYTES", sizeof(float) * (_n*_n/2 + 2*_n*X.width()));
-    }
+    PerfLog::get().log_total("TRSM FLOPS", _n*_n*X.width());
+    PerfLog::get().log_total("TRSM TIME", end - start);
+    PerfLog::get().log_total("TRSM BYTES", sizeof(float) * (_n*_n/2 + 2*_n*X.width()));
 }
 
 template<>
@@ -1568,12 +1526,9 @@ void Matrix<float>::mmm(float alpha, const Matrix<float>& A, const Matrix<float>
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("MMM FLOPS", 2 * _m * _n * A._n);
-        perf_log->log_total("MMM TIME", end - start);
-        perf_log->log_total("MMM BYTES", sizeof(float) * (2*_m *_n + _m * A._n + A._n * _n)); 
-    }
+    PerfLog::get().log_total("MMM FLOPS", 2 * _m * _n * A._n);
+    PerfLog::get().log_total("MMM TIME", end - start);
+    PerfLog::get().log_total("MMM BYTES", sizeof(float) * (2*_m *_n + _m * A._n + A._n * _n)); 
 }
 
 template<>
@@ -1617,11 +1572,8 @@ void Matrix<float>::qr(Vector<float>& t)
     }
 
     end = rdtsc();
-
-    if(perf_log) {
-        perf_log->log_total("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
-        perf_log->log_total("QR TIME", end - start);
-    }
+    PerfLog::get().log_total("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
+    PerfLog::get().log_total("QR TIME", end - start);
 }
 
 
@@ -1653,10 +1605,7 @@ void Matrix<float>::tpqr(Matrix<float>& B, Matrix<float>& T, int64_t l_in, int64
 
     end = rdtsc();
 
-    if(perf_log) {
-//        perf_log->log_total("TPQR FLOPS", 2*_m(_n*_n - 2*_n/3));
-        perf_log->log_total("TPQR TIME", end - start);
-    }
+    PerfLog::get().log_total("TPQR TIME", end - start);
 }
 
 template<>
@@ -1699,11 +1648,8 @@ void Matrix<float>::apply_tpq(Matrix<float>& A, Matrix<float>& B, const Matrix<f
 
     end = rdtsc();
 
-    if(perf_log) {
-        assert(l == 0); //TODO: Flop count is unknown when l == 0
-        perf_log->log_total("APPLY TPQR FLOPS", k*k*n + 4*m*k);
-        perf_log->log_total("APPLY TPQR TIME", end - start);
-    }
+    PerfLog::get().log_total("APPLY TPQR FLOPS", k*k*n + 4*m*k);
+    PerfLog::get().log_total("APPLY TPQR TIME", end - start);
 }
 
 #endif

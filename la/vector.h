@@ -3,8 +3,6 @@
 
 #include <assert.h>
 #include "mkl.h"
-#include "../perf_log.h"
-#include "../perf/perf.h"
 
 template<class DT> class Matrix;
 
@@ -19,14 +17,11 @@ public:
     DT * _values;
     int64_t _len;
     int64_t _stride;
-
-    PerfLog* perf_log;
-
     int64_t _base_len;
     bool _mem_manage;
 
 //public:
-    Vector(int64_t s) : _len(s), _base_len(s), _stride(1), _mem_manage(true), perf_log(NULL)
+    Vector(int64_t s) : _len(s), _base_len(s), _stride(1), _mem_manage(true)
     {
         auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
         if(ret != 0){
@@ -36,7 +31,7 @@ public:
     }
 
     Vector(DT* values, int64_t len, int64_t base_len, int64_t stride, bool mem_manage) :
-        _values(values), _len(len), _base_len(base_len), _stride(stride), _mem_manage(mem_manage), perf_log(NULL)
+        _values(values), _len(len), _base_len(base_len), _stride(stride), _mem_manage(mem_manage)
     {
     }
 
@@ -153,17 +148,9 @@ public:
 
     DT sum() const
     {
-        int64_t start = rdtsc();
-
         DT sum = 0.0;
         for(int i = 0; i < _len; i++)
             sum += _values[i*_stride];
-
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-            perf_log->log_total("VECTOR FLOPS", _len);
-            perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
-        }
 
         return sum;
     }
@@ -258,22 +245,12 @@ public:
 
     void scale(const DT alpha)
     {
-        int64_t start = rdtsc();
-
         for(int i = 0; i < _len; i++) {
             (*this)(i) *= alpha;
-        }
-
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-            perf_log->log_total("VECTOR BYTES", 2*sizeof(DT)*_len);
-            perf_log->log_total("VECTOR FLOPS", _len);
         }
     }
 
     DT house_gen() {
-        int64_t start = rdtsc();
-
         DT chi1 = (*this)(0);
         DT nrm_x2_sqr = 0.0;
         
@@ -285,10 +262,6 @@ public:
         double tau = 0.5;
         if(nrm_x2_sqr == 0) {
             (*this)(0) = -chi1;
-            if(perf_log) {
-                perf_log->log_total("VECTOR BYTES", sizeof(DT)*_len);
-                perf_log->log_total("VECTOR FLOPS", 2*_len);
-            }
         } else {
             DT alpha = -sgn(chi1) * nrm_x;
             DT mult = 1.0 / (chi1 - alpha);
@@ -299,16 +272,8 @@ public:
 
             tau = 1.0 /  (0.5 + 0.5 * nrm_x2_sqr * mult * mult);
             (*this)(0) = alpha;
-
-            if(perf_log) {
-                perf_log->log_total("VECTOR FLOPS", 3*_len);
-                perf_log->log_total("VECTOR BYTES", 3*sizeof(DT)*_len);
-            }
         }
 
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        }
         return tau;
     }
 
@@ -317,8 +282,6 @@ public:
     //v[0] is implicitly 1.
     void house_apply(double tau, Vector<DT>& x) const 
     {
-        int64_t start = rdtsc();
-
         //First perform v'*x
         DT vt_x = x(0);
         for(int i = 1; i < _len; i++) {
@@ -330,18 +293,10 @@ public:
         for(int i = 1; i < _len, i++) {
             x(i) -= alpha * (*this)(i);
         }
-
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-            perf_log->log_total("VECTOR FLOPS", 4*_len);
-            perf_log->log_total("VECTOR BYTES", 3*sizeof(DT)*_len);
-        }
     }
 
     inline void house_apply(DT tau, Matrix<DT>& X) const 
     {
-        int64_t start = rdtsc();
-
         _Pragma("omp parallel for")
         for(int j = 0; j < X.width(); j++) {
             //First perform v'*x
@@ -355,12 +310,6 @@ public:
             for(int i = 1; i < _len; i++) {
                 X(i,j) -= alpha * (*this)(i);
             }
-        }
-
-        if(perf_log) {
-            perf_log->log_total("VECTOR TIME", rdtsc() - start);
-            perf_log->log_total("VECTOR FLOPS", 4*_len * X.width());
-            perf_log->log_total("VECTOR BYTES", sizeof(DT)*(_len + 2*X.width() * X.height()));
         }
     }
 
@@ -376,83 +325,34 @@ public:
 template<>
 inline double Vector<double>::norm2() const
 {
-    int64_t start = rdtsc();
-
     double nrm = cblas_dnrm2( _len, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 2*_len);
-        perf_log->log_total("VECTOR BYTES", sizeof(double)*_len);
-    }
-
     return nrm;
 }
 template<>
 inline double Vector<double>::dot(const Vector<double>& other) const
 {
-    int64_t start = rdtsc();
-
     double alpha = cblas_ddot( _len, _values, _stride, other._values, other._stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 2*_len);
-        perf_log->log_total("VECTOR BYTES", sizeof(double)*_len);
-    }
-
     return alpha;
 }
 template<>
 inline void Vector<double>::scale(const double alpha)
 {
-    int64_t start = rdtsc();
-
     cblas_dscal(_len, alpha, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", _len);
-        perf_log->log_total("VECTOR BYTES", 2*sizeof(double)*_len);
-    }
 }
 template<>
 inline void Vector<double>::axpy(const double alpha, const Vector<double>& other)
 {
-    int64_t start = rdtsc();
-
     cblas_daxpy(_len, alpha, other._values, other._stride, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 2*_len);
-        perf_log->log_total("VECTOR BYTES", 3*sizeof(double)*_len);
-    }
 }
 template<>
 inline void Vector<double>::axpby(const double alpha, const Vector<double>& other, const double beta)
 {
-    int64_t start = rdtsc();
-
     cblas_daxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 3*_len);
-        perf_log->log_total("VECTOR BYTES", 3*sizeof(double)*_len);
-    }
 }
 
 template<>
 void Vector<double>::copy(const Vector<double>& from) {
-    int64_t start = rdtsc();
-
     cblas_dcopy(_len, from._values, from._stride, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR BYTES", 2*sizeof(double)*_len);
-    }
 }
 
 //
@@ -461,83 +361,34 @@ void Vector<double>::copy(const Vector<double>& from) {
 template<>
 inline float Vector<float>::norm2() const
 {
-    int64_t start = rdtsc();
-
     float nrm = cblas_snrm2( _len, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 2*_len);
-        perf_log->log_total("VECTOR BYTES", sizeof(float)*_len);
-    }
-
     return nrm;
 }
 template<>
 inline float Vector<float>::dot(const Vector<float>& other) const
 {
-    int64_t start = rdtsc();
-
     float alpha = cblas_sdot( _len, _values, _stride, other._values, other._stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 2*_len);
-        perf_log->log_total("VECTOR BYTES", sizeof(float)*_len);
-    }
-
     return alpha;
 }
 template<>
 inline void Vector<float>::scale(const float alpha)
 {
-    int64_t start = rdtsc();
-
     cblas_sscal(_len, alpha, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", _len);
-        perf_log->log_total("VECTOR BYTES", 2*sizeof(float)*_len);
-    }
 }
 template<>
 inline void Vector<float>::axpy(const float alpha, const Vector<float>& other)
 {
-    int64_t start = rdtsc();
-
     cblas_saxpy(_len, alpha, other._values, other._stride, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 2*_len);
-        perf_log->log_total("VECTOR BYTES", 3*sizeof(float)*_len);
-    }
 }
 template<>
 inline void Vector<float>::axpby(const float alpha, const Vector<float>& other, const float beta)
 {
-    int64_t start = rdtsc();
-
     cblas_saxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR FLOPS", 3*_len);
-        perf_log->log_total("VECTOR BYTES", 3*sizeof(float)*_len);
-    }
 }
 
 template<>
 void Vector<float>::copy(const Vector<float>& from) {
-    int64_t start = rdtsc();
-
     cblas_scopy(_len, from._values, from._stride, _values, _stride);
-
-    if(perf_log) {
-        perf_log->log_total("VECTOR TIME", rdtsc() - start);
-        perf_log->log_total("VECTOR BYTES", 2*sizeof(float)*_len);
-    }
 }
 
 #endif

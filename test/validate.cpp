@@ -120,8 +120,7 @@ void val_brute_force(std::string name)
         //Create random problem
         F problem(n);
         problem.initialize_default();
-        MinNormPoint<DT> mnp;
-        auto A = mnp.minimize(problem, 1e-5, 1e-5, false, NULL);
+        auto A = mnp(problem, 1e-5, 1e-5);
         DT mnp_sol = problem.eval(A);
         
         std::vector<bool> empty(n);
@@ -146,7 +145,7 @@ void val_gains(std::string name)
     int64_t inc = 4; 
 
     std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating " << name << " Marginal Gains" << std::endl;
+    std::cout << "Validating Consistency " << name << " Marginal Gains" << std::endl;
     std::cout << "===========================================================" << std::endl;
     int w = 18;
     std::cout << std::setw(w) << "n";
@@ -158,7 +157,7 @@ void val_gains(std::string name)
 
         Vector<DT> p1(n);
         Vector<DT> p2(n);
-        
+       
         std::vector<int64_t> perm(n);
         for(int64_t i = 0; i < n; i++) perm[i] = i;
         scramble(perm);
@@ -208,7 +207,7 @@ void val_mincut_greedy_eval()
         Vector<double> x(n);
         x.fill_rand();
 
-        double val1 = prob.polyhedron_greedy_eval(-1.0, x, p, NULL);
+        double val1 = prob.polyhedron_greedy_ascending(x, p);
 
         std::vector<bool> A(n);
         for(int64_t i = 0; i < n; i++) {

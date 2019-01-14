@@ -3,7 +3,6 @@
 
 #include "../la/vector.h"
 #include "../la/matrix.h"
-#include "../la/inc_qr_matrix.h"
 #include "../submodular.h"
 
 #define REALLOC_WS
@@ -33,7 +32,7 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
     //Initialize x, a, S
     Vector<DT> s0 = S.subcol(0);
     s0.fill_rand();
-    F.polyhedron_greedy(1.0, s0, x, NULL); 
+    F.polyhedron_greedy_decending(s0, x); 
     s0.copy(x);
     a(0) = 1.0;
     
@@ -58,7 +57,7 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
 #endif
         //Get s
         auto s = S_base.subcol(S.width());
-        DT F_curr = F.polyhedron_greedy_eval(-1.0, x, s, NULL);
+        DT F_curr = F.polyhedron_greedy_ascending(x, s);
         F_best = std::min(F_curr, F_best);
 
         //Test for termination
