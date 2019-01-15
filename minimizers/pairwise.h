@@ -4,7 +4,7 @@
 #include "../la/vector.h"
 #include "../la/matrix.h"
 #include "../la/inc_qr_matrix.h"
-#include "../submodular.h"
+#include "../set_fn/submodular.h"
 
 #define REALLOC_WS
 #define MAX_S_WIDTH

@@ -6,9 +6,13 @@
 
 #include "../la/vector.h"
 #include "../la/matrix.h"
+
+#include "../set_fn/submodular.h"
+#include "../set_fn/log_det.h"
+#include "../set_fn/graph_cut.h"
+
 #include "../perf/perf.h"
 #include "../util.h"
-#include "../submodular.h"
 
 void benchmark_gemm()
 {
@@ -254,4 +258,3 @@ void run_benchmark_suite()
     benchmark_mincut_gains();
     benchmark_logdet_gains();
 }
-

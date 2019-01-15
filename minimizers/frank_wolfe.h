@@ -1,5 +1,5 @@
 #include "../la/vector.h"
-#include "../submodular.h"
+#include "../set_fn/submodular.h"
 
 template<class DT>
 std::vector<bool> FrankWolfe(SubmodularFunction<DT>& F, DT eps)

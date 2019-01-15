@@ -4,7 +4,7 @@
 #include "../la/matrix.h"
 #include "../la/vector.h"
 #include "../la/inc_qr_matrix.h"
-#include "../submodular.h"
+#include "../set_fn/submodular.h"
 #include "../perf_log.h"
 
 //R is upper triangular

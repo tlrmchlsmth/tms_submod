@@ -1,5 +1,5 @@
 #include <iostream>
-#include "../submodular.h"
+#include "../set_fn/submodular.h"
 
 extern "C" {
     int func_fw     (int n, double sf(int *p, int j, int n), double *x);

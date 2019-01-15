@@ -4,7 +4,12 @@
 #include <vector>
 
 #include <random>
-#include "submodular.h"
+
+#include "set_fn/submodular.h"
+#include "set_fn/graph_cut.h"
+#include "set_fn/log_det.h"
+#include "set_fn/iwata_test.h"
+
 #include "minimizers/mnp.h"
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
