@@ -11,6 +11,7 @@
 #include "../set_fn/graph_cut.h"
 #include "../set_fn/log_det.h"
 #include "../set_fn/iwata_test.h"
+#include "../set_fn/scmm.h"
 
 #include "../util.h"
 
@@ -426,23 +427,29 @@ void run_validation_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     std::cout << "Running validation tests." << std::endl;
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
+    val_brute_force<SCMM<double, Sqrt<double>>, double>("SCMM");
+    val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM");
+    val_brute_force<SCMM<double, Log<double>>, double>("SCMM");
+    val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM");
+
     val_incremental_qr_remove_cols();
 
     //Validate consistency of gains vs eval
-    //val_gains<IwataTest<float>, float>("Iwata's Test Fn Float");
-    val_gains<IwataTest<double>, double>("Iwata's Test Fn Double");
-    val_gains<SlowLogDet<double>, double>("LogDet Double");
-//    val_gains<SlowLogDet<float>, float>("LogDet Float");
-    val_gains<MinCut<double>, double>("MinCut Double");
-//    val_gains<MinCut<float>, float>("MinCut Float");
+    val_gains<IwataTest<double>, double>("Iwata's Test Fn");
+    val_gains<LogDet<double>, double>("LogDet");
+    val_gains<MinCut<double>, double>("MinCut");
+    val_gains<SCMM<double, Log<double>>, double>("SCMM");
     val_mincut_greedy_eval();
+    
+    //Validate submodularity
+    val_submodularity<MinCut<double>>("MinCut");
+    val_submodularity<LogDet<double>>("Log Det");
+    val_submodularity<SCMM<double, Log<double>>>("SCMM");
 
     //Validate answer from mnp algorithm
-    val_brute_force<MinCut<double>, double>("MinCut Double");
-    val_brute_force<SlowLogDet<double>, double>("Log Det Double");
+    val_brute_force<MinCut<double>, double>("MinCut");
+    val_brute_force<LogDet<double>, double>("Log Det");
 
-    val_submodularity<MinCut<double>>("MinCut");
-    //val_submodularity<SlowLogDet<double>>("Log Det");
    
 #ifdef VALIDATE_LEMON
     val_mincut();
