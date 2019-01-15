@@ -461,9 +461,9 @@ extern int number_extreme_point;
 
 void test_versus_fujishige()
 {
-    int64_t start = 8;
+    int64_t start = 100;
     int64_t end = 10000;
-    int64_t inc = 8;
+    int64_t inc = 100;
     int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
