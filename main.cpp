@@ -11,6 +11,7 @@
 #include "set_fn/iwata_test.h"
 
 #include "minimizers/mnp.h"
+#include "minimizers/mnp2.h"
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
 #include "minimizers/pairwise.h"
@@ -527,6 +528,69 @@ void test_versus_fujishige()
     }
 }
 
+void test_versus_mnp2()
+{
+    int64_t start = 100;
+    int64_t end = 10000;
+    int64_t inc = 100;
+    int64_t n_reps = 10;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking min cut" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(2*fw) << "MNP1 cycles"; 
+    std::cout << std::setw(2*fw) << "MNP2 cycles"; 
+    std::cout << std::setw(fw) << "|A|"; 
+    std::cout << std::setw(2*fw) << "MNP1 F(A)"; 
+    std::cout << std::setw(2*fw) << "MNP2 F(A)"; 
+    std::cout << std::setw(2*fw) << "MNP1"; 
+    std::cout << std::setw(2*fw) << "MNP2"; 
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            std::cout << std::setw(fw) << n;
+            int64_t max_iter = 1e6;
+
+            //Initialize min norm point problem
+            MinCut<double> problem(n);
+            problem.WattsStrogatz(16, 0.25);
+
+            //MNP1
+            PerfLog::get().set_total("MAJOR CYCLES", 0);
+            cycles_count_start();
+            auto mnp1_A = mnp(problem, 1e-10, 1e-10);
+            double mnp1_seconds = (double) cycles_count_stop().time;
+            double mnp1_fa = problem.eval(mnp1_A);
+            std::cout << std::setw(2*fw) << PerfLog::get().get_total("MAJOR CYCLES"); 
+
+            //MNP2
+            PerfLog::get().set_total("MAJOR CYCLES", 0);
+            cycles_count_start();
+            auto mnp2_A = mnp2(problem, 1e-10, 1e-10);
+            double mnp2_seconds = (double) cycles_count_stop().time;
+            double mnp2_fa = problem.eval(mnp2_A);
+            std::cout << std::setw(2*fw) << PerfLog::get().get_total("MAJOR CYCLES"); 
+
+            int64_t cardinality = 0;
+            for(int i = 0; i < n; i++) {
+                if(mnp1_A[i]) cardinality++;
+            }
+            std::cout << std::setw(fw) << cardinality;
+            std::cout << std::setw(2*fw) << mnp1_fa;
+            std::cout << std::setw(2*fw) << mnp2_fa;
+            std::cout << std::setw(2*fw) << mnp1_seconds;
+            std::cout << std::setw(2*fw) << mnp2_seconds;
+            std::cout << std::endl;
+        }
+    }
+}
+
 template<class DT>
 void test_greedy_maximize()
 {
@@ -589,6 +653,7 @@ void test_greedy_maximize()
 
 int main() 
 {
+    test_versus_mnp2();
     run_validation_suite();
     test_versus_fujishige();
     exit(1);

@@ -39,7 +39,7 @@ public:
     MinusAXSqr(int64_t k) : _a(k) {
         std::random_device rd; 
         std::mt19937 gen{rd()};
-        std::uniform_real_distribution<> dist(0.0, 1.0);
+        std::uniform_real_distribution<> dist(0.0, .005);
         _a.fill_rand(gen, dist);
     }
     DT eval(DT x, int64_t j) {
@@ -64,7 +64,7 @@ public:
     {
         std::random_device rd; 
         std::mt19937 gen{rd()};
-        std::uniform_real_distribution<> dist(0.0, 1.0);
+        std::uniform_real_distribution<> dist(1.0, 5.0);
         _M.fill_rand(gen, dist);
 
         _normalization = 0.0;
@@ -79,7 +79,7 @@ public:
     {
         std::random_device rd; 
         std::mt19937 gen{rd()};
-        std::uniform_real_distribution<> dist(0.0, 1.0);
+        std::uniform_real_distribution<> dist(1.0, 5.0);
         _M.fill_rand(gen, dist);
 
         _normalization = 0.0;

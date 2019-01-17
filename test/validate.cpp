@@ -12,6 +12,7 @@
 #include "../set_fn/log_det.h"
 #include "../set_fn/iwata_test.h"
 #include "../set_fn/scmm.h"
+#include "../set_fn/sum_submodular.h"
 
 #include "../util.h"
 
@@ -132,11 +133,58 @@ void val_brute_force(std::string name)
         std::vector<bool> empty(n);
         std::fill(empty.begin(), empty.end(), 0);
         DT brute_sol = brute_force_rec(problem, empty, 0, n);
+        
+        int64_t a_cardinality = 0;
+        for(auto a : A) { if(a) a_cardinality++; }
 
         std::cout << std::setw(w) << n;
         std::cout << std::setw(w) << mnp_sol;
         std::cout << std::setw(w) << brute_sol;
-        std::cout << std::setw(w) << A.size();
+        std::cout << std::setw(w) << a_cardinality;
+        print_err(brute_sol - mnp_sol, w);
+        std::cout << std::endl;
+    }
+}
+
+template<class DT>
+void val_brute_force_sum_submodular()
+{
+    int64_t start = 2;
+    int64_t end = 16;
+    int64_t inc = start;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Sum Submodulars via Brute Force" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "mnp sol";
+    std::cout << std::setw(w) << "brute sol";
+    std::cout << std::setw(w) << "mnp |A|";
+    std::cout << std::setw(w) << "diff";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        //Create random problem
+        std::vector<std::unique_ptr<SubmodularFunction<DT>>> fns;
+        fns.emplace_back(new SCMM<DT, MinusAXSqr<DT>>(n));
+        fns.emplace_back(new SCMM<DT, Log<DT>>(n));
+        SumSubmodulars<DT> problem(n, std::move(fns));
+
+        //problem.initialize_default();
+        auto A = mnp(problem, 1e-5, 1e-5);
+        DT mnp_sol = problem.eval(A);
+        
+        std::vector<bool> empty(n);
+        std::fill(empty.begin(), empty.end(), 0);
+        DT brute_sol = brute_force_rec(problem, empty, 0, n);
+        
+        int64_t a_cardinality = 0;
+        for(auto a : A) { if(a) a_cardinality++; }
+
+        std::cout << std::setw(w) << n;
+        std::cout << std::setw(w) << mnp_sol;
+        std::cout << std::setw(w) << brute_sol;
+        std::cout << std::setw(w) << a_cardinality;
         print_err(brute_sol - mnp_sol, w);
         std::cout << std::endl;
     }
@@ -427,10 +475,12 @@ void run_validation_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
     std::cout << "Running validation tests." << std::endl;
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
-    val_brute_force<SCMM<double, Sqrt<double>>, double>("SCMM");
-    val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM");
-    val_brute_force<SCMM<double, Log<double>>, double>("SCMM");
-    val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM");
+
+    val_brute_force_sum_submodular<double>();
+    val_brute_force<SCMM<double, Sqrt<double>>, double>("SCMM with sqrt(x)");
+    val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
+    val_brute_force<SCMM<double, Log<double>>, double>("SCMM with log(x + 1.0)");
+    val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
 
     val_incremental_qr_remove_cols();
 
