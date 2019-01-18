@@ -34,22 +34,17 @@ public:
     // Constructors
     // Supports resizing, so n is the initial n
     IncQRMatrix(int64_t n) : _n(n), _base_n(n), _am_a(true), _am_upper_tri(true),
-        _a(Matrix<DT>(_n,_n)), _b(Matrix<DT>(_n,_n)), _ws(Matrix<DT>(NB, _n)), _T(NB, _n), _V(MAX_COLS_AT_ONCE, _n)
-    { }
-
-    IncQRMatrix(const IncQRMatrix<DT>& parent, int64_t diag_offset, int64_t nc) : 
-        _n(std::min(nc,_n - diag_offset)),
-        _base_n(parent._base_n),
-        _am_a(parent._am_a), _am_upper_tri(parent._am_upper_tri),
-        _a(parent._a.submatrix(diag_offset, diag_offset, _n, _n)),
-        _b(parent._b.submatrix(diag_offset, diag_offset, _n, _n)),
-        _ws(parent._ws.submatrix(0, 0, NB, _base_n)),
-        _T(parent._T.submatrix(0, 0, NB, _base_n)),
-        _V(parent._V.submatrix(0, 0, MAX_COLS_AT_ONCE, _base_n))
-
+        _a(Matrix<DT>(_n,_n)), _b(Matrix<DT>(_n,_n)), _ws(Matrix<DT>(2*NB, _n)), _T(2*NB, _n), _V(MAX_COLS_AT_ONCE, _n)
     {
-        assert(diag_offset < _n && "Matrix index out of bounds.");
+       _b.set_all(0.0); 
+       _a.set_all(0.0); 
     }
+
+    IncQRMatrix(int64_t n, int64_t base_n, bool am_upper_tri, bool am_a,
+            Matrix<DT> a, Matrix<DT> b, Matrix<DT> T, Matrix<DT> V, Matrix<DT> ws) :
+        _n(n), _base_n(base_n), _am_upper_tri(am_upper_tri), _am_a(am_a),
+        _a(a), _b(b), _T(T), _V(V), _ws(ws)
+    { }
 
     void transpose()
     {
@@ -112,27 +107,27 @@ public:
         }
     }
 
-    inline Matrix<DT> current_matrix() {
-        if( _am_a ) {
+    inline Matrix<DT>& current_matrix() {
+        if(_am_a) {
             assert(_a._m == _n);
             assert(_a._n == _n);
-            return _a.submatrix(0,0,_n,_n);
+            return &_a;
         } else {
             assert(_b._m == _n);
             assert(_b._n == _n);
-            return _b.submatrix(0,0,_n,_n);
+            return &_b;
         }
     }
 
     inline const Matrix<DT> current_matrix() const {
-        if( _am_a ) {
+        if(_am_a) {
             assert(_a._m == _n);
             assert(_a._n == _n);
-            return _a.submatrix(0,0,_n,_n);
+            return &_a;
         } else {
             assert(_b._m == _n);
             assert(_b._n == _n);
-            return _b.submatrix(0,0,_n,_n);
+            return &_b;
         }
     }
 
@@ -141,8 +136,19 @@ public:
     //
     inline IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc)
     {
-        return IncQRMatrix<DT>(*this, diag_start, nc);
+        assert(diag_start < _n && "Matrix index out of bounds.");
+        auto n = std::min(nc, _n - diag_start);
+
+        auto toret = IncQRMatrix(n, _base_n, _am_upper_tri, _am_a,
+            _a.submatrix(diag_start, diag_start, n, n), 
+            _b.submatrix(diag_start, diag_start, n, n), 
+            _T.submatrix(0, 0, _T.height(), _T.width()),
+            _V.submatrix(0, 0, _V.height(), _T.width()),
+            _ws.submatrix(0, 0, _ws.height(), _T.width()));
+            
+        return toret;
     }
+
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
         if(_am_a) {
@@ -178,8 +184,19 @@ public:
 
     inline const IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc) const
     {
-        return IncQRMatrix<DT>(this, diag_start, nc);
+        assert(diag_start < _n && "Matrix index out of bounds.");
+        auto n = std::min(nc, _n - diag_start);
+
+        auto toret = IncQRMatrix(n, _base_n, _am_upper_tri, _am_a,
+            _a.submatrix(diag_start, diag_start, n, n), 
+            _b.submatrix(diag_start, diag_start, n, n), 
+            _T.submatrix(0, 0, _T.height(), _T.width()),
+            _V.submatrix(0, 0, _V.height(), _T.width()),
+            _ws.submatrix(0, 0, _ws.height(), _T.width()));
+            
+        return toret;
     }
+
     inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
         if(_am_a) {

@@ -29,6 +29,8 @@ public:
     }
     virtual void initialize_default(){}
 
+    virtual ~SubmodularFunction() {}
+
     virtual DT eval(const std::vector<bool>& A) = 0;
 
     std::vector<bool> get_set() const {

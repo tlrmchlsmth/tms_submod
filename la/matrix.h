@@ -810,20 +810,21 @@ public:
             }
             
             #pragma omp parallel
-            #pragma omp single
+            #pragma omp single nowait
             {
                 for(int64_t i = 0; i < trap_n; i += task_size) {
                     int64_t block_m = std::min(task_size, trap_n - i);
                     int64_t block_begin = trap_begin + i;
 
-                    auto V1 = V.submatrix(0, block_begin, n_removed, block_m);
-                    auto T1 = T.submatrix(0, block_begin, T.height(), block_m);
 
                     //Factorization
                     #pragma omp task depend(inout: i)
                     {
+                        auto V1 = V.submatrix(0, block_begin, n_removed, block_m);
+                        auto T1 = T.submatrix(0, block_begin, nb, block_m);
+
                         auto R11 = dest.submatrix(block_begin, block_begin, block_m, block_m);
-                        auto ws1 = ws.submatrix(0, block_begin, ws.height(), block_m);
+                        auto ws1 = ws.submatrix(0, block_begin, nb, block_m);
                         R11.tpqr(V1, T1, 0, nb, ws1);
                     }
 
@@ -833,6 +834,9 @@ public:
                         
                         #pragma omp task depend(in:i) //depend(inout:j)
                         {
+                            auto V1 = V.submatrix(0, block_begin, n_removed, block_m);
+                            auto T1 = T.submatrix(0, block_begin, nb, block_m);
+
                             auto R12 = dest.submatrix(block_begin, j, block_m, block_n);
                             auto V2 = V.submatrix(0, j, n_removed, block_n);
                             auto ws2 = ws.submatrix(0, j, ws.height(), block_n);
@@ -1322,28 +1326,49 @@ void Matrix<float>::chol(char uplo)
 template<>
 void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws)
 {
+    int32_t m = B.height();
+    int32_t n = B.width();
+
     assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
     assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
     assert(_rs == 1 && "Only column major qr supported");
+    assert(T._rs == 1); assert(B._rs == 1);
 
-    int m = B.height();
-    int n = B.width();
-    int l = l_in;
-    int nb = std::min(B.width(), nb_in);
-    int lda = this->_cs;
-    int ldt = T._cs;
-    int ldb = B._cs;
-    int info;
+    int32_t l = l_in;
+    int32_t nb = std::min(n, (int32_t)nb_in);
+    int32_t info;
+
+/*    int64_t n_size = std::max(2*n, 2*m);
+    int64_t m_size = std::max(2*n, 2*m);
+    Matrix<double> A2(n_size, n_size);
+    Matrix<double> ws2(n_size, n_size);
+    Matrix<double> T2(n_size, n_size);
+    Matrix<double> B2(m_size, n_size);
+
+    int32_t ldt = T2._cs;
+
+    int32_t ldb = B2._cs;
+
+    int32_t lda = A2._cs;
+    auto A2_00 = A2.submatrix(0,0,n,n);
+    A2_00.copy(*this);
 
     int64_t start, end;
     start = rdtsc();
-
-    dtpqrt_(&m, &n, &l, &nb,
-            _values, &lda, B._values, &ldb, T._values, &ldt,
-            ws._values, &info);
-
-    end = rdtsc();
-    PerfLog::get().log_total("TPQR TIME", end - start);
+    auto B2_00 = B2.submatrix(0,0,m,n);
+    B2_00.copy(B);
+*/
+/*    dtpqrt_(&m, &n, &l, &nb,
+            A2._values, &lda, B2._values, &ldb, T2._values, &ldt,
+            ws2._values, &info);*/
+/*
+    B.copy(B2_00);
+    this->copy(A2_00);
+*/
+ //   end = rdtsc();
+ //   PerfLog::get().log_total("TPQR TIME", end - start);
+    LAPACKE_dtpqrt(LAPACK_COL_MAJOR, m, n, l, nb,
+            _values, this->_cs, B._values, B._cs, T._values, T._cs);
 }
 
 template<>

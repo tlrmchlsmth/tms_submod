@@ -52,7 +52,7 @@ public:
         DT* array;
         const int ret = posix_memalign((void **) &array, 4096, len * sizeof(DT));
         if (ret != 0) {
-            std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
+            std::cout << "Could not allocate memory for Vector. Exiting ..." << std::endl;
             exit(1);
         }
         
