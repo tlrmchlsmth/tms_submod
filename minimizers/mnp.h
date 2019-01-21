@@ -177,14 +177,15 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         major_cycles++;
     }
 
-    PerfLog::get().log_total("MAJOR CYCLES", major_cycles);
+    PerfLog::get().log_total("ITERATIONS", major_cycles);
     return A;
 }
 
 template<class DT>
 std::vector<bool> mnp(SubmodularFunction<DT>& F, DT eps, DT tolerance) {
     Vector<DT> wA(F.n);
-    wA.fill_rand();
+    for(int64_t i = 0; i < F.n; i++)
+        wA(i) = i;
     return mnp(F, wA, eps, tolerance);
 }
 

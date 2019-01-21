@@ -34,6 +34,8 @@ std::vector<bool> FrankWolfe(SubmodularFunction<DT>& F, DT eps)
         k++;
     }
 
+    PerfLog::get().log_total("ITERATIONS", k);
+
     //Return A, minimizer of F
     std::vector<bool> A(F.n);
     for(int64_t i = 0; i < F.n; i++){ A[i] = x(i) <= 0.0; }
@@ -77,6 +79,8 @@ std::vector<bool> FrankWolfeLineSearchGamma(SubmodularFunction<DT>& F, DT eps)
         duality_gap = std::abs(F_best - sum_x_lt_0);
         k++;
     }
+
+    PerfLog::get().log_total("ITERATIONS", k);
 
     //Return A, minimizer of F
     std::vector<bool> A(F.n);

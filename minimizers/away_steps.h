@@ -6,7 +6,7 @@
 #include "../set_fn/submodular.h"
 
 #define REALLOC_WS
-#define MAX_S_WIDTH
+//#define MAX_S_WIDTH
 
 template<class DT>
 std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
@@ -156,14 +156,19 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps)
             
             //Update x
             x.axpy(gamma, dA);
+
         }
+
 
         //Update duality gap
         DT sum_x_lt_0 = 0.0;
         for (int64_t i = 0; i < F.n; i++) { if(x(i) <= 0.0) sum_x_lt_0 += x(i); }
         duality_gap = std::abs(F_best - sum_x_lt_0);
         k++;
+        PerfLog::get().log_total("S WIDTH", S.width());
     }
+
+    PerfLog::get().log_total("ITERATIONS", k);
 
     //Return A, minimizer of F
     std::vector<bool> A(F.n);

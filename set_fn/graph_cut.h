@@ -128,13 +128,6 @@ private:
 
     void sanity_check()
     {
-/*        Matrix<double> sums(n+2, 5); sums.set_all(0.0);
-        Vector<double> sum_in_a = sums.subcol(1);
-        Vector<double> sum_in_b = sums.subcol(2);
-        Vector<double> sum_out_a= sums.subcol(3);
-        Vector<double> sum_out_b= sums.subcol(4);
-        for(int64_t i = 0; i < n+2; i++)
-            sums(i, 0) = i;*/
         Vector<double> sum_in_a(n+2); sum_in_a.set_all(0.0);
         Vector<double> sum_in_b(n+2); sum_in_b.set_all(0.0);
         Vector<double> sum_out_a(n+2); sum_out_a.set_all(0.0);

@@ -7,7 +7,7 @@
 #include "../set_fn/submodular.h"
 
 #define REALLOC_WS
-#define MAX_S_WIDTH
+//#define MAX_S_WIDTH
 
 template<class DT>
 std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
@@ -78,7 +78,6 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
         DT F_curr = F.polyhedron_greedy_ascending(x, s);
         F_best = std::min(F_curr, F_best);
 
-
         //Test for termination
         DT xtx_minus_xts = x.dot(x) - x.dot(s);
         if(xtx_minus_xts < 1e-5) break;
@@ -133,9 +132,11 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
         for (int64_t i = 0; i < F.n; i++) { if(x(i) < 0.0) sum_x_lt_0 += x(i); }
         duality_gap = std::abs(F_best - sum_x_lt_0);
         k++;
-        //if(k % 100 == 0)
-        //    std::cout << k << "\t" << duality_gap << "\t" << F_best << "\t" << sum_x_lt_0 << "\t" << xtx_minus_xts << "\t" << gamma << "\t" << alpha_v << "\t" << a.sum() << "\t" << F_best - answer << "\t" << x.norm2() << std::endl;
+
+        PerfLog::get().log_total("S WIDTH", S.width());
     }
+
+    PerfLog::get().log_total("ITERATIONS", k);
 
     //Return A, minimizer of F
     std::vector<bool> A(F.n);

@@ -1,17 +1,18 @@
-#ifndef TMS_SUBMOD_MNP2_H
-#define TMS_SUBMOD_MNP2_H
+#ifndef TMS_SUBMOD_MNP3_H
+#define TMS_SUBMOD_MNP3_H
 
 #include "../la/matrix.h"
 #include "../la/vector.h"
 #include "../la/inc_qr_matrix.h"
+#include "../la/list_matrix.h"
 #include "../set_fn/submodular.h"
 #include "../perf_log.h"
 
 //At the end, y is equal to the new value of x_hat
 //mu is a tmp vector with a length = m
 template<class DT>
-void mnp2_update_w(Vector<DT>& w, Vector<DT>& v_base, 
-        Matrix<DT>& S, IncQRMatrix<DT>& R, DT tolerance)
+void mnp3_update_w(Vector<DT>& w, Vector<DT>& v_base, 
+        ColListMatrix<DT>& S, IncQRMatrix<DT>& R, DT tolerance)
 {
     auto v = v_base.subvector(0, S.width());
 
@@ -70,7 +71,7 @@ void mnp2_update_w(Vector<DT>& w, Vector<DT>& v_base,
 }
 
 template<class DT>
-std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tolerance) 
+std::vector<bool> mnp3(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tolerance) 
 {
     DT F_best = std::numeric_limits<DT>::max();
     std::vector<bool> A(F.n);
@@ -83,15 +84,15 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
     w(0) = 1.0;
 
     //Initialize S and R.
-    Matrix<DT> S_base(F.n,F.n+1);
+    ColListMatrix<DT> S(F.n, F.n+1);
     IncQRMatrix<DT> R_base(F.n+1);
-    auto S = S_base.submatrix(0, 0, F.n, 1);
     auto R = R_base.submatrix(0, 1);
 
-    Vector<DT> s0 = S.subcol(0);
+    auto s0 = S.next_col();
     F.polyhedron_greedy_decending(wA, s0);
     R(0,0) = s0.norm2();
     DT pt_p_max = s0.dot(s0);
+    S.enlarge_width();
 
     int64_t major_cycles = 0;
     while(1) {
@@ -110,7 +111,7 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
         }
 
         // Get p_hat using the greedy algorithm
-        Vector<DT> p_hat = S_base.subcol(S.width());
+        auto p_hat = S.next_col();
         DT F_curr = F.polyhedron_greedy_ascending(x_hat, p_hat);
 
         if (F_curr < F_best) {
@@ -121,7 +122,7 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
         
         // Update R to account for modifying S.
         R.add_col_inc_qr(S, p_hat);
-        S.enlarge_n(1);
+        S.enlarge_width();
         w.enlarge(1);
         w(w.length()-1) = 0.0;
 
@@ -137,7 +138,7 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
         if( xt_p > xt_x - tolerance * pt_p_max || std::abs(F_best - sum_x_hat_lt_0) < eps) break;
 
         // Update x_hat
-        mnp2_update_w(w, v_base, S, R, tolerance);
+        mnp3_update_w(w, v_base, S, R, tolerance);
        
         major_cycles++;
         PerfLog::get().log_total("S WIDTH", S.width());
@@ -148,11 +149,11 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
 }
 
 template<class DT>
-std::vector<bool> mnp2(SubmodularFunction<DT>& F, DT eps, DT tolerance) {
+std::vector<bool> mnp3(SubmodularFunction<DT>& F, DT eps, DT tolerance) {
     Vector<DT> wA(F.n);
     for(int64_t i = 0; i < F.n; i++)
         wA(i) = i;
-    return mnp2(F, wA, eps, tolerance);
+    return mnp3(F, wA, eps, tolerance);
 }
 
 #endif
