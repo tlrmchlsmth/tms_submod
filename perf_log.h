@@ -7,17 +7,19 @@
 #include <iomanip>
 #include <iostream>
 
+#define LOG_FREQ 1
+
 class PerfTotal {
 public:
     int64_t total;
     int64_t count;
 
     PerfTotal() : total(0), count(0) { }
-    inline void log_total(int64_t x) {
+    inline void log(int64_t x) {
         total += x;
         count++;
     }
-    inline void set_total(int64_t x) {
+    inline void set(int64_t x) {
         total = x;
         count++;
     }
@@ -35,7 +37,7 @@ public:
     { 
         std::fill(buckets.begin(), buckets.end(), 0);
     }
-    inline void log_hist(double x) {
+    inline void log(double x) {
         int64_t bucket = (x - min) / bucket_size;
         bucket = std::min(bucket, (int64_t)buckets.size() - 1);
         buckets[bucket]++;
@@ -52,10 +54,24 @@ public:
     }
 };
 
+class PerfSequence {
+public:
+    std::vector<double> sequence;
+
+    PerfSequence() : sequence() { 
+        sequence.reserve(1e9);
+    }
+
+    inline void log(double x) {
+        sequence.push_back(x);
+    }
+};
+
 class PerfLog {
 public:
     std::map<std::string, PerfTotal> tot_classes;
     std::map<std::string, PerfHist> hist_classes;
+    std::map<std::string, PerfSequence> sequence_classes;
 
     static PerfLog& get() 
     {
@@ -66,15 +82,18 @@ public:
     void clear() {
         tot_classes.clear();
         hist_classes.clear();
+        sequence_classes.clear();
     }
 
+    //
+    // Total logger stuff
+    //
     void log_total(std::string s, int64_t x) {
-        tot_classes[s].log_total(x);
+        tot_classes[s].log(x);
     }
     void set_total(std::string s, int64_t x) {
-        tot_classes[s].set_total(x);
+        tot_classes[s].set(x);
     }
-
 
     int64_t get_total(std::string s) const {
         if(tot_classes.count(s) == 0)
@@ -88,21 +107,46 @@ public:
         return tot_classes.at(s).count;
     }
 
-
+    //
+    // Histogram logger stuff
+    //
     void add_histogram(std::string s, double min, double max, int num_buckets) {
         hist_classes.emplace(s,PerfHist(min, max, num_buckets));
     }
 
     void log_hist(std::string s, double x) {
-        hist_classes[s].log_hist(x);
+        hist_classes[s].log(x);
     }
 
-    PerfHist get_hist(std::string s) const {
+    const PerfHist get_hist(std::string s) const {
         if(hist_classes.count(s) == 0)
             return PerfHist();
 
         auto to_ret = hist_classes.at(s);
         return to_ret;
+    }
+
+    //
+    // Sequence Logger stuff
+    //
+    void add_sequence(std::string s) {
+        sequence_classes.emplace(s, PerfSequence());
+    }
+    void log_sequence(std::string s, double x) {
+        sequence_classes[s].log(x);
+    }
+    const std::vector<double>& get_sequence(std::string s) const {
+        return sequence_classes.at(s).sequence;
+    }
+    void print_sequence(std::string s) const {
+        std::cout << "=======" << std::endl;
+        std::cout << s << std::endl;
+        std::cout << "=======" << std::endl;
+        
+        auto to_print = sequence_classes.at(s).sequence;
+        for(auto a : to_print) {
+            std::cout << a << std::endl;
+        }
     }
 
 private:

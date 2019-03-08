@@ -1,6 +1,7 @@
 #ifndef TMS_SUBMOD_VECTOR_H
 #define TMS_SUBMOD_VECTOR_H
 
+#include <list>
 #include <assert.h>
 #include "mkl.h"
 
@@ -172,7 +173,6 @@ public:
                 index = i;
             }
         }
-
         return index;
     }
     int64_t index_of_min() const
@@ -182,6 +182,40 @@ public:
         for(int i = 1; i < _len; i++) {
             if(_values[i*_stride] < min) {
                 min = _values[i*_stride];
+                index = i;
+            }
+        }
+        return index;
+    }
+    DT abs_min() const
+    {
+        return std::abs(_values[index_of_abs_min()*_stride]);
+    }
+    DT abs_max() const
+    {
+        return std::abs(_values[index_of_abs_max()*_stride]);
+    }
+    int64_t index_of_abs_min() const
+    {
+        int64_t index = 0;
+        DT abs_min = _values[0*_stride];
+        for(int i = 1; i < _len; i++) {
+            if(std::abs(_values[i*_stride]) < abs_min) {
+                abs_min = std::abs(_values[i*_stride]);
+                index = i;
+            }
+        }
+
+        return index;
+    }
+
+    int64_t index_of_abs_max() const
+    {
+        int64_t index = 0;
+        DT abs_max = _values[0*_stride];
+        for(int i = 1; i < _len; i++) {
+            if(std::abs(_values[i*_stride]) > abs_max) {
+                abs_max = std::abs(_values[i*_stride]);
                 index = i;
             }
         }
@@ -204,7 +238,24 @@ public:
        _len += l_inc; 
     }
 
-    void remove(int64_t index) {
+    void remove_elems(std::list<int64_t> indices) {
+        int64_t n_removed = 1;
+        for(auto iter = indices.begin(); iter != indices.end(); iter++) {
+            int64_t block_begin = *iter - (n_removed - 1);
+            int64_t block_end = _len - n_removed;
+            if(std::next(iter,1) != indices.end()) {
+                block_end = *std::next(iter,1) - n_removed;
+            }
+
+            for(int64_t i = block_begin; i < block_end; i++) {
+                (*this)(i) = (*this)(i+n_removed);
+            }
+            n_removed++;
+        }
+        _len -= indices.size();
+    }
+
+    void remove_elem(int64_t index) {
         if(index != _len - 1) {
             Vector<DT> t(_len - index - 1);
             const auto a2 = subvector(index+1, _len - index - 1);

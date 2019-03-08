@@ -5,15 +5,22 @@
 #include "../la/matrix.h"
 #include "../la/inc_qr_matrix.h"
 #include "../set_fn/submodular.h"
+#include "../perf/perf.h"
 
 #define REALLOC_WS
-//#define MAX_S_WIDTH
+#define TIMEOUT 0.1 
 
 template<class DT>
-std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
+std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, int64_t pruning_factor)
 {
     int64_t k = 1;
-    int64_t max_away = 512;
+    int64_t max_away = pruning_factor;
+    if(pruning_factor == -1)
+        max_away = F.n; //Will get resized in this case
+
+    PerfLog::get().add_sequence("PW CUMMULATIVE TIME");
+    PerfLog::get().add_sequence("PW DUALITY");
+    int64_t initial_time = rdtsc();
 
     //Iterates
     Vector<DT> x(F.n);
@@ -30,7 +37,7 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
     
     //Initialize x, a, S
     Vector<DT> s0 = S.subcol(0);
-    s0.fill_rand();
+    s0.set_all(0.0);
     F.polyhedron_greedy_decending(s0, x); 
     s0.copy(x);
     a(0) = 1.0;
@@ -60,18 +67,18 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
         S.transpose(); S.mvm(1.0, x, 0.0, STx); S.transpose();
         int64_t v_index = STx.index_of_max();
 
-        #ifdef MAX_S_WIDTH
         //Get rid of minimum (don't keep track of it) 
         //We can do this instead of reallocating workspace
-        if(S.width()+1 >= S_base.width()) {
+        if(pruning_factor != -1 && S.width() >= pruning_factor) {
+            STx.axpy(1.0, a);
             int64_t min_index = STx.index_of_min();
+            //int64_t min_index = a.index_of_min();
             assert(min_index != v_index);
             S.remove_col(min_index);
-            a.remove(min_index);
+            a.remove_elem(min_index);
             if(v_index > min_index)
                 v_index--;
         }
-        #endif
 
         //Get s
         auto s = S_base.subcol(S.width());
@@ -121,7 +128,7 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
             a(v_index) -= gamma;
         } else {
             S.remove_col(v_index);
-            a.remove(v_index);
+            a.remove_elem(v_index);
         }
         
         //Update x
@@ -131,9 +138,14 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, DT answer)
         DT sum_x_lt_0 = 0.0;
         for (int64_t i = 0; i < F.n; i++) { if(x(i) < 0.0) sum_x_lt_0 += x(i); }
         duality_gap = std::abs(F_best - sum_x_lt_0);
-        k++;
 
         PerfLog::get().log_total("S WIDTH", S.width());
+        if(k % LOG_FREQ == 0) {
+            PerfLog::get().log_sequence("PW CUMMULATIVE TIME", rdtsc() - initial_time);
+            PerfLog::get().log_sequence("PW DUALITY", duality_gap);
+        }
+        if(rdtsc() - initial_time > TIMEOUT * 3.6e9) break;
+        k++;
     }
 
     PerfLog::get().log_total("ITERATIONS", k);

@@ -7,6 +7,13 @@
 #include "../set_fn/submodular.h"
 #include "../perf_log.h"
 
+/*
+ * Slightly more favorable version of MNP that keeps track of w instead of x,
+ * where x = Sw.
+ *
+ * Benefit comes from not having to do a solve during the case that Sw is not in conv(S)
+ */
+
 //At the end, y is equal to the new value of x_hat
 //mu is a tmp vector with a length = m
 template<class DT>
@@ -46,23 +53,23 @@ void mnp2_update_w(Vector<DT>& w, Vector<DT>& v_base,
         //
 
         //Determine which columns of S and R are useless
-        std::list<int64_t> toRemove;
+        std::list<int64_t> to_remove;
         int64_t j = 0;
         for(int64_t i = 0; i < S.width(); i++){
             if(w(i) <= tolerance){
-                toRemove.push_back(i);
+                to_remove.push_back(i);
             } else {
                 v(j) = w(i);
                 j++;
             }
         }
-        assert(toRemove.size() > 0); 
+        assert(to_remove.size() > 0); 
         
         //Remove unnecessary columns from S and fixup R so that S = QR for some Q
-        S.remove_cols(toRemove);
-        R.remove_cols_inc_qr(toRemove);
-        w.enlarge(-toRemove.size());
-        v.enlarge(-toRemove.size());
+        S.remove_cols(to_remove);
+        R.remove_cols_inc_qr(to_remove);
+        w.enlarge(-to_remove.size());
+        v.enlarge(-to_remove.size());
         w.copy(v);
     }
 
@@ -72,8 +79,12 @@ void mnp2_update_w(Vector<DT>& w, Vector<DT>& v_base,
 template<class DT>
 std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tolerance) 
 {
+    PerfLog::get().add_sequence("MNP CUMMULATIVE TIME");
+    PerfLog::get().add_sequence("MNP DUALITY");
+
     DT F_best = std::numeric_limits<DT>::max();
     std::vector<bool> A(F.n);
+
 
     Vector<DT> x_hat(F.n);
 
@@ -93,7 +104,8 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
     R(0,0) = s0.norm2();
     DT pt_p_max = s0.dot(s0);
 
-    int64_t major_cycles = 0;
+    int64_t k = 0;
+    int64_t initial_time = rdtsc();
     while(1) {
         assert(S.width() <= F.n);
         
@@ -130,20 +142,31 @@ std::vector<bool> mnp2(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tol
         for (int64_t i = 0; i < F.n; i++) {
             sum_x_hat_lt_0 += std::min(x_hat(i), 0.0);
         }
+        DT duality_gap = std::abs(F_best - sum_x_hat_lt_0);
 
         //Test to see if we are done
         DT xt_p = x_hat.dot(p_hat);
         pt_p_max = std::max(p_hat.dot(p_hat), pt_p_max);
-        if( xt_p > xt_x - tolerance * pt_p_max || std::abs(F_best - sum_x_hat_lt_0) < eps) break;
+        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps) {
+            PerfLog::get().log_sequence("MNP CUMMULATIVE TIME", rdtsc() - initial_time);
+            PerfLog::get().log_sequence("MNP DUALITY", duality_gap);
+            break;
+        }
+
 
         // Update x_hat
         mnp2_update_w(w, v_base, S, R, tolerance);
        
-        major_cycles++;
         PerfLog::get().log_total("S WIDTH", S.width());
+        if(k % LOG_FREQ == 0) {
+            PerfLog::get().log_sequence("MNP CUMMULATIVE TIME", rdtsc() - initial_time);
+            PerfLog::get().log_sequence("MNP DUALITY", duality_gap);
+        }
+        k++;
     }
 
-    PerfLog::get().log_total("ITERATIONS", major_cycles);
+    wA.copy(x_hat);
+    PerfLog::get().log_total("ITERATIONS", k);
     return A;
 }
 

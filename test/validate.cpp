@@ -13,6 +13,7 @@
 #include "../set_fn/iwata_test.h"
 #include "../set_fn/scmm.h"
 #include "../set_fn/sum_submodular.h"
+#include "../set_fn/coverage.h"
 
 #include "../util.h"
 

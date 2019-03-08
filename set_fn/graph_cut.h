@@ -25,8 +25,12 @@ public:
     std::vector<std::vector<Edge<DT>>> adj_out;
     int64_t n;
     DT baseline;
+    unsigned seed;
 
-    MinCut(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in), baseline(0.0) {}
+    MinCut(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in), baseline(0.0) {
+        std::random_device rd;
+        seed = rd();
+    }
     void initialize_default()
     {
         WattsStrogatz(16, 0.25);
@@ -61,12 +65,10 @@ private:
     }
 
     //Utility routine to randomly select source and sink nodes
-    void select_source_and_sink() 
+    void select_source_and_sink(std::mt19937 gen) 
     {
         //Select source and sink nodes randomly, but not the nodes at n or n+1,
         //so I don't have to handle the special cases
-        std::random_device rd;
-        std::mt19937 gen{rd()};
         std::uniform_int_distribution<int64_t> uniform_node(0, n-1);
 
         int64_t source = uniform_node(gen);
@@ -157,8 +159,7 @@ private:
 public: 
     void WattsStrogatz(int64_t k, double beta) 
     {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
+        std::mt19937 gen(seed);
         std::uniform_real_distribution<double> dist(0.1, 1.0);
         std::uniform_int_distribution<int64_t> uniform_node(0, n+1);
    
@@ -189,7 +190,7 @@ public:
                 this->connect_undirected(i, new_neighbor, dist(gen));         
             }
         }
-        this->select_source_and_sink();
+        this->select_source_and_sink(gen);
 
         //Establish baseline
         baseline = 0.0;
@@ -203,8 +204,7 @@ public:
     //Place vertices randomly on the unit square and connect if their distance is less than d
     void Geometric(double d) 
     {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
+        std::mt19937 gen(seed);
         std::uniform_real_distribution<double> dist(0.0, 1.0);
         std::uniform_real_distribution<double> weight_dist(0.1, 1.0);
 
@@ -226,7 +226,7 @@ public:
                     this->connect_undirected(i, j, weight_dist(gen));         
             }
         }
-        this->select_source_and_sink();
+        this->select_source_and_sink(gen);
 
         //Establish baseline
         baseline = 0.0;
