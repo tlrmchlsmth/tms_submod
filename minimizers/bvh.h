@@ -59,10 +59,20 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
         */
         
         //Compute u
+        Vector<DT> d(S.width());
+        auto d_linear = d.subvector(0, d.length()-1);
+        D.transposed().mvm(-2.0, x, 1.0, d_linear);
+
+        Matrix<DT> DT_D(D.width(), D.width());
+        DT_D.mmm(1.0, D.transposed(), D, 0.0); //should be syrk not mmm
+        DT_D.chol('U');
+        DT_D.transposed().trsv(d);
+        DT_D.trsv(d);
+
         Vector<DT> u(S.width());
         auto u_linear = u.subvector(0, u.length()-1);
         u_linear.copy(w_linear);
-        D.transposed().mvm(-2.0, x, 1.0, u_linear);
+        u.axpy(1.0, d);
         u(u.length()-1) = 1.0 - u_linear.sum();
 
         //Return to major cycle if u = w
@@ -413,7 +423,8 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         w(w.length()-1) = gamma;
 //       w(w.length()-1) = 0.0;
         assert(std::abs(1.0 - w.sum()) < tolerance);
-        bvh_update_w(w, x_hat, S, D, tolerance);
+       // bvh_update_w(w, x_hat, S, D, tolerance);
+        bvh_update_w_correction2(w, x_hat, S, D, tolerance);
 
         //Snap to zero
         if(x_hat.dot(x_hat) < tolerance)
