@@ -15,24 +15,6 @@ public:
 };
 
 template<class DT>
-class Log {
-public:
-    Log(int64_t k) {}
-    DT eval(DT x, int64_t j) {
-        return log(x + 1.0);
-    }
-};
-
-template<class DT>
-class Sqrt {
-public:
-    Sqrt(int64_t k) {}
-    DT eval(DT x, int64_t j) {
-        return sqrt(x);
-    }
-};
-
-template<class DT>
 class MinusAXSqr {
 public:
     Vector<DT> _a;

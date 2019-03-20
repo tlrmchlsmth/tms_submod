@@ -226,7 +226,6 @@ public:
         }
     }
 
-    //TODO: optimize maybe using mkl_?omatcopy
     void copy(const Matrix<DT>& other) 
     {
         assert(_m == other._m && _n == other._n);

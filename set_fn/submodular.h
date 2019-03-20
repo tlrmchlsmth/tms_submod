@@ -58,7 +58,6 @@ public:
         }
     }
 
-
     void polyhedron_greedy_decending(const Vector<DT>& x, Vector<DT>& p) 
     {
         std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) > x(b); } );

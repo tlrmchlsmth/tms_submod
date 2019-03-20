@@ -168,7 +168,7 @@ void val_brute_force_sum_submodular()
         //Create random problem
         std::vector<std::unique_ptr<SubmodularFunction<DT>>> fns;
         fns.emplace_back(new SCMM<DT, MinusAXSqr<DT>>(n));
-        fns.emplace_back(new SCMM<DT, Log<DT>>(n));
+        fns.emplace_back(new SCMM<DT, MinusAXSqr<DT>>(n));
         SumSubmodulars<DT> problem(n, std::move(fns));
 
         //problem.initialize_default();
@@ -478,9 +478,8 @@ void run_validation_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
 
     val_brute_force_sum_submodular<double>();
-    val_brute_force<SCMM<double, Sqrt<double>>, double>("SCMM with sqrt(x)");
+    //val_brute_force<SCMM<double, Sqrt<double>>, double>("SCMM with sqrt(x)");
     val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
-    val_brute_force<SCMM<double, Log<double>>, double>("SCMM with log(x + 1.0)");
     val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
 
     val_incremental_qr_remove_cols();
@@ -489,13 +488,13 @@ void run_validation_suite()
     val_gains<IwataTest<double>, double>("Iwata's Test Fn");
     val_gains<LogDet<double>, double>("LogDet");
     val_gains<MinCut<double>, double>("MinCut");
-    val_gains<SCMM<double, Log<double>>, double>("SCMM");
+    val_gains<SCMM<double, MinusAXSqr<double>>, double>("SCMM");
     val_mincut_greedy_eval();
     
     //Validate submodularity
     val_submodularity<MinCut<double>>("MinCut");
     val_submodularity<LogDet<double>>("Log Det");
-    val_submodularity<SCMM<double, Log<double>>>("SCMM");
+    val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");
 
     //Validate answer from mnp algorithm
     val_brute_force<MinCut<double>, double>("MinCut");

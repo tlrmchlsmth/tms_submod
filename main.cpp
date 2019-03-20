@@ -12,7 +12,6 @@
 #include "set_fn/coverage.h"
 
 #include "minimizers/mnp.h"
-#include "minimizers/mnp2.h"
 #include "minimizers/bvh.h"
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
@@ -186,7 +185,7 @@ void benchmark_mincut(DT eps, DT tol)
             
             //Time problem
             cycles_count_start();
-            auto A = mnp2(problem, wA, eps, tol);
+            auto A = mnp(problem, wA, eps, tol);
 
             double cycles = (double) cycles_count_stop().cycles;
             double seconds = (double) cycles_count_stop().time;
@@ -360,7 +359,7 @@ void frank_wolfe_wolfe_mincut()
             //MNP
             PerfLog::get().clear();
             cycles_count_start();
-            auto mnp_A = mnp2(problem, 1e-5, 1e-5);
+            auto mnp_A = mnp(problem, 1e-5, 1e-5);
             double mnp_fa = problem.eval(mnp_A);
             double cycles = (double) cycles_count_stop().cycles;
             double mnp_seconds = (double) cycles_count_stop().time;
@@ -417,10 +416,10 @@ void frank_wolfe_wolfe_mincut()
 template<class DT>
 void mnp_bvh()
 {
-    int64_t start = 4;
+    int64_t start = 64;
     int64_t end = 1000;
-    int64_t inc = 50;
-    int64_t n_reps = 10;
+    int64_t inc = 128;
+    int64_t n_reps = 3;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
@@ -434,6 +433,8 @@ void mnp_bvh()
     std::cout << std::setw(2*fw) << "BVH T";
     std::cout << std::setw(2*fw) << "MNP N";
     std::cout << std::setw(2*fw) << "BVH N";
+    std::cout << std::setw(2*fw) << "MNP C";
+    std::cout << std::setw(2*fw) << "BVH C";
     std::cout << std::setw(2*fw) << "MNP |S|";
     std::cout << std::setw(2*fw) << "BVH |S|";
     std::cout << std::endl;
@@ -451,21 +452,24 @@ void mnp_bvh()
             //MNP
             PerfLog::get().clear();
             cycles_count_start();
-            auto mnp_A = mnp2(problem, 1e-5, 1e-5);
+            auto mnp_A = mnp(problem, 1e-5, 1e-5);
             double mnp_fa = problem.eval(mnp_A);
             double cycles = (double) cycles_count_stop().cycles;
             double mnp_seconds = (double) cycles_count_stop().time;
             int64_t mnp_iterations = PerfLog::get().get_total("ITERATIONS");
+            int64_t mnp_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
             int64_t mnp_s_card = PerfLog::get().get_total("S WIDTH");
             
             //BVH
             PerfLog::get().clear();
             cycles_count_start();
-            auto bvh_A = bvh(problem, 1e-5, 1e-5);
+            Vector<double> w(n);
+            auto bvh_A = bvh_test(problem, 1e-5, 1e-5);
             double bvh_fa = problem.eval(bvh_A);
             cycles = (double) cycles_count_stop().cycles;
             double bvh_seconds = (double) cycles_count_stop().time;
             int64_t bvh_iterations = PerfLog::get().get_total("ITERATIONS");
+            int64_t bvh_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
             int64_t bvh_s_card = PerfLog::get().get_total("S WIDTH");
 
             int64_t cardinality = 0;
@@ -479,10 +483,11 @@ void mnp_bvh()
             std::cout << std::setw(2*fw) << bvh_seconds;
             std::cout << std::setw(2*fw) << mnp_iterations;
             std::cout << std::setw(2*fw) << bvh_iterations;
+            std::cout << std::setw(2*fw) << mnp_minor_cycles;
+            std::cout << std::setw(2*fw) << bvh_minor_cycles;
             std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
             std::cout << std::setw(2*fw) << (double) bvh_s_card / (double) bvh_iterations;
             std::cout << std::endl;
-            exit(1);
         }
     }
 }
@@ -503,7 +508,7 @@ void frank_wolfe_mincut_err_vs_time()
     problem.WattsStrogatz(16, 0.25);
 
     //Run everything once to warm it up
-    mnp2(problem, 1e-5, 1e-5);
+    mnp(problem, 1e-5, 1e-5);
     //FrankWolfe(problem, 1e-5);
     AwaySteps(problem, 1e-5, -1);
     Pairwise(problem, 1e-5, -1);
@@ -511,7 +516,7 @@ void frank_wolfe_mincut_err_vs_time()
     //MNP
     PerfLog::get().clear();
     std::cout << std::setw(fw) << "\"MNP T\"" << ", " << std::setw(fw) << "\"MNP D\"" << ", ";
-    mnp2(problem, 1e-5, 1e-5);
+    mnp(problem, 1e-5, 1e-5);
     dualities.emplace_back(PerfLog::get().get_sequence("MNP DUALITY"));
     times.emplace_back(PerfLog::get().get_sequence("MNP CUMMULATIVE TIME"));
        
@@ -611,7 +616,7 @@ void test_versus_fujishige()
             //MNP
             PerfLog::get().set_total("ITERATIONS", 0);
             cycles_count_start();
-            auto mnp_A = mnp2(problem, 1e-10, 1e-10);
+            auto mnp_A = mnp(problem, 1e-10, 1e-10);
             double mnp_seconds = (double) cycles_count_stop().time;
             double mnp_fa = problem.eval(mnp_A);
             std::cout << std::setw(2*fw) << PerfLog::get().get_total("ITERATIONS"); 
@@ -629,7 +634,7 @@ void test_versus_fujishige()
         }
     }
 }
-
+/*
 void test_versus_mnp2()
 {
     int64_t start = 500;
@@ -691,8 +696,8 @@ void test_versus_mnp2()
             std::cout << std::endl;
         }
     }
-
 }
+*/
 
 template<class DT>
 void test_greedy_maximize()
@@ -769,34 +774,42 @@ void mmm_lower_bounds()
     std::cout << std::setw(fw) << "Q";
     std::cout << std::setw(fw) << "Q_known";
     std::cout << std::endl;
-    for(int64_t N = 10; N < 35; N += 5) {
+    for(int64_t N = 4; N < 32; N += 4) {
         Coverage<double> cdag = build_mmma_coverage<double>(N,N,N);
+        cdag.alpha = 1.0;
+
         Vector<double> x(N*N*N);
         x.fill_rand();
 
-        //Find minimum norm base x
-        auto a = mnp2(cdag, x, 1e-14, 1e-14);
-
+        auto B = mnp(cdag, x, -1.0, 1e-14);
         //Get distinct values of x 
         std::vector<double> distinct_vals;
         for(int64_t i = 0; i < x.length(); i++){
             bool xi_distinct = true;
             for(auto v : distinct_vals) {
-                if(std::abs(x(i) - v) < 1e-10) 
+                if(std::abs(x(i) - v) < 1e-5) 
                     xi_distinct = false;
             }
             if(xi_distinct) {
                 distinct_vals.push_back(x(i));
             }
         }
+       
+       int card = 0; 
+        for(int i = 0; i < B.size(); i++){
+            if(B[i]) card++;
+        }
+        std::cout << "|B| = " << card << std::endl;
 
+
+        cdag.alpha = 0.0;
         std::sort(distinct_vals.begin(), distinct_vals.end());
         std::vector<bool> A(N*N*N, false);
         for(auto v : distinct_vals) {
             //Determine Av
             double T = 0; // Number of FMAs in the best segment
             for(int64_t i = 0; i < x.length(); i++) {
-                if(std::abs(x(i) - v) < 1e-10)
+                if((x(i) - v) < 1e-5)
                 { 
                     T++;
                     A[i] = true;
@@ -820,6 +833,8 @@ void mmm_lower_bounds()
             std::cout << std::setw(fw) << M;               //Cache Size
             std::cout << std::setw(fw) << Q;               //I/O lower bound
             std::cout << std::setw(fw) << Q_known;         //Previously known I/O lower bound
+            std::cout.precision(10);
+            std::cout << std::setw(fw) << v;               //Distinct Value
             std::cout << std::endl;
         }
     }
@@ -827,13 +842,19 @@ void mmm_lower_bounds()
 
 int main() 
 {
+    
+    //Test Simplicical Decomposition
     mnp_bvh<double>();
     exit(1);
     frank_wolfe_mincut_err_vs_time<double>();
     exit(1);
+
+    //Compare with Fujishige's implementation
     test_versus_fujishige();
     exit(1);
-    test_versus_mnp2();
+    
+    //Compare 2 formulations of MNP. mnp2 is superior to mnp
+//    test_versus_mnp2();
 
 
     benchmark_mincut<double>(1e-10, 1e-10);
@@ -841,8 +862,6 @@ int main()
     exit(1);
     frank_wolfe_wolfe_mincut<double>();
 
-
-    test_versus_mnp2();
 
     run_validation_suite();
 
@@ -854,4 +873,6 @@ int main()
 
     //Would be very fun if we could get lower bounds better than compulsory misses from this
     mmm_lower_bounds();
+    exit(1);
+
 }
