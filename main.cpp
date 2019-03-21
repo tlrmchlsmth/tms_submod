@@ -417,9 +417,9 @@ template<class DT>
 void mnp_bvh()
 {
     int64_t start = 64;
-    int64_t end = 1000;
-    int64_t inc = 128;
-    int64_t n_reps = 3;
+    int64_t end = 8000;
+    int64_t inc = 64;
+    int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
@@ -446,13 +446,14 @@ void mnp_bvh()
             int64_t max_iter = 1e6;
 
             //Initialize min norm point problem
-            MinCut<DT> problem(n);
-            problem.WattsStrogatz(16, 0.25);
+            LogDet<DT> problem(n);
+            //MinCut<DT> problem(n);
+            //problem.WattsStrogatz(16, 0.25);
 
             //MNP
             PerfLog::get().clear();
             cycles_count_start();
-            auto mnp_A = mnp(problem, 1e-5, 1e-5);
+            auto mnp_A = mnp(problem, 1e-10, 1e-10);
             double mnp_fa = problem.eval(mnp_A);
             double cycles = (double) cycles_count_stop().cycles;
             double mnp_seconds = (double) cycles_count_stop().time;
@@ -464,7 +465,7 @@ void mnp_bvh()
             PerfLog::get().clear();
             cycles_count_start();
             Vector<double> w(n);
-            auto bvh_A = bvh_test(problem, 1e-5, 1e-5);
+            auto bvh_A = bvh(problem, 1e-10, 1e-10);
             double bvh_fa = problem.eval(bvh_A);
             cycles = (double) cycles_count_stop().cycles;
             double bvh_seconds = (double) cycles_count_stop().time;
@@ -476,17 +477,29 @@ void mnp_bvh()
             for(int i = 0; i < n; i++) {
                 if(mnp_A[i]) cardinality++;
             }
-            std::cout << std::setw(fw) << n;
+            /*std::cout << std::setw(fw) << n;
             std::cout << std::setw(2*fw) << mnp_fa;
             std::cout << std::setw(2*fw) << bvh_fa;
-            std::cout << std::setw(2*fw) << mnp_seconds;
-            std::cout << std::setw(2*fw) << bvh_seconds;
-            std::cout << std::setw(2*fw) << mnp_iterations;
-            std::cout << std::setw(2*fw) << bvh_iterations;
-            std::cout << std::setw(2*fw) << mnp_minor_cycles;
-            std::cout << std::setw(2*fw) << bvh_minor_cycles;
+            std::cout << std::setw(2*fw) << mnp_seconds << ",";
+            std::cout << std::setw(2*fw) << bvh_seconds << ",";
+            std::cout << std::setw(2*fw) << mnp_iterations << ",";
+            std::cout << std::setw(2*fw) << bvh_iterations << ",";
+            std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
+            std::cout << std::setw(2*fw) << bvh_minor_cycles << ",";
             std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
             std::cout << std::setw(2*fw) << (double) bvh_s_card / (double) bvh_iterations;
+            std::cout << std::endl;*/
+            std::cout << n << ",";
+            std::cout << mnp_fa << ",";
+            std::cout << bvh_fa << ",";
+            std::cout << mnp_seconds << ",";
+            std::cout << bvh_seconds << ",";
+            std::cout << mnp_iterations << ",";
+            std::cout << bvh_iterations << ",";
+            std::cout << mnp_minor_cycles << ",";
+            std::cout << bvh_minor_cycles << ",";
+            std::cout << (double) mnp_s_card / (double) mnp_iterations << ",";
+            std::cout << (double) bvh_s_card / (double) bvh_iterations;
             std::cout << std::endl;
         }
     }

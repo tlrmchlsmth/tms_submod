@@ -20,12 +20,10 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
     // y_d = h
     // w_d = u
     // w_b = v
-    int iter = 0;
     int64_t minor_cycles = 0;
     while(1) {
         minor_cycles++;
         assert(w.min() > -tolerance);
-        iter++;
         //Compute:
         //  x = Sw
         //  g = D^T 2x
@@ -43,46 +41,41 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
 
         //Make sure S and D are right
         /*
-        double xtx = x.dot(x);
         Vector<DT> x2(x.length());
         D.mvm(1.0, w_linear, 0.0, x2);
         x2.axpy(1.0, s_k);
         std::cout << "xtx " << xtx << " x2tx2 " << x2.dot(x2) << std::endl;
         assert(std::abs(xtx - x2.dot(x2)) < tolerance);
-
-        //Make sure x is decreasing 
-        if(iter > 1){
-            std::cout << "Minor cycle xtx " << xtx << " last xtx " << last_xtx << std::endl;
+*/
+/*      
+        //Return if x isn't changing
+        double xtx = x.dot(x);
+        if(minor_cycles > 1){
+            if(std::abs(last_xtx - xtx) < tolerance) break;
             assert(last_xtx - xtx > -tolerance);
         }
         last_xtx = xtx;
-        */
+*/
         
         //Compute u
-        Vector<DT> d(S.width());
-        auto d_linear = d.subvector(0, d.length()-1);
-        D.transposed().mvm(-2.0, x, 1.0, d_linear);
+        Vector<DT> u(S.width());
+        auto u_linear = u.subvector(0, u.length()-1);
+        D.transposed().mvm(-2.0, x, 0.0, u_linear);
 
         Matrix<DT> DT_D(D.width(), D.width());
         DT_D.mmm(1.0, D.transposed(), D, 0.0); //should be syrk not mmm
         DT_D.chol('U');
-        DT_D.transposed().trsv(d);
-        DT_D.trsv(d);
-
-        Vector<DT> u(S.width());
-        auto u_linear = u.subvector(0, u.length()-1);
-        u_linear.copy(w_linear);
-        u.axpy(1.0, d);
-        u(u.length()-1) = 1.0 - u_linear.sum();
+        DT_D.transposed().trsv(CblasLower, u_linear);
+        DT_D.trsv(CblasUpper, u_linear);
 
         //Return to major cycle if u = w
-        Vector<DT> d(S.width());
-        d.copy(u);
-        d.axpy(-1.0, w);
-        if(d.abs_max() < tolerance) { 
+        if(u_linear.dot(u_linear) < tolerance) { 
+        //if(u_linear.abs_max() < tolerance) { 
             break;  //Or should it be 0.0 rather than tolerance?
         }
-        
+        u_linear.axpy(1.0, w_linear);
+        u(u.length()-1) = 1.0 - u_linear.sum();
+
         //Compute lambda
         //Need to pick best lambda that gives us a valid v.
         DT lambda = (w(0) - u(0)) / w(0);
@@ -165,7 +158,7 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
         if(S.width() == 1) {
             auto s0 = S.subcol(0);
             x.copy(s0);
-            std::cout << "Return C" << std::endl;
+//            std::cout << "Return C" << std::endl;
             break;
         }
 
@@ -189,12 +182,10 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
     // y_d = h
     // w_d = u
     // w_b = v
-    int iter = 0;
     int64_t minor_cycles = 0;
     while(1) {
         minor_cycles++;
         assert(w.min() > -tolerance);
-        iter++;
         //Compute:
         //  x = Sw
         //  g = D^T 2x
@@ -218,13 +209,6 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         x2.axpy(1.0, s_k);
         std::cout << "xtx " << xtx << " x2tx2 " << x2.dot(x2) << std::endl;
         assert(std::abs(xtx - x2.dot(x2)) < tolerance);
-
-        //Make sure x is decreasing 
-        if(iter > 1){
-            std::cout << "Minor cycle xtx " << xtx << " last xtx " << last_xtx << std::endl;
-            assert(last_xtx - xtx > -tolerance);
-        }
-        last_xtx = xtx;
         */
         
         //Compute u
@@ -484,7 +468,7 @@ std::vector<bool> bvh_test(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT
             auto w_linear = w.subvector(0, w.length()-1);
             w(w.length()-1) = 1.0 - w_linear.sum();
             D.enlarge_n(-1);
-        }
+        } //TODO: see if we can get rid of this (should be able to)
 
         // Get p_hat using the greedy algorithm
         Vector<DT> p_hat = S_base.subcol(S.width());
@@ -538,16 +522,16 @@ std::vector<bool> bvh_test(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT
         w_old.copy(w);
 
         //Take a FW step before doing simplicical decomposition minor cycles
-//        Vector<DT> d(F.n);
-//        d.copy(p_hat);
-//        d.axpy(-1.0, x_hat);
-//        DT gamma = std::min(std::max(-x_hat.dot(d) / d.dot(d), 0.0), .5);
-//        w.scale(1.0 - gamma);
-//        w(w.length()-1) = gamma;
-        w(w.length()-1) = 0.0;
+        Vector<DT> d(F.n);
+        d.copy(p_hat);
+        d.axpy(-1.0, x_hat);
+        DT gamma = std::min(std::max(-x_hat.dot(d) / d.dot(d), 0.0), .5);
+        w.scale(1.0 - gamma);
+        w(w.length()-1) = gamma;
+//        w(w.length()-1) = 0.0;
         
         //Do simplicical decomposition minor cycles
-        bvh_update_w(w, x_hat, S, D, tolerance); 
+        bvh_update_w_correction2(w, x_hat, S, D, tolerance); 
 
         //Do MNP minor cycles
         mnp_update_w(w_old, v, S_old, R, tolerance); 
@@ -556,10 +540,13 @@ std::vector<bool> bvh_test(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT
         Vector<DT> x_mnp(F.n);
         S_old.mvm(1.0, w_old, 0.0, x_mnp);
         std::cout << std::setw(8) << k << std::setw(8) <<  S.width() << std::setw(8) << S_old.width() << " bvh xTx " << std::setw(8) << x_hat.dot(x_hat) << " mnp xTx " << std::setw(8) << x_mnp.dot(x_mnp);
-        if(x_hat.dot(x_hat) < x_mnp.dot(x_mnp) - tolerance)
+        std::cout << " Gap " << std::setw(8) << duality_gap;
+        if(x_hat.dot(x_hat) < x_mnp.dot(x_mnp) - 1e-5)
            std::cout << "\tGood!";
+        else if (x_hat.dot(x_hat) > x_mnp.dot(x_mnp) + 1e-5)
+           std::cout << "\tBad!";
         std::cout << std::endl;
-        assert(x_hat.dot(x_hat) <= x_mnp.dot(x_mnp) + tolerance);
+        //assert(x_hat.dot(x_hat) <= x_mnp.dot(x_mnp) + tolerance);
 
         //Snap to zero
         if(x_hat.dot(x_hat) < tolerance)
