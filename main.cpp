@@ -144,82 +144,6 @@ void benchmark_logdet(DT eps, DT tol)
     }
 }
 
-template<class DT>
-void benchmark_mincut(DT eps, DT tol)
-{
-    int64_t start = 8000;
-    int64_t end = 8000;
-    int64_t inc = 2;
-    int64_t n_reps = 10;
-
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Benchmarking min cut" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(fw) << "|A|"; 
-    std::cout << std::setw(2*fw) << "seconds";
-    std::cout << std::setw(2*fw) <<  "major";
-    std::cout << std::setw(2*fw) <<  "minor";
-    std::cout << std::setw(2*fw) <<  "add col %";
-    std::cout << std::setw(2*fw) <<  "del col %";
-    std::cout << std::setw(2*fw) <<  "del col qr %";
-    std::cout << std::setw(2*fw) <<  "greedy %";
-    std::cout << std::setw(2*fw) <<  "total %";
-    std::cout << std::endl;
-
-    for(int64_t i = start; i <= end; i *= inc) {
-        int64_t n = i;
-
-        for(int64_t r = 0; r < n_reps; r++) {
-            int64_t max_iter = 1e6;
-            PerfLog::get().clear();
-
-            //Initialize min norm point problem
-            MinCut<DT> problem(n);
-            problem.WattsStrogatz(16, 0.25);
-
-            //Initial condition    
-            Vector<DT> wA(n);
-            wA.fill_rand();
-            
-            //Time problem
-            cycles_count_start();
-            auto A = mnp(problem, wA, eps, tol);
-
-            double cycles = (double) cycles_count_stop().cycles;
-            double seconds = (double) cycles_count_stop().time;
-
-#ifdef PRINT_HIST
-            std::cout << "Num columns" << std::endl;
-            PerfLog::get().print_hist("NUM COLUMNS");
-            std::cout << std::endl;
-            std::cout << "Columns removed" << std::endl;
-            PerfLog::get().print_hist("COLUMNS REMOVED");
-#endif
-
-            int64_t cardinality = 0;
-            for(int i = 0; i < n; i++) {
-                if(A[i]) cardinality++;
-            }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(2*fw) << seconds;
-            std::cout << std::setw(2*fw) << PerfLog::get().get_count("MAJOR TIME");
-            std::cout << std::setw(2*fw) << PerfLog::get().get_count("MINOR TIME");
-            double total = 0.0;
-            for(auto p : { "ADD COL TIME", "REMOVE COLS TIME", "REMOVE COLS QR TIME", "GREEDY TIME"}) {
-                double percent = 100 * (double) PerfLog::get().get_total(p) / cycles;
-                total += percent;
-                std::cout << std::setw(2*fw) << percent;
-            }
-            std::cout << std::setw(2*fw) << total;
-
-            std::cout << std::endl;
-        }
-    }
-}
 
 template<class DT>
 void benchmark_iwata(DT eps, DT tol)
@@ -854,9 +778,58 @@ void mmm_lower_bounds()
     }
 }
 
+template<class DT>
+void test(DT eps, DT tol)
+{
+    int64_t start = 16;
+    int64_t end = 4096;
+    int64_t inc = start;
+    int64_t n_reps = 10;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Test" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(2*fw) << "f(A)"; 
+    std::cout << std::setw(fw) << "|A|"; 
+    std::cout << std::setw(2*fw) << "seconds";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i *= inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            int64_t max_iter = 1e6;
+
+            //Initialize min norm point problem
+            MinCut<DT> problem(n);
+            problem.WattsStrogatz(16, 0.25);
+
+            //Time problem
+            cycles_count_start();
+            auto A = mnp_order_k(problem, wA, eps, tol);
+
+            double cycles = (double) cycles_count_stop().cycles;
+            double seconds = (double) cycles_count_stop().time;
+
+            for(int i = 0; i < n; i++) {
+                if(A[i]) cardinality++;
+            }
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(2*fw) << problem.eval(A);
+            std::cout << std::setw(fw) << cardinality;
+            std::cout << std::setw(2*fw) << seconds;
+            std::cout << std::endl;
+        }
+    }
+}
+
+#include "mnp_order_k.h"
 int main() 
 {
-    
+    test<double>(1e-10, 1e-10);
     //Test Simplicical Decomposition
     mnp_bvh<double>();
     exit(1);
