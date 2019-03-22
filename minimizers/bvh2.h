@@ -92,10 +92,14 @@ void bvh2_update_w(Vector<DT>& w, Vector<DT>& x,
 
         //Remove columns from B
         std::list<int64_t> to_remove;
+        std::list<int64_t> to_remove_D;
         bool remove_s0 = w(0) < tolerance;
-        for(int64_t j = 0; j < w.length(); j++) {
-            if(w(j) < tolerance)
+        if(remove_s0) to_remove.push_back(0);
+        for(int64_t j = 1; j < w.length(); j++) {
+            if(w(j) < tolerance) {
                 to_remove.push_back(j);
+                to_remove_D.push_back(j-1);
+            }
         }
         assert(alpha < 1.0 - tolerance || to_remove.size() > 0);
         S.remove_cols(to_remove);
@@ -104,9 +108,9 @@ void bvh2_update_w(Vector<DT>& w, Vector<DT>& x,
             D.enlarge_n(-to_remove.size());
             R.enlarge_n(-to_remove.size());
             recompute_D_R(S, D, R);
-        } else {
-            D.remove_cols(to_remove);
-            R.remove_cols_inc_qr(to_remove);
+        } else if(to_remove.size() > 0){
+            D.remove_cols(to_remove_D);
+            R.remove_cols_inc_qr(to_remove_D);
         }
 
         if(S.width() == 1) {
