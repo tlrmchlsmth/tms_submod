@@ -8,8 +8,22 @@
 #include "../perf_log.h"
 
 template<class DT>
+void update_D(const Matrix<DT>& S, Matrix<DT>& D, Matrix<DT>& DT_D) {
+    auto s_k = S.subcol(S.width()-1);
+    for(int64_t j = 0; j < D.width(); j++) {
+        auto d_j = D.subcol(j);
+        auto s_j = S.subcol(j);
+        d_j.copy(s_j);
+        d_j.axpy(-1.0, s_k);
+    }
+
+    DT_D.mmm(1.0, D.transposed(), D, 0.0); //should be syrk not mmm
+    DT_D.chol('U');
+}
+
+template<class DT>
 void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
-        Matrix<DT>& S, Matrix<DT>& D, DT tolerance)
+        Matrix<DT>& S, Matrix<DT>& D, Matrix<DT>& DT_D, DT tolerance)
 {
     double last_xtx = 0;
     //
@@ -20,6 +34,7 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
     // y_d = h
     // w_d = u
     // w_b = v
+    update_D(S, D, DT_D);
     int64_t minor_cycles = 0;
     while(1) {
         minor_cycles++;
@@ -31,40 +46,10 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
         S.mvm(1.0, w, 0.0, x);
         auto w_linear = w.subvector(0, w.length()-1);
 
-        auto s_k = S.subcol(S.width()-1);
-        for(int64_t j = 0; j < D.width(); j++) {
-            auto d_j = D.subcol(j);
-            auto s_j = S.subcol(j);
-            d_j.copy(s_j);
-            d_j.axpy(-1.0, s_k);
-        }
-
-        //Make sure S and D are right
-        /*
-        Vector<DT> x2(x.length());
-        D.mvm(1.0, w_linear, 0.0, x2);
-        x2.axpy(1.0, s_k);
-        std::cout << "xtx " << xtx << " x2tx2 " << x2.dot(x2) << std::endl;
-        assert(std::abs(xtx - x2.dot(x2)) < tolerance);
-*/
-/*      
-        //Return if x isn't changing
-        double xtx = x.dot(x);
-        if(minor_cycles > 1){
-            if(std::abs(last_xtx - xtx) < tolerance) break;
-            assert(last_xtx - xtx > -tolerance);
-        }
-        last_xtx = xtx;
-*/
-        
         //Compute u
         Vector<DT> u(S.width());
         auto u_linear = u.subvector(0, u.length()-1);
         D.transposed().mvm(-2.0, x, 0.0, u_linear);
-
-        Matrix<DT> DT_D(D.width(), D.width());
-        DT_D.mmm(1.0, D.transposed(), D, 0.0); //should be syrk not mmm
-        DT_D.chol('U');
         DT_D.transposed().trsv(CblasLower, u_linear);
         DT_D.trsv(CblasUpper, u_linear);
 
@@ -99,20 +84,12 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
         Vector<DT> Dw (D.height());
         Vector<DT> Dv (D.height());
         auto v_linear = v.subvector(0, w.length()-1);
-//        D.mvm(1.0, w_linear, 0.0, Dw); //w is 1 too long...
-//        D.mvm(1.0, v_linear, 0.0, Dv);
         S.mvm(1.0, w, 0.0, Dw); //w is 1 too long...
         S.mvm(1.0, v, 0.0, Dv);
         Vector<DT> Dw_minus_Dv (D.height());
         Dw_minus_Dv.copy(Dw);
         Dw_minus_Dv.axpy(-1.0, Dv);
-/*
-        std::cout << "Dw^T Dw " << Dw.dot(Dw) << std::endl;
-        std::cout << "Dv^T Dv " << Dv.dot(Dv) << std::endl;
-        std::cout << "Dw^T Dv " << Dw.dot(Dv) << std::endl;
-        std::cout << "(Dw-Dv)^2 " << Dw_minus_Dv.dot(Dw_minus_Dv) << std::endl;
-*/
-        DT alpha = (Dw.dot(Dw) - Dw.dot(Dv)) / Dw_minus_Dv.dot(Dw_minus_Dv); //This gives a zero of f' along the line from Dw to Dv. Is this a local max or min?
+        DT alpha = (Dw.dot(Dw) - Dw.dot(Dv)) / Dw_minus_Dv.dot(Dw_minus_Dv);
         alpha = std::min(std::max(0.0, alpha), 1.0);
 
         //Test the three possibilities
@@ -128,19 +105,9 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
         std::cout << "alpha: " << alpha << std::endl;
         std::cout << "w " << p1.dot(p1) << " v " << p2.dot(p2) << " interp " << p3.dot(p3) << std::endl;
         assert(v.abs_min() < tolerance);*/
-
-        //assert(Dw.dot(Dw) + Dv.dot(Dv) < 2*Dw.dot(Dv)); //Assert that it is a local maximum
-
        
         if(alpha < 1.0 - tolerance) {
             w.axpby(alpha, v, 1.0 - alpha);
-
-/*            if(std::abs(alpha) <= tolerance){
-                w_linear = w.subvector(0, w.length()-1);
-                w(w.length()-1) = 1.0 - w_linear.sum();
-                S.mvm(1.0, w, 0.0, x);
-                return;
-            }*/
         } else {
             w.copy(v);
         }
@@ -155,10 +122,13 @@ void bvh_update_w_correction2(Vector<DT>& w, Vector<DT>& x,
         S.remove_cols(to_remove);
         w.remove_elems(to_remove);
         D.enlarge_n(-to_remove.size());
+        DT_D.enlarge_n(-to_remove.size());
+        DT_D.enlarge_m(-to_remove.size());
+        update_D(S, D, DT_D);
+
         if(S.width() == 1) {
             auto s0 = S.subcol(0);
             x.copy(s0);
-//            std::cout << "Return C" << std::endl;
             break;
         }
 
@@ -341,6 +311,9 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     Matrix<DT> D_base(F.n,F.n+1);
     auto D = D_base.submatrix(0, 0, F.n, 0);
 
+    Matrix<DT> DT_D_base(F.n+1,F.n+1);
+    auto DT_D = DT_D_base.submatrix(0, 0, 0, 0);
+
     Vector<DT> s0 = S.subcol(0);
     F.polyhedron_greedy_decending(wA, s0);
     DT pt_p_max = s0.dot(s0);
@@ -403,12 +376,12 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         //Update x
         S.enlarge_n(1);
         D.enlarge_n(1);
+        DT_D.enlarge_n(1);
+        DT_D.enlarge_m(1);
         w.enlarge(1);
         w(w.length()-1) = gamma;
-//       w(w.length()-1) = 0.0;
         assert(std::abs(1.0 - w.sum()) < tolerance);
-       // bvh_update_w(w, x_hat, S, D, tolerance);
-        bvh_update_w_correction2(w, x_hat, S, D, tolerance);
+        bvh_update_w_correction2(w, x_hat, S, D, DT_D, tolerance);
 
         //Snap to zero
         if(x_hat.dot(x_hat) < tolerance)
