@@ -13,6 +13,7 @@
 
 #include "minimizers/mnp.h"
 #include "minimizers/bvh.h"
+#include "minimizers/bvh2.h"
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
 #include "minimizers/pairwise.h"
@@ -416,9 +417,9 @@ void frank_wolfe_wolfe_mincut()
 template<class DT>
 void mnp_bvh()
 {
-    int64_t start = 64;
+    int64_t start = 4;
     int64_t end = 8000;
-    int64_t inc = 64;
+    int64_t inc = 4;
     int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
@@ -446,9 +447,9 @@ void mnp_bvh()
             int64_t max_iter = 1e6;
 
             //Initialize min norm point problem
-            LogDet<DT> problem(n);
-            //MinCut<DT> problem(n);
-            //problem.WattsStrogatz(16, 0.25);
+            //LogDet<DT> problem(n);
+            MinCut<DT> problem(n);
+            problem.WattsStrogatz(16, 0.25);
 
             //MNP
             PerfLog::get().clear();
@@ -465,7 +466,7 @@ void mnp_bvh()
             PerfLog::get().clear();
             cycles_count_start();
             Vector<double> w(n);
-            auto bvh_A = bvh(problem, 1e-10, 1e-10);
+            auto bvh_A = bvh2(problem, 1e-10, 1e-10);
             double bvh_fa = problem.eval(bvh_A);
             cycles = (double) cycles_count_stop().cycles;
             double bvh_seconds = (double) cycles_count_stop().time;

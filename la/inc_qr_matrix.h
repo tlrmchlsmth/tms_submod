@@ -112,11 +112,11 @@ public:
         if(_am_a) {
             assert(_a._m == _n);
             assert(_a._n == _n);
-            return &_a;
+            return _a;
         } else {
             assert(_b._m == _n);
             assert(_b._n == _n);
-            return &_b;
+            return _b;
         }
     }
 
@@ -124,11 +124,11 @@ public:
         if(_am_a) {
             assert(_a._m == _n);
             assert(_a._n == _n);
-            return &_a;
+            return _a;
         } else {
             assert(_b._m == _n);
             assert(_b._n == _n);
-            return &_b;
+            return _b;
         }
     }
 
