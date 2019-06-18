@@ -7,34 +7,6 @@
 #include "../set_fn/submodular.h"
 #include "../perf_log.h"
 
-//R is upper triangular
-template<class DT>
-DT check_STS_eq_RTR(const Matrix<DT>& S, const IncQRMatrix<DT>& R_in)
-{
-    assert(R_in._n > 0);
-    auto R = R_in.current_matrix();
-
-    Vector<DT> y(S.width());
-    y.fill_rand();
-
-    Vector<DT> Sy(S.height());
-    Vector<DT> STSy(S.width());
-    auto ST = S.transposed();
-    S.mvm(1.0, y, 0.0, Sy);
-    ST.mvm(1.0, Sy, 0.0, STSy);
-
-    Vector<DT> Ry(R.height());
-    Vector<DT> RTRy(R.width());
-    auto RT = R.transposed();
-    R.set_subdiagonal(0.0);
-
-    R.mvm(1.0, y, 0.0, Ry);
-    RT.mvm(1.0, Ry, 0.0, RTRy);
-
-    RTRy.axpy(-1.0, STSy);
-    return RTRy.norm2();
-}
-
 //At the end, y is equal to the new value of x_hat
 //mu is a tmp vector with a length = m
 //Returns: whether R and R_new should be swapped

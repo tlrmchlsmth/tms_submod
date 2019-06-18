@@ -51,10 +51,10 @@ public:
         std::fill(A.begin(), A.end(), 0);
         DT FA_old = 0.0;
         for(int i = 0; i < p.length(); i++) {
-            DT FA = gain(A, FA_old, perm[i]);
-            p(perm[i]) = FA - FA_old;
+            DT gain_i = gain(A, FA_old, perm[i]);
+            p(perm[i]) = gain_i;
             A[perm[i]] = 1;
-            FA_old = FA;
+            FA_old += gain_i;
         }
     }
 

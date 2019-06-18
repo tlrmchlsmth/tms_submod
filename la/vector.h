@@ -382,6 +382,7 @@ inline double Vector<double>::norm2() const
 template<>
 inline double Vector<double>::dot(const Vector<double>& other) const
 {
+    assert(_len == other.length());
     double alpha = cblas_ddot( _len, _values, _stride, other._values, other._stride);
     return alpha;
 }

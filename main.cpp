@@ -13,7 +13,11 @@
 
 #include "minimizers/mnp.h"
 #include "minimizers/bvh.h"
-#include "minimizers/bvh2.h"
+
+#include "minimizers/mnp_order_k.h"
+#include "minimizers/mnp_speculative.h"
+#include "minimizers/bvh_speculative.h"
+
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
 #include "minimizers/pairwise.h"
@@ -341,10 +345,10 @@ void frank_wolfe_wolfe_mincut()
 template<class DT>
 void mnp_bvh()
 {
-    int64_t start = 4;
-    int64_t end = 8000;
-    int64_t inc = 4;
-    int64_t n_reps = 10;
+    int64_t start = 1000;
+    int64_t end = 1000;
+    int64_t inc = 100;
+    int64_t n_reps = 1000;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
@@ -371,6 +375,84 @@ void mnp_bvh()
             int64_t max_iter = 1e6;
 
             //Initialize min norm point problem
+            LogDet<DT> problem(n);
+            //MinCut<DT> problem(n);
+            //problem.WattsStrogatz(16, 0.25);
+
+            //MNP
+            PerfLog::get().clear();
+            cycles_count_start();
+            auto mnp_A = mnp(problem, 1e-5, 1e-5);
+            double mnp_fa = problem.eval(mnp_A);
+            double cycles = (double) cycles_count_stop().cycles;
+            double mnp_seconds = (double) cycles_count_stop().time;
+            int64_t mnp_iterations = PerfLog::get().get_total("ITERATIONS");
+            int64_t mnp_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
+            int64_t mnp_s_card = PerfLog::get().get_total("S WIDTH");
+
+            //BVH
+            PerfLog::get().clear();
+            cycles_count_start();
+            auto bvh_A = bvh(problem, 1e-5, 1e-5);
+            double bvh_fa = problem.eval(bvh_A);
+            cycles = (double) cycles_count_stop().cycles;
+            double bvh_seconds = (double) cycles_count_stop().time;
+            int64_t bvh_iterations = PerfLog::get().get_total("ITERATIONS");
+            int64_t bvh_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
+            int64_t bvh_s_card = PerfLog::get().get_total("S WIDTH");
+            int64_t bvh_recompute_dr = PerfLog::get().get_total("RECOMPUTE DR");
+
+            int64_t cardinality = 0;
+            for(int i = 0; i < n; i++) {
+                if(mnp_A[i]) cardinality++;
+            }
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(2*fw) << mnp_fa;
+            std::cout << std::setw(2*fw) << bvh_fa;
+            std::cout << std::setw(2*fw) << mnp_seconds << ",";
+            std::cout << std::setw(2*fw) << bvh_seconds << ",";
+            std::cout << std::setw(2*fw) << mnp_iterations << ",";
+            std::cout << std::setw(2*fw) << bvh_iterations << ",";
+            std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
+            std::cout << std::setw(2*fw) << bvh_minor_cycles << ",";
+            std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
+            std::cout << std::setw(2*fw) << (double) bvh_s_card / (double) bvh_iterations;
+            std::cout << std::endl;
+        }
+    }
+}
+
+template<class DT>
+void mnp_order_k()
+{
+    int64_t start = 100;
+    int64_t end = 1000;
+    int64_t inc = 100;
+    int64_t n_reps = 20;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(2*fw) << "MNP F(A)";
+    std::cout << std::setw(2*fw) << "Spec F(A)";
+    std::cout << std::setw(2*fw) << "MNP T";
+    std::cout << std::setw(2*fw) << "Spec T";
+    std::cout << std::setw(2*fw) << "MNP N";
+    std::cout << std::setw(2*fw) << "Spec N";
+    std::cout << std::setw(2*fw) << "MNP C";
+    std::cout << std::setw(2*fw) << "Spec C";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            int64_t max_iter = 1e6;
+
+            //Initialize min norm point problem
             //LogDet<DT> problem(n);
             MinCut<DT> problem(n);
             problem.WattsStrogatz(16, 0.25);
@@ -385,47 +467,34 @@ void mnp_bvh()
             int64_t mnp_iterations = PerfLog::get().get_total("ITERATIONS");
             int64_t mnp_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
             int64_t mnp_s_card = PerfLog::get().get_total("S WIDTH");
-            
-            //BVH
+
+            //MNP
             PerfLog::get().clear();
             cycles_count_start();
-            Vector<double> w(n);
-            auto bvh_A = bvh2(problem, 1e-10, 1e-10);
-            double bvh_fa = problem.eval(bvh_A);
+            auto mnp_speculate_A = mnp_order_k(problem, 1e-10, 1e-10);
+            double mnp_speculate_fa = problem.eval(mnp_speculate_A);
+
             cycles = (double) cycles_count_stop().cycles;
-            double bvh_seconds = (double) cycles_count_stop().time;
-            int64_t bvh_iterations = PerfLog::get().get_total("ITERATIONS");
-            int64_t bvh_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
-            int64_t bvh_s_card = PerfLog::get().get_total("S WIDTH");
+            double mnp_speculate_seconds = (double) cycles_count_stop().time;
+            int64_t mnp_speculate_iterations = PerfLog::get().get_total("ITERATIONS");
+            int64_t mnp_speculate_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
+            int64_t mnp_speculate_s_card = PerfLog::get().get_total("S WIDTH");
 
             int64_t cardinality = 0;
             for(int i = 0; i < n; i++) {
                 if(mnp_A[i]) cardinality++;
             }
-            /*std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << n;
             std::cout << std::setw(2*fw) << mnp_fa;
-            std::cout << std::setw(2*fw) << bvh_fa;
+            std::cout << std::setw(2*fw) << mnp_speculate_fa;
             std::cout << std::setw(2*fw) << mnp_seconds << ",";
-            std::cout << std::setw(2*fw) << bvh_seconds << ",";
+            std::cout << std::setw(2*fw) << mnp_speculate_seconds << ",";
             std::cout << std::setw(2*fw) << mnp_iterations << ",";
-            std::cout << std::setw(2*fw) << bvh_iterations << ",";
+            std::cout << std::setw(2*fw) << mnp_speculate_iterations << ",";
             std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
-            std::cout << std::setw(2*fw) << bvh_minor_cycles << ",";
-            std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
-            std::cout << std::setw(2*fw) << (double) bvh_s_card / (double) bvh_iterations;
-            std::cout << std::endl;*/
-            std::cout << n << ",";
-            std::cout << mnp_fa << ",";
-            std::cout << bvh_fa << ",";
-            std::cout << mnp_seconds << ",";
-            std::cout << bvh_seconds << ",";
-            std::cout << mnp_iterations << ",";
-            std::cout << bvh_iterations << ",";
-            std::cout << mnp_minor_cycles << ",";
-            std::cout << bvh_minor_cycles << ",";
-            std::cout << (double) mnp_s_card / (double) mnp_iterations << ",";
-            std::cout << (double) bvh_s_card / (double) bvh_iterations;
+            std::cout << std::setw(2*fw) << mnp_speculate_minor_cycles << ",";
             std::cout << std::endl;
+
         }
     }
 }
@@ -572,70 +641,6 @@ void test_versus_fujishige()
         }
     }
 }
-/*
-void test_versus_mnp2()
-{
-    int64_t start = 500;
-    int64_t end = 10000;
-    int64_t inc = 500;
-    int64_t n_reps = 10;
-
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Benchmarking min cut" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(2*fw) << "MNP1 cycles"; 
-    std::cout << std::setw(2*fw) << "MNP2 cycles"; 
-    std::cout << std::setw(fw) << "|A|"; 
-    std::cout << std::setw(2*fw) << "MNP1 F(A)"; 
-    std::cout << std::setw(2*fw) << "MNP2 F(A)"; 
-    std::cout << std::setw(2*fw) << "MNP1"; 
-    std::cout << std::setw(2*fw) << "MNP2"; 
-    std::cout << std::endl;
-
-    for(int64_t i = start; i <= end; i += inc) {
-        int64_t n = i;
-
-        for(int64_t r = 0; r < n_reps; r++) {
-            std::cout << std::setw(fw) << n;
-            int64_t max_iter = 1e6;
-
-            //Initialize min norm point problem
-            MinCut<double> problem(n);
-            problem.WattsStrogatz(16, 0.25);
-
-            //MNP1
-            PerfLog::get().set_total("ITERATIONS", 0);
-            cycles_count_start();
-            auto mnp1_A = mnp(problem, 1e-10, 1e-10);
-            double mnp1_seconds = (double) cycles_count_stop().time;
-            double mnp1_fa = problem.eval(mnp1_A);
-            std::cout << std::setw(2*fw) << PerfLog::get().get_total("ITERATIONS"); 
-
-            //MNP2
-            PerfLog::get().set_total("ITERATIONS", 0);
-            cycles_count_start();
-            auto mnp2_A = mnp2(problem, 1e-10, 1e-10);
-            double mnp2_seconds = (double) cycles_count_stop().time;
-            double mnp2_fa = problem.eval(mnp2_A);
-            std::cout << std::setw(2*fw) << PerfLog::get().get_total("ITERATIONS"); 
-
-            int64_t cardinality = 0;
-            for(int i = 0; i < n; i++) {
-                if(mnp1_A[i]) cardinality++;
-            }
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(2*fw) << mnp1_fa;
-            std::cout << std::setw(2*fw) << mnp2_fa;
-            std::cout << std::setw(2*fw) << mnp1_seconds;
-            std::cout << std::setw(2*fw) << mnp2_seconds;
-            std::cout << std::endl;
-        }
-    }
-}
-*/
 
 template<class DT>
 void test_greedy_maximize()
@@ -778,58 +783,13 @@ void mmm_lower_bounds()
     }
 }
 
-template<class DT>
-void test(DT eps, DT tol)
-{
-    int64_t start = 16;
-    int64_t end = 4096;
-    int64_t inc = start;
-    int64_t n_reps = 10;
-
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Test" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(2*fw) << "f(A)"; 
-    std::cout << std::setw(fw) << "|A|"; 
-    std::cout << std::setw(2*fw) << "seconds";
-    std::cout << std::endl;
-
-    for(int64_t i = start; i <= end; i *= inc) {
-        int64_t n = i;
-
-        for(int64_t r = 0; r < n_reps; r++) {
-            int64_t max_iter = 1e6;
-
-            //Initialize min norm point problem
-            MinCut<DT> problem(n);
-            problem.WattsStrogatz(16, 0.25);
-
-            //Time problem
-            cycles_count_start();
-            auto A = mnp_order_k(problem, wA, eps, tol);
-
-            double cycles = (double) cycles_count_stop().cycles;
-            double seconds = (double) cycles_count_stop().time;
-
-            for(int i = 0; i < n; i++) {
-                if(A[i]) cardinality++;
-            }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(2*fw) << problem.eval(A);
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(2*fw) << seconds;
-            std::cout << std::endl;
-        }
-    }
-}
-
-#include "mnp_order_k.h"
 int main() 
 {
-    test<double>(1e-10, 1e-10);
+    run_validation_suite();
+
+//    mnp_order_k<double>();
+//    exit(1);
+
     //Test Simplicical Decomposition
     mnp_bvh<double>();
     exit(1);
@@ -840,17 +800,13 @@ int main()
     test_versus_fujishige();
     exit(1);
     
-    //Compare 2 formulations of MNP. mnp2 is superior to mnp
-//    test_versus_mnp2();
 
 
-    benchmark_mincut<double>(1e-10, 1e-10);
     mkl_free_buffers(); 
     exit(1);
     frank_wolfe_wolfe_mincut<double>();
 
 
-    run_validation_suite();
 
     test_greedy_maximize<double>();
     run_benchmark_suite();

@@ -22,7 +22,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
 {
     auto v = v_base.subvector(0, S.width());
     
-    int64_t minor_cycles;
+    int64_t minor_cycles = 0;
     while(1) {
         minor_cycles++;
 

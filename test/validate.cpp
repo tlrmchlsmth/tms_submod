@@ -14,6 +14,7 @@
 #include "../set_fn/scmm.h"
 #include "../set_fn/sum_submodular.h"
 #include "../set_fn/coverage.h"
+#include "../set_fn/deep.h"
 
 #include "../util.h"
 
@@ -94,8 +95,10 @@ void val_submodularity(std::string name)
         F problem(n);
         problem.initialize_default();
 
+
         std::vector<bool> empty(n);
         std::fill(empty.begin(), empty.end(), 0);
+        assert(std::abs(problem.eval(empty) - 0.0) < 1e-10); //Make sure submodular function is normalized
         bool valid = submodularity_rec(problem, empty, 0, n);
 
         std::cout << std::setw(w) << n;
@@ -128,7 +131,7 @@ void val_brute_force(std::string name)
         //Create random problem
         F problem(n);
         problem.initialize_default();
-        auto A = mnp(problem, 1e-5, 1e-5);
+        auto A = mnp(problem, 1e-10, 1e-10);
         DT mnp_sol = problem.eval(A);
         
         std::vector<bool> empty(n);
@@ -477,12 +480,12 @@ void run_validation_suite()
     std::cout << "Running validation tests." << std::endl;
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
 
-    val_brute_force_sum_submodular<double>();
-    //val_brute_force<SCMM<double, Sqrt<double>>, double>("SCMM with sqrt(x)");
-    val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
-    val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
 
-    val_incremental_qr_remove_cols();
+    //Validate submodularity
+    val_submodularity<MinCut<double>>("MinCut");
+    val_submodularity<LogDet<double>>("Log Det");
+    val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");
+    val_submodularity<Deep<double>>("Deep");
 
     //Validate consistency of gains vs eval
     val_gains<IwataTest<double>, double>("Iwata's Test Fn");
@@ -490,17 +493,19 @@ void run_validation_suite()
     val_gains<MinCut<double>, double>("MinCut");
     val_gains<SCMM<double, MinusAXSqr<double>>, double>("SCMM");
     val_mincut_greedy_eval();
-    
-    //Validate submodularity
-    val_submodularity<MinCut<double>>("MinCut");
-    val_submodularity<LogDet<double>>("Log Det");
-    val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");
 
-    //Validate answer from mnp algorithm
+    //Validate mnp solution using brute force
+    val_brute_force<Deep<double>, double>("Deep submodular function");
     val_brute_force<MinCut<double>, double>("MinCut");
     val_brute_force<LogDet<double>, double>("Log Det");
+    val_brute_force_sum_submodular<double>();
+    val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
+    val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
 
-   
+    //Validate incremental qr column removal
+    val_incremental_qr_remove_cols();
+
+    //Compare mincut mnp solution to that of an external library  
 #ifdef VALIDATE_LEMON
     val_mincut();
 #endif
