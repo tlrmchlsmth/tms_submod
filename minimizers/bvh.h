@@ -26,6 +26,39 @@ void recompute_D_R(const Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& R) {
 }
 
 template<class DT>
+void cleanup_cols(Vector<DT>& w, Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& R, DT tolerance) {
+    std::list<int64_t> to_remove;
+    std::list<int64_t> to_remove_D;
+    bool remove_s0 = w(0) < 1e-10;
+    if(remove_s0) to_remove.push_back(0);
+    for(int64_t j = 1; j < w.length(); j++) {
+        if(w(j) < 1e-10) {
+            to_remove.push_back(j);
+            to_remove_D.push_back(j-1);
+        }
+    }
+    if(S.width() >= S.height() - 1 && to_remove.size() == 0) {
+        auto w_linear = w.subvector(1, w.length()-1);
+        to_remove.push_back(w_linear.index_of_abs_min());
+        to_remove_D.push_back(w_linear.index_of_abs_min()-1);
+    }
+
+    S.remove_cols(to_remove);
+    w.remove_elems(to_remove);
+    //assert(alpha < 1.0 - tolerance || to_remove.size() > 0);
+    if(remove_s0) {
+        D.enlarge_n(-to_remove.size());
+        R.enlarge_n(-to_remove.size());
+        recompute_D_R(S, D, R);
+    } else if(to_remove.size() > 0){
+        D.remove_cols(to_remove_D);
+        R.remove_cols_inc_qr(to_remove_D);
+    }
+
+    w.scale(1.0 / w.sum());
+}
+
+template<class DT>
 void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& R, DT tolerance)
 {
@@ -50,7 +83,8 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         R.trsv(u_linear); //Now u is the direction we will be moving in.
 
         //Return to major cycle if u = 0
-        if(u_linear.dot(u_linear) < tolerance) { 
+        if(u_linear.dot(u_linear) < 1e-15) { 
+            cleanup_cols(w, S, D, R, tolerance);
             break;
         }
         u_linear.axpy(1.0, w_linear);
@@ -63,9 +97,10 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
             lambda = std::max(lambda, (w(i) - u(i)) / w(i));
         }
         lambda = 1.0 / lambda;
-
-        if(std::abs(lambda) < tolerance) {
+        
+        if(std::abs(lambda) < 1e-12) {
             S.mvm(1.0, w, 0.0, x);
+            cleanup_cols(w, S, D, R, tolerance);
             break;
         }
         Vector<DT> v(S.width());
@@ -77,7 +112,7 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         Vector<DT> Sw (S.height());
         Vector<DT> Sv (S.height());
         auto v_linear = v.subvector(1, v.length()-1);
-        S.mvm(1.0, w, 0.0, Sw); //w is 1 too long...
+        S.mvm(1.0, w, 0.0, Sw);
         S.mvm(1.0, v, 0.0, Sv);
         Vector<DT> Sw_minus_Sv (S.height());
         Sw_minus_Sv.copy(Sw);
@@ -91,28 +126,7 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
             w.copy(v);
         }
 
-        //Remove columns from B
-        std::list<int64_t> to_remove;
-        std::list<int64_t> to_remove_D;
-        bool remove_s0 = w(0) < tolerance;
-        if(remove_s0) to_remove.push_back(0);
-        for(int64_t j = 1; j < w.length(); j++) {
-            if(w(j) < tolerance) {
-                to_remove.push_back(j);
-                to_remove_D.push_back(j-1);
-            }
-        }
-        S.remove_cols(to_remove);
-        w.remove_elems(to_remove);
-        assert(alpha < 1.0 - tolerance || to_remove.size() > 0);
-        if(remove_s0) {
-            D.enlarge_n(-to_remove.size());
-            R.enlarge_n(-to_remove.size());
-            recompute_D_R(S, D, R);
-        } else if(to_remove.size() > 0){
-            D.remove_cols(to_remove_D);
-            R.remove_cols_inc_qr(to_remove_D);
-        }
+        cleanup_cols(w, S, D, R, tolerance);
 
         if(S.width() == 1) {
             auto s0 = S.subcol(0);
@@ -162,17 +176,7 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     int64_t k = 0;
     int64_t initial_time = rdtsc();
     while(1) {
-        //assert(S.width() <= F.n + 1);
-        if(S.width() >= F.n + 1) {
-            int64_t j_to_remove = w.index_of_abs_min();
-            S.remove_col(j_to_remove);
-            w.remove_elem(j_to_remove);
-            auto w_linear = w.subvector(0, w.length()-1);
-            w(w.length()-1) = 1.0 - w_linear.sum();
-            D.enlarge_n(-1);
-            std::cout << "ERROR S width is too high" << std::endl;
-            exit(1);
-        }
+        assert(S.width() <= F.n + 1);
 
         // Get p_hat using the greedy algorithm
         auto p_hat = S_base.subcol(S.width());
