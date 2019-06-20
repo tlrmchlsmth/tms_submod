@@ -34,6 +34,9 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, int64_t pruning_fa
     Vector<DT> STx_base(max_away);
     Vector<DT> d(F.n);
     Vector<DT> tmp(F.n);
+
+    std::vector<bool> A_curr(F.n);
+    std::vector<bool> A_best(F.n);
     
     //Initialize x, a, S
     Vector<DT> s0 = S.subcol(0);
@@ -43,6 +46,7 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, int64_t pruning_fa
     a(0) = 1.0;
 
     DT F_best = std::numeric_limits<DT>::max();
+    DT F_thresh;
     DT duality_gap = 1.0;
     while(duality_gap > eps) {
         assert(S.width() > 0);
@@ -82,8 +86,13 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, int64_t pruning_fa
 
         //Get s
         auto s = S_base.subcol(S.width());
-        DT F_curr = F.polyhedron_greedy_ascending(x, s);
-        F_best = std::min(F_curr, F_best);
+        DT F_curr = F.polyhedron_greedy_ascending(x, s, A_curr);
+
+        if (F_curr < F_best) {
+            F_best = F_curr;
+            for(int64_t i = 0; i < F.n; i++)
+                A_best[i] = A_curr[i];
+        }
 
         //Test for termination
         DT xtx_minus_xts = x.dot(x) - x.dot(s);
@@ -151,9 +160,7 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, int64_t pruning_fa
     PerfLog::get().log_total("ITERATIONS", k);
 
     //Return A, minimizer of F
-    std::vector<bool> A(F.n);
-    for(int64_t i = 0; i < F.n; i++){ A[i] = x(i) <= 0.0; }
-    return A;
+    return A_best;
 }
 
 #endif

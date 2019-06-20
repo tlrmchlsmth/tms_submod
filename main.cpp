@@ -10,13 +10,10 @@
 #include "set_fn/log_det.h"
 #include "set_fn/iwata_test.h"
 #include "set_fn/coverage.h"
+#include "set_fn/deep.h"
 
 #include "minimizers/mnp.h"
 #include "minimizers/bvh.h"
-
-#include "minimizers/mnp_order_k.h"
-#include "minimizers/mnp_speculative.h"
-#include "minimizers/bvh_speculative.h"
 
 #include "minimizers/frank_wolfe.h"
 #include "minimizers/away_steps.h"
@@ -346,9 +343,9 @@ template<class DT>
 void mnp_bvh()
 {
     int64_t start = 1000;
-    int64_t end = 1000;
-    int64_t inc = 100;
-    int64_t n_reps = 1000;
+    int64_t end = 5000;
+    int64_t inc = 500;
+    int64_t n_reps = 100;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
@@ -356,6 +353,7 @@ void mnp_bvh()
 
     int fw = 8;
     std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "MNP |A|"; 
     std::cout << std::setw(2*fw) << "MNP F(A)";
     std::cout << std::setw(2*fw) << "BVH F(A)";
     std::cout << std::setw(2*fw) << "MNP T";
@@ -375,14 +373,16 @@ void mnp_bvh()
             int64_t max_iter = 1e6;
 
             //Initialize min norm point problem
-            LogDet<DT> problem(n);
+            //LogDet<DT> problem(n);
             //MinCut<DT> problem(n);
             //problem.WattsStrogatz(16, 0.25);
+            //problem.Groups(2, 1.0, 0.00);
+            Deep<DT> problem(n);
 
             //MNP
             PerfLog::get().clear();
             cycles_count_start();
-            auto mnp_A = mnp(problem, 1e-5, 1e-5);
+            auto mnp_A = mnp(problem, 1e-5, 1e-10);
             double mnp_fa = problem.eval(mnp_A);
             double cycles = (double) cycles_count_stop().cycles;
             double mnp_seconds = (double) cycles_count_stop().time;
@@ -393,7 +393,7 @@ void mnp_bvh()
             //BVH
             PerfLog::get().clear();
             cycles_count_start();
-            auto bvh_A = bvh(problem, 1e-5, 1e-5);
+            auto bvh_A = bvh(problem, 1e-5, 1e-10);
             double bvh_fa = problem.eval(bvh_A);
             cycles = (double) cycles_count_stop().cycles;
             double bvh_seconds = (double) cycles_count_stop().time;
@@ -407,6 +407,7 @@ void mnp_bvh()
                 if(mnp_A[i]) cardinality++;
             }
             std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << cardinality;
             std::cout << std::setw(2*fw) << mnp_fa;
             std::cout << std::setw(2*fw) << bvh_fa;
             std::cout << std::setw(2*fw) << mnp_seconds << ",";
@@ -702,97 +703,15 @@ void test_greedy_maximize()
     }
 }
 
-
-
-void mmm_lower_bounds()
-{
-    int fw = 16;
-    double M = 16;
-
-    std::cout << std::setw(fw) << "N";
-    std::cout << std::setw(fw) << "FMA / Seg";
-    std::cout << std::setw(fw) << "Segments";
-    std::cout << std::setw(fw) << "Inputs / Seg";
-    std::cout << std::setw(fw) << "M";
-    std::cout << std::setw(fw) << "Q";
-    std::cout << std::setw(fw) << "Q_known";
-    std::cout << std::endl;
-    for(int64_t N = 4; N < 32; N += 4) {
-        Coverage<double> cdag = build_mmma_coverage<double>(N,N,N);
-        cdag.alpha = 1.0;
-
-        Vector<double> x(N*N*N);
-        x.fill_rand();
-
-        auto B = mnp(cdag, x, -1.0, 1e-14);
-        //Get distinct values of x 
-        std::vector<double> distinct_vals;
-        for(int64_t i = 0; i < x.length(); i++){
-            bool xi_distinct = true;
-            for(auto v : distinct_vals) {
-                if(std::abs(x(i) - v) < 1e-5) 
-                    xi_distinct = false;
-            }
-            if(xi_distinct) {
-                distinct_vals.push_back(x(i));
-            }
-        }
-       
-       int card = 0; 
-        for(int i = 0; i < B.size(); i++){
-            if(B[i]) card++;
-        }
-        std::cout << "|B| = " << card << std::endl;
-
-
-        cdag.alpha = 0.0;
-        std::sort(distinct_vals.begin(), distinct_vals.end());
-        std::vector<bool> A(N*N*N, false);
-        for(auto v : distinct_vals) {
-            //Determine Av
-            double T = 0; // Number of FMAs in the best segment
-            for(int64_t i = 0; i < x.length(); i++) {
-                if((x(i) - v) < 1e-5)
-                { 
-                    T++;
-                    A[i] = true;
-                } else {
-                    A[i] = false;
-                }
-            }
-
-            //Evaluate 
-            double D_A_cardinality = cdag.eval(A);
-
-            //Determine lower bound
-            double W = N*N*N;
-            double Q    = std::floor(W/T) * (D_A_cardinality - M);
-            double Q_known = 2 * W / 4 - 2*M;
-
-            std::cout << std::setw(fw) << N;               //N*N*N MMM
-            std::cout << std::setw(fw) << T;               //FMAs per segment
-            std::cout << std::setw(fw) << W/T;             //Lower bound on segments
-            std::cout << std::setw(fw) << D_A_cardinality; //Inputs in a segment
-            std::cout << std::setw(fw) << M;               //Cache Size
-            std::cout << std::setw(fw) << Q;               //I/O lower bound
-            std::cout << std::setw(fw) << Q_known;         //Previously known I/O lower bound
-            std::cout.precision(10);
-            std::cout << std::setw(fw) << v;               //Distinct Value
-            std::cout << std::endl;
-        }
-    }
-}
-
 int main() 
 {
     run_validation_suite();
 
-//    mnp_order_k<double>();
-//    exit(1);
-
     //Test Simplicical Decomposition
     mnp_bvh<double>();
     exit(1);
+
+    //Error vs time experiments
     frank_wolfe_mincut_err_vs_time<double>();
     exit(1);
 
@@ -800,22 +719,13 @@ int main()
     test_versus_fujishige();
     exit(1);
     
-
-
     mkl_free_buffers(); 
     exit(1);
     frank_wolfe_wolfe_mincut<double>();
-
-
 
     test_greedy_maximize<double>();
     run_benchmark_suite();
 
     benchmark_logdet<double>(1e-10, 1e-10);
     benchmark_iwata<double>(1e-10, 1e-10);
-
-    //Would be very fun if we could get lower bounds better than compulsory misses from this
-    mmm_lower_bounds();
-    exit(1);
-
 }

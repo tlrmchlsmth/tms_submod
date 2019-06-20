@@ -135,7 +135,8 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     PerfLog::get().add_sequence("BVH DUALITY");
 
     DT F_best = std::numeric_limits<DT>::max();
-    std::vector<bool> A(F.n);
+    std::vector<bool> A_best(F.n);
+    std::vector<bool> A_curr(F.n);
 
     Vector<DT> x_hat(F.n);
     Vector<DT> w_base(F.n+2);
@@ -175,22 +176,14 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
         // Get p_hat using the greedy algorithm
         auto p_hat = S_base.subcol(S.width());
-        DT F_curr = F.polyhedron_greedy_ascending(x_hat, p_hat);
+        DT F_curr = F.polyhedron_greedy_ascending(x_hat, p_hat, A_curr);
 
         if (F_curr < F_best) {
             F_best = F_curr;
             for(int64_t i = 0; i < F.n; i++)
-                A[i] = x_hat(i) <= 0.0;
+                A_best[i] = A_curr[i];
         }
 
-        //Update R and D to account for modifying S
-        auto d_hat = D_base.subcol(D.width());
-        d_hat.copy(p_hat);
-        auto s0 = S.subcol(0);
-        d_hat.axpy(-1.0, s0);
-        R.add_col_inc_qr(D, d_hat);
-        D.enlarge_n(1);
-        S.enlarge_n(1);
 
         // Get suboptimality bound
         DT sum_x_hat_lt_0 = 0.0;
@@ -202,14 +195,26 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         //Test to see if we are done
         DT xt_p = x_hat.dot(p_hat);
         DT xt_x = x_hat.dot(x_hat);
-        assert(last_xtx - xt_x > -tolerance);
-        last_xtx = xt_x;
         pt_p_max = std::max(p_hat.dot(p_hat), pt_p_max);
-        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps) {
+        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps /* last_xtx - xt_x < tolerance*/) {
             break;
         }
+        last_xtx = xt_x;
+
+        //Update R and D to account for modifying S
+        auto d_hat = D_base.subcol(D.width());
+        d_hat.copy(p_hat);
+        auto s0 = S.subcol(0);
+        d_hat.axpy(-1.0, s0);
+        R.add_col_inc_qr(D, d_hat);
+        D.enlarge_n(1);
+        S.enlarge_n(1);
+
+        //If rho00 is 0, (and our math is right), we already have our answer
+        if(R(R.height()-1, R.width()-1) <= 1e-10) break;
 
         //Take a FW step
+        //(Just because we need to be in the interior of the polytope)
         Vector<DT> d_FW(F.n);
         d_FW.copy(p_hat);
         d_FW.axpy(-1.0, x_hat);
@@ -237,7 +242,7 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
     wA.copy(x_hat);
     PerfLog::get().log_total("ITERATIONS", k);
-    return A;
+    return A_best;
 }
 
 

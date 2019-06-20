@@ -33,7 +33,8 @@ public:
     }
     void initialize_default()
     {
-        WattsStrogatz(16, 0.25);
+        WattsStrogatz(10, 0.25);
+//        Groups(2, 0.25, .01);
     }
 
 private:
@@ -45,6 +46,17 @@ private:
             adj_in.emplace_back(std::vector<Edge<DT>>());
             adj_out.emplace_back(std::vector<Edge<DT>>());
         }
+    }
+
+    void connect_directed(int64_t i, int64_t j, double weight)
+    {
+        assert(i != j);
+        assert(!std::any_of(adj_out[i].begin(), adj_out[i].end(), [=](Edge<DT> e){return e.index == j;})) ;
+        assert(!std::any_of(adj_in[j].begin(), adj_in[j].end(), [=](Edge<DT> e){return e.index == i;})) ;
+
+        //Edge from i to j
+        adj_out[i].emplace_back(Edge<DT>(j, weight));
+        adj_in [j].emplace_back(Edge<DT>(i, weight));
     }
     
     void connect_undirected(int64_t i, int64_t j, double weight)
@@ -160,7 +172,8 @@ public:
     void WattsStrogatz(int64_t k, double beta) 
     {
         std::mt19937 gen(seed);
-        std::uniform_real_distribution<double> dist(0.1, 1.0);
+        std::uniform_real_distribution<double> weight_dist(0.01, 1.0);
+        std::uniform_real_distribution<double> connect_dist(0.0, 1.0);
         std::uniform_int_distribution<int64_t> uniform_node(0, n+1);
    
         this->init_adj_lists();
@@ -171,7 +184,7 @@ public:
             for(int64_t p = 1; p < k/2 && i+p < n+2; p++) {
                 int64_t new_neighbor = i+p;
         
-                if(dist(gen) < beta) {
+                if(connect_dist(gen) < beta) {
                     int64_t new_neighbor = uniform_node(gen);
                     int64_t attempts = 0;
                     while(new_neighbor == i || std::any_of(adj_out[i].begin(), adj_out[i].end(), [=](Edge<DT> e){return e.index == new_neighbor;})) 
@@ -187,7 +200,7 @@ public:
                     }
                 }
                 
-                this->connect_undirected(i, new_neighbor, dist(gen));         
+                this->connect_undirected(i, new_neighbor, weight_dist(gen));         
             }
         }
         this->select_source_and_sink(gen);
@@ -237,14 +250,60 @@ public:
         this->sanity_check();
     }
 
+    //Create a graph with k groups
+    //alpha = probability to connect within group
+    //beta = probability to connect between group
+    void Groups(int64_t k, DT alpha, DT beta)
+    {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::uniform_real_distribution<double> connect_dist(0.0, 1.0);
+        std::uniform_real_distribution<double> weight_dist(0.1, 1.0);
+
+        this->init_adj_lists();
+
+        //Setup edges within graph
+        for(int64_t i = 0; i < n+2; i++) {
+            for(int64_t j = 0; j < n+2; j++) {
+                if(i == j) continue;
+                
+                DT rand = connect_dist(gen);
+                if(i % k == j % k) {
+                    if(rand < alpha) {
+                        this->connect_directed(i, j, 1.0); //weight_dist(gen));
+                    }
+                } else {
+                    if(rand < beta) {
+                        this->connect_directed(i, j, 1.0); //weight_dist(gen));
+                    }
+                }
+            }
+        }
+        this->select_source_and_sink(gen);
+
+        //Establish baseline
+        baseline = 0.0;
+        for(auto a : adj_out[n]) {
+            baseline += a.weight;
+        }
+
+        this->sanity_check();
+    }
+
     DT eval(const std::vector<bool>& A) 
     {
         DT val = 0.0;
         for(int64_t i = 0; i < n; i++) {
-            if(!A[i]) continue;
-            for(auto b : adj_out[i]) {
-                if(b.index == n+1 || !A[b.index])
-                    val += b.weight;
+            if(A[i]){
+                for(auto b : adj_out[i]) {
+                    if(b.index == n+1 || !A[b.index])
+                        val += b.weight;
+                }
+            } else {
+                for(auto b : adj_out[i]) {
+                    if(b.index != n+1 && A[b.index])
+                        val += b.weight;
+                }
             }
         }
         for(auto b : adj_out[n]) {
@@ -259,25 +318,53 @@ public:
     virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
     {
         std::vector<int64_t> perm_lookup(n);
-//        _Pragma("omp parallel for")
+        _Pragma("omp parallel for")
         for(int64_t i = 0; i < n; i++) {
             perm_lookup[perm[i]] = i;
         }
 
-        //Iterate over every edge.
-        //Each edge connects two nodes, a and b. We get a gain when the first of the nodes joins A and a loss when the second node joins A.
         x.set_all(0.0);
+
+        //Iterate over every outgoing edge.
         _Pragma("omp parallel for")
         for(int64_t a = 0; a < n; a++) {
             int64_t index_a = perm_lookup[a];
             for(auto edge : adj_out[a]) {
                 int64_t b = edge.index;
+                int64_t index_b = perm_lookup[b];
+                
                 if(b == n+1) {
+                    //This edge goes to sink node, so there's a gain when the source vertex joins
                     x(a) += edge.weight;
                 }
                 else {
-                    int64_t index_b = perm_lookup[b];
+                    assert(a != b && b < n);
+                    //We gain when the first vertex joins A and lose when the second joins
+                    if(index_a < index_b) {
+                        x(a) += edge.weight;
+                        //x(b) -= edge.weight;
+                    } else {
+                        //x(b) += edge.weight;
+                        x(a) -= edge.weight;
+                    }
+                }
+            }
+        }
 
+        _Pragma("omp parallel for")
+        for(int64_t a = 0; a < n; a++) {
+            int64_t index_a = perm_lookup[a];
+            for(auto edge : adj_in[a]) {
+                int64_t b = edge.index;
+                int64_t index_b = perm_lookup[b];
+                
+                if(b == n) {
+                    //This edge goes to sink node, so there's a gain when the source vertex joins
+                    x(a) -= edge.weight;
+                }
+                else {
+                    assert(a != b && b < n);
+                    //We gain when the first vertex joins A and lose when the second joins
                     if(index_a < index_b) {
                         x(a) += edge.weight;
                     } else {
@@ -287,9 +374,10 @@ public:
             }
         }
 
-        for(auto edge : adj_out[n]) {
+        //Iterate over source vertex edges
+       /* for(auto edge : adj_out[n]) {
             if(edge.index != n+1) x(edge.index) -= edge.weight;
-        }
+        }*/
     }
 };
 
@@ -338,7 +426,7 @@ public:
             if(!A[adj_out[b][i].index])
                 gain += adj_out[b][i].weight;
         }
-
+    
         //Loss from adding b
         DT loss = 0.0;
         for(int64_t i = 0; i < adj_in[b].size(); i++) {

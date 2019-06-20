@@ -131,7 +131,7 @@ void val_brute_force(std::string name)
         //Create random problem
         F problem(n);
         problem.initialize_default();
-        auto A = mnp(problem, 1e-10, 1e-10);
+        auto A = mnp(problem, 1e-15, 1e-15);
         DT mnp_sol = problem.eval(A);
         
         std::vector<bool> empty(n);
@@ -234,7 +234,7 @@ void val_gains(std::string name)
         prob.gains(perm, p2);
         p1.axpy(-1.0, p2);
         DT error = p1.norm2();
-        
+
         std::cout << std::setw(w) << n;
         print_err(error, w);
         std::cout << std::endl;
@@ -245,7 +245,7 @@ void val_mincut_greedy_eval()
 {
 
     int64_t start = 4;
-    int64_t end = 1024; 
+    int64_t end = 512; 
     int64_t inc = 4; 
 
     std::cout << "===========================================================" << std::endl;
@@ -259,22 +259,14 @@ void val_mincut_greedy_eval()
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         MinCut<double> prob(n);
-        prob.WattsStrogatz(16, 0.25);
+        prob.initialize_default();
 
         Vector<double> p(n);
         Vector<double> x(n);
         x.fill_rand();
 
-        double val1 = prob.polyhedron_greedy_ascending(x, p);
-
         std::vector<bool> A(n);
-        for(int64_t i = 0; i < n; i++) {
-            if(x(i) < 0.0) {
-                A[i] = 1;
-            } else {
-                A[i] = 0;
-            }
-        }
+        double val1 = prob.polyhedron_greedy_ascending(x, p, A);
         double val2 = prob.eval(A);
         
         std::cout << std::setw(w) << n;
@@ -480,13 +472,16 @@ void run_validation_suite()
     std::cout << "Running validation tests." << std::endl;
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
 
+    val_gains<MinCut<double>, double>("MinCut");
+    val_submodularity<MinCut<double>>("MinCut");
+    val_brute_force<MinCut<double>, double>("MinCut");
 
     //Validate submodularity
     val_submodularity<MinCut<double>>("MinCut");
     val_submodularity<LogDet<double>>("Log Det");
     val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");
     val_submodularity<Deep<double>>("Deep");
-
+    
     //Validate consistency of gains vs eval
     val_gains<IwataTest<double>, double>("Iwata's Test Fn");
     val_gains<LogDet<double>, double>("LogDet");
@@ -496,7 +491,6 @@ void run_validation_suite()
 
     //Validate mnp solution using brute force
     val_brute_force<Deep<double>, double>("Deep submodular function");
-    val_brute_force<MinCut<double>, double>("MinCut");
     val_brute_force<LogDet<double>, double>("Log Det");
     val_brute_force_sum_submodular<double>();
     val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");

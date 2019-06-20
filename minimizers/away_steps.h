@@ -42,8 +42,12 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps, int64_t pruning_f
     a(0) = 1.0;
 
     Vector<DT> tmp(F.n);
+
+    std::vector<bool> A_curr(F.n);
+    std::vector<bool> A_best(F.n);
     
     DT F_best = std::numeric_limits<DT>::max();
+    DT F_thresh;
     DT duality_gap = 1.0;
     int64_t initial_time = rdtsc();
     while(duality_gap > eps) {
@@ -65,8 +69,13 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps, int64_t pruning_f
 
         //Get s
         auto s = S_base.subcol(S.width());
-        DT F_curr = F.polyhedron_greedy_ascending(x, s);
-        F_best = std::min(F_curr, F_best);
+        DT F_curr = F.polyhedron_greedy_ascending(x, s, A_curr);
+
+        if (F_curr < F_best) {
+            F_best = F_curr;
+            for(int64_t i = 0; i < F.n; i++)
+                A_best[i] = A_curr[i];
+        }
 
         //Test for termination
         DT xtx_minus_xts = x.dot(x) - x.dot(s);
@@ -183,10 +192,7 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps, int64_t pruning_f
 
     PerfLog::get().log_total("ITERATIONS", k);
 
-    //Return A, minimizer of F
-    std::vector<bool> A(F.n);
-    for(int64_t i = 0; i < F.n; i++){ A[i] = x(i) <= 0.0; }
-    return A;
+    return A_best;
 }
 
 #endif

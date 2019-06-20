@@ -64,17 +64,53 @@ public:
         gains(permutation, p);
     }
 
-    double polyhedron_greedy_ascending(const Vector<DT>& x, Vector<DT>& p) 
+    DT polyhedron_greedy_ascending(const Vector<DT>& x, Vector<DT>& p, std::vector<bool>& A_out) 
     {
         std::sort(permutation.begin(), permutation.end(), [&](int64_t a, int64_t b){ return x(a) < x(b); } );
         gains(permutation, p);
         
         //Get current value of F(A)
-        double val = 0.0;
+        /*DT val = 0.0;
         for(int64_t i = 0; i < x.length(); i++) {
-            if(x(i) <= 0.0) val += p(i);
+            if(x(i) <= 0) val += p(i);
+            if(x(i) <= -1e-10) std::cout << "x(i) " << x(i) << " p(i) " << p(i) << std::endl;;
+        }*/
+
+        for(int i = 0; i < n; i++) 
+            A_out[i] = false;
+/*
+        DT val = 0.0;
+        for(int64_t i = 0; i < n; i++) {
+            if(i < x.length()-1)
+                assert(x(permutation[i]) <= x(permutation[i+1]));
+            if(p(permutation[i]) <= 0.0) {
+                val += p(permutation[i]);
+                A_out[permutation[i]] = true;
+            } else {
+                break;
+            }
         }
-        return val;
+*/
+        DT val = 0.0;
+        DT min_val = 0.0;
+        DT prefix_len = 0;
+        for(int64_t i = 0; i < n; i++) {
+            val += p(permutation[i]);
+            if(val < min_val) {
+                min_val = val;
+                prefix_len = i+1;
+            }
+        }
+        for(int64_t i = 0; i < prefix_len; i++) {
+           A_out[permutation[i]] = true; 
+        }
+        return min_val;
+
+//        for(int64_t i = 0; i < n; i++) {
+//            std::cout << x(permutation[i]) << "\t" << p(permutation[i]) << std::endl;
+//        }
+
+//        return val;
     }
 };
 

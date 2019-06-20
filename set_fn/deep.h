@@ -31,7 +31,7 @@ public:
     void constructor_helper(std::vector<int64_t>& layer_sizes) {
         std::random_device rd; 
         std::mt19937 gen{rd()};
-        std::uniform_real_distribution<DT> uniform(0.0, 0.1);
+        std::uniform_real_distribution<DT> uniform(0.0, 1.1);
         
         layers.reserve(layer_sizes.size());
         inputs.reserve(layer_sizes.size()+1);
@@ -57,7 +57,7 @@ public:
         }
         
         //Random nonmonotone modular component
-        std::normal_distribution<DT> normal(0.0, 10.0);
+        std::normal_distribution<DT> normal(0.0, 0.5);
         modular.fill_rand(gen, normal);
     }
 

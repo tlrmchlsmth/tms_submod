@@ -33,6 +33,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         R.transpose(); R.trsv(v); R.transpose();
         R.trsv(v);
         v.scale(1.0 / v.sum());
+        assert(!v.has_nan());
 
         //Check to see if y is written as positive convex combination of S
         if(v.min() > tolerance) break;
@@ -46,7 +47,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         // Find w for which Sw in conv(S) is closest to Sv 
         DT beta = 1.0;
         for(int64_t i = 0; i < S.width(); i++) {
-            if(v(i) < tolerance)
+            if(v(i) < 1e-10/*tolerance*/)
                 beta = std::min(beta, w(i) / (w(i) - v(i)));
         }
         w.axpby(beta, v, 1.0 - beta);
@@ -59,7 +60,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         std::list<int64_t> to_remove;
         int64_t j = 0;
         for(int64_t i = 0; i < S.width(); i++){
-            if(w(i) <= tolerance){
+            if(w(i) <= 1e-10 /*tolerance*/){
                 to_remove.push_back(i);
             } else {
                 v(j) = w(i);
@@ -87,7 +88,8 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     PerfLog::get().add_sequence("MNP DUALITY");
 
     DT F_best = std::numeric_limits<DT>::max();
-    std::vector<bool> A(F.n);
+    std::vector<bool> A_curr(F.n);
+    std::vector<bool> A_best(F.n);
 
 
     Vector<DT> x_hat(F.n);
@@ -108,6 +110,7 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     R(0,0) = s0.norm2();
     DT pt_p_max = s0.dot(s0);
 
+    DT last_xtx = pt_p_max + 1.0;
     int64_t k = 0;
     int64_t initial_time = rdtsc();
     while(1) {
@@ -127,36 +130,37 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
         // Get p_hat using the greedy algorithm
         Vector<DT> p_hat = S_base.subcol(S.width());
-        DT F_curr = F.polyhedron_greedy_ascending(x_hat, p_hat);
-
+        DT F_curr = F.polyhedron_greedy_ascending(x_hat, p_hat, A_curr);
         if (F_curr < F_best) {
             F_best = F_curr;
             for(int64_t i = 0; i < F.n; i++)
-                A[i] = x_hat(i) <= 0.0;
+                A_best[i] = A_curr[i];
         }
-        
-        // Update R to account for modifying S.
-        R.add_col_inc_qr(S, p_hat);
-        S.enlarge_n(1);
-        w.enlarge(1);
-        w(w.length()-1) = 0.0;
 
         // Get suboptimality bound
         DT sum_x_hat_lt_0 = 0.0;
         for (int64_t i = 0; i < F.n; i++) {
             sum_x_hat_lt_0 += std::min(x_hat(i), 0.0);
         }
-        DT duality_gap = std::abs(F_best - sum_x_hat_lt_0);
+        DT duality_gap = F_best - sum_x_hat_lt_0;
 
         //Test to see if we are done
         DT xt_p = x_hat.dot(p_hat);
         pt_p_max = std::max(p_hat.dot(p_hat), pt_p_max);
-        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps) {
+        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps /*|| last_xtx - xt_x < tolerance*/) {
             PerfLog::get().log_sequence("MNP CUMMULATIVE TIME", rdtsc() - initial_time);
             PerfLog::get().log_sequence("MNP DUALITY", duality_gap);
             break;
         }
+        last_xtx = xt_x;
 
+        // Update R to account for modifying S.
+        R.add_col_inc_qr(S, p_hat);
+        S.enlarge_n(1);
+        w.enlarge(1);
+        w(w.length()-1) = 0.0;
+
+        if(R(R.height()-1, R.width()-1) <= 1e-10) break; //In this case we necessarily already have our answer
 
         // Update x_hat
         mnp_update_w(w, v_base, S, R, tolerance);
@@ -171,7 +175,7 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
     wA.copy(x_hat);
     PerfLog::get().log_total("ITERATIONS", k);
-    return A;
+    return A_best;
 }
 
 template<class DT>
