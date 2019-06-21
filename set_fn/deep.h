@@ -8,11 +8,28 @@
 template<class DT>
 DT rectify(DT x) {
     assert(x >= 0);
-//    if(x < 0.0) return 0.0;
-//    return x;
-
     return sqrt(x);
 }
+
+template<class DT>
+void rectify(Vector<DT>& y, const Vector<DT>& x) {
+    assert(y.length() == x.length());
+    _Pragma("omp parallel for")
+    for(int64_t i = 0; i < x.length(); i++) {
+        assert(x(i) >= 0);
+        y(i) = rectify(x(i));
+    }
+}
+
+template<class DT>
+void rectify(Vector<DT>& x) {
+    _Pragma("omp parallel for")
+    for(int64_t i = 0; i < x.length(); i++) {
+        assert(x(i) >= 0);
+        x(i) = rectify(x(i));
+    }
+}
+
 
 template<class DT>
 class Deep : public SubmodularFunction<DT> {
@@ -57,7 +74,7 @@ public:
         }
         
         //Random nonmonotone modular component
-        std::normal_distribution<DT> normal(0.0, 0.2);
+        std::normal_distribution<DT> normal(0.0, 0.05);
         modular.fill_rand(gen, normal);
     }
 
@@ -94,9 +111,7 @@ public:
         //Middle layers
         for(int layer = 0; layer < layers.size(); layer++) {
             layers[layer].mvm(1.0, inputs[layer], 0.0, inputs[layer+1]);
-            for(int i = 0; i < inputs[layer].length(); i++) {
-                inputs[layer](i) = rectify(inputs[layer](i));
-            }
+            rectify(inputs[layer+1]);
         }
 
         //Final layer
@@ -104,6 +119,33 @@ public:
         
         return rectify(submodular_component) + modular_component;
     }
+
+    //Only limited savings from gains fn
+    //We can compute 1st layer (pre rectification) once,
+    //also we can compute modular component once
+    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    {
+        x.copy(modular);
+
+        Vector<DT> layer1_ws = Vector<DT>(inputs[1].length());
+        layer1_ws.set_all(0.0);
+
+        DT FA_old = 0.0;
+        for(int i = 0; i < n; i++) {
+            layer1_ws.axpy(1.0, layers[0].subcol(perm[i]));
+            rectify(inputs[1], layer1_ws);
+
+            for(int layer = 1; layer < layers.size(); layer++) {
+                layers[layer].mvm(1.0, inputs[layer], 0.0, inputs[layer+1]);
+                rectify(inputs[layer+1]);
+            }
+
+            DT FA = rectify(final_layer.dot(inputs.back()));
+            x(perm[i]) += FA - FA_old;
+            FA_old = FA;
+        }
+    }
+
 };
 
 #endif
