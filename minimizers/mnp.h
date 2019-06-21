@@ -36,7 +36,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         assert(!v.has_nan());
 
         //Check to see if y is written as positive convex combination of S
-        if(v.min() > tolerance) break;
+        if(v.min() > 0) break;
 
         // It's not a convex combination.
         
@@ -47,7 +47,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         // Find w for which Sw in conv(S) is closest to Sv 
         DT beta = 1.0;
         for(int64_t i = 0; i < S.width(); i++) {
-            if(v(i) < 1e-10/*tolerance*/)
+            if(v(i) <= 0 /*1e-10*//*tolerance*/)
                 beta = std::min(beta, w(i) / (w(i) - v(i)));
         }
         w.axpby(beta, v, 1.0 - beta);
@@ -60,13 +60,14 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         std::list<int64_t> to_remove;
         int64_t j = 0;
         for(int64_t i = 0; i < S.width(); i++){
-            if(w(i) <= 1e-10 /*tolerance*/){
+            if(w(i) <= 0 /*tolerance*/){
                 to_remove.push_back(i);
             } else {
                 v(j) = w(i);
                 j++;
             }
         }
+        if(to_remove.size() == 0) to_remove.push_back(w.index_of_min());
         assert(to_remove.size() > 0); 
         
         //Remove unnecessary columns from S and fixup R so that S = QR for some Q
@@ -74,6 +75,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         R.remove_cols_inc_qr(to_remove);
         w.enlarge(-to_remove.size());
         v.enlarge(-to_remove.size());
+        v.scale(1.0 / v.sum());
         w.copy(v);
     }
     PerfLog::get().log_total("MINOR CYCLES", minor_cycles);
@@ -160,7 +162,13 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         w.enlarge(1);
         w(w.length()-1) = 0.0;
 
-        if(R(R.height()-1, R.width()-1) <= 1e-10) break; //In this case we necessarily already have our answer
+        if(std::isnan(R(R.height()-1, R.width()-1))) {
+            std::cout << "Warning: rho is nan.\n" << std::endl;
+        }
+
+        //In this case we necessarily already have our answer
+        if(R(R.height()-1, R.width()-1) <= 1e-10) break; 
+        if(std::isnan(R(R.height()-1, R.width()-1))) break; 
 
         // Update x_hat
         mnp_update_w(w, v_base, S, R, tolerance);
@@ -171,6 +179,7 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
             PerfLog::get().log_sequence("MNP DUALITY", duality_gap);
         }
         k++;
+        if(k > 10000) break;
     }
 
     wA.copy(x_hat);

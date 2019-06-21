@@ -98,7 +98,7 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         }
         lambda = 1.0 / lambda;
         
-        if(std::abs(lambda) < 1e-12) {
+        if(std::abs(lambda) < 1e-15) {
             S.mvm(1.0, w, 0.0, x);
             cleanup_cols(w, S, D, R, tolerance);
             break;
@@ -216,6 +216,7 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
         //If rho00 is 0, (and our math is right), we already have our answer
         if(R(R.height()-1, R.width()-1) <= 1e-10) break;
+        if(std::isnan(R(R.height()-1, R.width()-1))) break; 
 
         //Take a FW step
         //(Just because we need to be in the interior of the polytope)

@@ -308,7 +308,7 @@ public:
         this->transpose(); this->trsv(r0); this->transpose();
 
         // rho1^2 = s' * s - r0' * r0;
-        DT rho1 = sqrt(std::abs(s.dot(s) - r0.dot(r0)));
+        DT rho1 = sqrt(s.dot(s) - r0.dot(r0));
         this->enlarge_n(1);
         (*this)(_n-1, _n-1) = rho1;
     }
@@ -333,6 +333,12 @@ public:
         Vector<DT> r0(r0_buffer, _n, _n, stride, false);
         S.transposed_mvm(1.0, s, 0.0, r0);
         this->transpose(); this->trsv(r0); this->transpose();
+        
+        //Now r0 = Rv for some v
+        Vector<DT> v(this->width());
+        v.copy(r0);
+        this.trsv(v);
+        v.print("v");
 
         // rho1^2 = s' * s - r0' * r0;
         DT rho1 = sqrt(std::abs(s.dot(s) - r0.dot(r0)));

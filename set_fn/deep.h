@@ -57,7 +57,7 @@ public:
         }
         
         //Random nonmonotone modular component
-        std::normal_distribution<DT> normal(0.0, 0.5);
+        std::normal_distribution<DT> normal(0.0, 0.2);
         modular.fill_rand(gen, normal);
     }
 

@@ -33,7 +33,7 @@ public:
     }
     void initialize_default()
     {
-        WattsStrogatz(10, 0.25);
+        WattsStrogatz(16, 0.25);
 //        Groups(2, 0.25, .01);
     }
 
