@@ -343,9 +343,9 @@ template<class DT>
 void mnp_bvh()
 {
     int64_t start = 1000;
-    int64_t end = 5000;
-    int64_t inc = 500;
-    int64_t n_reps = 100;
+    int64_t end = 10000;
+    int64_t inc = 1000;
+    int64_t n_reps = 10;
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
@@ -353,17 +353,17 @@ void mnp_bvh()
 
     int fw = 8;
     std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(fw) << "MNP |A|"; 
-    std::cout << std::setw(2*fw) << "MNP F(A)";
-    std::cout << std::setw(2*fw) << "BVH F(A)";
-    std::cout << std::setw(2*fw) << "MNP T";
-    std::cout << std::setw(2*fw) << "BVH T";
-    std::cout << std::setw(2*fw) << "MNP N";
-    std::cout << std::setw(2*fw) << "BVH N";
-    std::cout << std::setw(2*fw) << "MNP C";
-    std::cout << std::setw(2*fw) << "BVH C";
-    std::cout << std::setw(2*fw) << "MNP |S|";
-    std::cout << std::setw(2*fw) << "BVH |S|";
+    std::cout << std::setw(fw) << "MNP_|A|"; 
+    std::cout << std::setw(2*fw) << "MNP_F(A)";
+    std::cout << std::setw(2*fw) << "BVH_F(A)";
+    std::cout << std::setw(2*fw) << "MNP_T";
+    std::cout << std::setw(2*fw) << "BVH_T";
+    std::cout << std::setw(2*fw) << "MNP_N";
+    std::cout << std::setw(2*fw) << "BVH_N";
+    std::cout << std::setw(2*fw) << "MNP_C";
+    std::cout << std::setw(2*fw) << "BVH_C";
+    std::cout << std::setw(2*fw) << "MNP_|S|";
+    std::cout << std::setw(2*fw) << "BVH_|S|";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -374,10 +374,10 @@ void mnp_bvh()
 
             //Initialize min norm point problem
             //LogDet<DT> problem(n);
-            //MinCut<DT> problem(n);
-            //problem.WattsStrogatz(16, 0.25);
-            //problem.Groups(2, 1.0, 0.00);
-            Deep<DT> problem(n);
+            MinCut<DT> problem(n);
+            problem.WattsStrogatz(16, 0.25);
+            //problem.Groups(16, 0.25, 1e-5);
+            //Deep<DT> problem(n);
 
             //MNP
             PerfLog::get().clear();
@@ -706,6 +706,8 @@ void test_greedy_maximize()
 int main() 
 {
     run_validation_suite();
+    mnp_bvh<double>();
+    exit(1);
 
     //Test Simplicical Decomposition
     mnp_bvh<double>();

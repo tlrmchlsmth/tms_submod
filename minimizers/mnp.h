@@ -179,7 +179,6 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
             PerfLog::get().log_sequence("MNP DUALITY", duality_gap);
         }
         k++;
-        if(k > 10000) break;
     }
 
     wA.copy(x_hat);
