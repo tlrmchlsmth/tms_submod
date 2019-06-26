@@ -27,7 +27,6 @@ public:
         for(int i = 0; i < n; i++) 
             permutation.push_back(i);
     }
-    virtual void initialize_default(){}
 
     virtual ~SubmodularFunction() {}
 

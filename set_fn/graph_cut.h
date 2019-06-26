@@ -30,9 +30,6 @@ public:
     MinCut(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in), baseline(0.0) {
         std::random_device rd;
         seed = rd();
-    }
-    void initialize_default()
-    {
         WattsStrogatz(16, 0.25);
 //        Groups(2, 0.25, .01);
     }
@@ -393,7 +390,6 @@ public:
     SlowMinCut(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in)
     {
         MinCut<DT> other(n);
-        other.initialize_default();
         adj_in = other.adj_in;
         adj_out = other.adj_out;
         baseline = other.baseline;

@@ -196,7 +196,6 @@ public:
 
     template<class RNG, class DIST>
     void fill_rand(RNG &gen, DIST &dist) {
-        //#pragma omp parallel for
         for(int64_t j = 0; j < _n; j++) {
             for(int64_t i = 0; i < _m; i++) {
                 (*this)(i,j) = dist(gen);
@@ -206,7 +205,7 @@ public:
     void fill_rand() {
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::normal_distribution<> normal(-1.0, 1.0);
+        std::normal_distribution<> normal(0.0, 1.0);
         this->fill_rand(gen, normal);
     }
 

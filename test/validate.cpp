@@ -7,19 +7,22 @@
 #include "../la/matrix.h"
 #include "../minimizers/mnp.h"
 
+//Set function includes
 #include "../set_fn/submodular.h"
 #include "../set_fn/graph_cut.h"
 #include "../set_fn/log_det.h"
 #include "../set_fn/iwata_test.h"
 #include "../set_fn/scmm.h"
-#include "../set_fn/sum_submodular.h"
 #include "../set_fn/coverage.h"
 #include "../set_fn/deep.h"
+#include "../set_fn/sum_submodular.h"
+
+#include "../set_fn/plus_modular.h"
+#include "../set_fn/st_constrain.h"
 
 #include "../util.h"
 
 //#define VALIDATE_LEMON
-
 #ifdef VALIDATE_WITH_LEMON
 #include <lemon/list_graph.h>
 #include <lemon/preflow.h>
@@ -93,7 +96,6 @@ void val_submodularity(std::string name)
     for(int64_t n = start; n <= end; n += inc) {
         //Create random problem
         F problem(n);
-        problem.initialize_default();
 
 
         std::vector<bool> empty(n);
@@ -111,7 +113,7 @@ void val_submodularity(std::string name)
 }
 
 template<class F, class DT>
-void val_brute_force(std::string name)
+void val_mnp_brute_force(std::string name)
 {
     int64_t start = 2;
     int64_t end = 16;
@@ -130,7 +132,6 @@ void val_brute_force(std::string name)
     for(int64_t n = start; n <= end; n += inc) {
         //Create random problem
         F problem(n);
-        problem.initialize_default();
         auto A = mnp(problem, 1e-15, 1e-15);
         DT mnp_sol = problem.eval(A);
         
@@ -174,7 +175,6 @@ void val_brute_force_sum_submodular()
         fns.emplace_back(new SCMM<DT, MinusAXSqr<DT>>(n));
         SumSubmodulars<DT> problem(n, std::move(fns));
 
-        //problem.initialize_default();
         auto A = mnp(problem, 1e-5, 1e-5);
         DT mnp_sol = problem.eval(A);
         
@@ -211,7 +211,6 @@ void val_gains(std::string name)
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         F prob(n);
-        prob.initialize_default();
 
         Vector<DT> p1(n);
         Vector<DT> p2(n);
@@ -259,7 +258,6 @@ void val_mincut_greedy_eval()
     std::cout << std::endl;
     for(int64_t n = start; n <= end; n += inc) {
         MinCut<double> prob(n);
-        prob.initialize_default();
 
         Vector<double> p(n);
         Vector<double> x(n);
@@ -472,9 +470,11 @@ void run_validation_suite()
     std::cout << "Running validation tests." << std::endl;
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
 
-    val_gains<MinCut<double>, double>("MinCut");
-    val_submodularity<MinCut<double>>("MinCut");
-    val_brute_force<MinCut<double>, double>("MinCut");
+
+    val_submodularity<STConstrain<double,PlusModular<double,Deep<double>>>>("Deep Plus Modular S,T Constrained");
+    val_gains<PlusModular<double,Deep<double>>, double>("Deep Plus Modular");
+    val_gains<STConstrain<double,PlusModular<double,Deep<double>>>, double>("Deep Plus Modular S,T Constrained");
+    val_mnp_brute_force<STConstrain<double,PlusModular<double,Deep<double>>>, double>("Deep Plus Modular S,T Constrained");
 
     //Validate submodularity
     val_submodularity<MinCut<double>>("MinCut");
@@ -490,11 +490,12 @@ void run_validation_suite()
     val_mincut_greedy_eval();
 
     //Validate mnp solution using brute force
-    val_brute_force<Deep<double>, double>("Deep submodular function");
-    val_brute_force<LogDet<double>, double>("Log Det");
+    val_mnp_brute_force<Deep<double>, double>("Deep submodular function");
+    val_mnp_brute_force<LogDet<double>, double>("Log Det");
+    val_mnp_brute_force<MinCut<double>, double>("MinCut");
     val_brute_force_sum_submodular<double>();
-    val_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
-    val_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
+    val_mnp_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
+    val_mnp_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
 
     //Validate incremental qr column removal
     val_incremental_qr_remove_cols();

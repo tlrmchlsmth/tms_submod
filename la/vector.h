@@ -126,7 +126,7 @@ public:
     void fill_rand() {
         std::random_device rd;
         std::mt19937 gen{rd()};
-        std::normal_distribution<> normal(-1.0, 1.0);
+        std::normal_distribution<> normal(0.0, 1.0);
         this->fill_rand(gen, normal);
     }
 
