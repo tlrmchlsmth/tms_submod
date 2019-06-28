@@ -13,7 +13,8 @@
 template<class DT> class Vector;
 
 template<class DT>
-class Matrix {
+class Matrix 
+{
 
 //protected:
 public:
@@ -34,7 +35,6 @@ public:
     //
     Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n)
     {
-        //TODO: Pad so each column is aligned
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
         if (ret != 0) {
             std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
@@ -44,14 +44,63 @@ public:
 
     Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs, int64_t base_m, int64_t base_n, bool mem_manage) :
         _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage)
-    {
-    }
+    { }
+
     ~Matrix()
     {
         if(_mem_manage){
             free(_values);
         }
     }
+
+    Matrix& operator=(Matrix&& x) = default;
+    Matrix(Matrix&& x) = default;
+
+    Matrix& operator=(const Matrix& A)
+    {
+        _m = A._m;
+        _m = A._n;
+        _base_m = _m;
+        _base_n = _n;
+        if(A._cs == 1) {
+            _cs = 1;
+            _rs = _n;
+        } else {
+            _rs = 1;
+            _cs = _m;
+        }
+        _mem_manage = true;
+
+        const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
+        if (ret != 0) {
+            std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
+            exit(1);
+        }
+
+        this->copy(A);
+    }
+
+    Matrix(const Matrix& A) :
+         _m(A._m), _n(A._n), _base_m(_m), _base_n(_n), _mem_manage(true)
+    {
+        if(A._cs == 1) {
+            _cs = 1;
+            _rs = _n;
+        } else {
+            _rs = 1;
+            _cs = _m;
+        }
+        _mem_manage = true;
+
+        const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
+        if (ret != 0) {
+            std::cout << "Could not allocate memory for Matrix. Exiting ..." << std::endl;
+            exit(1);
+        }
+
+        this->copy(A);
+    }
+
     
     void realloc(int64_t m, int64_t n) {
         //Can only reallocate "base object"
@@ -387,7 +436,7 @@ public:
         exit(1);
     }
 
-    void tpqr(Matrix<DT>& V, Matrix<DT>& T, int64_t l, int64_t nb, Matrix<DT>& ws)
+    void tpqr(Matrix<DT>& V, Matrix<DT>& T, int64_t l, int64_t nb)
     {
         std::cout << "TPQR factorization not implemented for datatype" << std::endl;
         exit(1);
@@ -422,11 +471,8 @@ public:
         assert(t._len >= std::min(_m, _n) && "Cannot apply q from trap qr.");
         assert(_cs == 1 || _rs == 1 && "Only row or column major trap_qr supported");
 
-        int64_t m = A.height();
-        int64_t n = A.width();
-
         for(int64_t i = 0; i < _n; i++) {
-            house_apply(l, n, &_values[i*_rs + i*_cs], _rs, t(i), &A._values[i*A._rs], A._rs, A._cs);
+            house_apply(l, A.width(), &_values[i*_rs + i*_cs], _rs, t(i), &A._values[i*A._rs], A._rs, A._cs);
         }
     }
 
@@ -823,7 +869,7 @@ public:
 
                         auto R11 = dest.submatrix(block_begin, block_begin, block_m, block_m);
                         auto ws1 = ws.submatrix(0, block_begin, nb, block_m);
-                        R11.tpqr(V1, T1, 0, nb, ws1);
+                        R11.tpqr(V1, T1, 0, nb);
                     }
 
                     //Apply Q to the rest of the matrix
@@ -883,7 +929,7 @@ public:
             auto V1 = V.submatrix(0, trap_begin, n_removed, trap_n);
             auto R11 = dest.submatrix(trap_begin, trap_begin, trap_n, trap_n);
             auto T1 = T.submatrix(0, trap_begin, T.height(), trap_n);
-            R11.tpqr(V1, T1, 0, nb, ws);
+            R11.tpqr(V1, T1, 0, nb);
 
             //Apply Q to the rest of matrix
             int64_t trail_begin = trap_end;
@@ -1227,11 +1273,10 @@ void Matrix<double>::syrk(CBLAS_UPLO uplo, double alpha, const Matrix<double>& A
     assert(_m == A._m && _m == _n && "Nonconformal syrk");
     assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1));
 
-    int64_t start = rdtsc();
-
     auto ATrans = CblasNoTrans;
     int64_t lda = A._rs * A._cs;
 
+    int64_t start = rdtsc();
     if(_rs == 1) {
         if(A._rs != 1) ATrans = CblasTrans;
         cblas_dsyrk(CblasColMajor, uplo, ATrans, _n, A._n, 
@@ -1244,6 +1289,9 @@ void Matrix<double>::syrk(CBLAS_UPLO uplo, double alpha, const Matrix<double>& A
             beta, _values, _rs);
     }
 
+    int64_t end = rdtsc();
+    PerfLog::get().log_total("SYRK FLOPS", _n*_n*A._n);
+    PerfLog::get().log_total("SYRK TIME", end - start);
 }
 
 template<>
@@ -1322,7 +1370,7 @@ void Matrix<float>::chol(char uplo)
 //Then stores the reflectors in that block
 //TODO: handle row-major
 template<>
-void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws)
+void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in)
 {
     int32_t m = B.height();
     int32_t n = B.width();
@@ -1334,39 +1382,15 @@ void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, in
 
     int32_t l = l_in;
     int32_t nb = std::min(n, (int32_t)nb_in);
-    int32_t info;
 
-/*    int64_t n_size = std::max(2*n, 2*m);
-    int64_t m_size = std::max(2*n, 2*m);
-    Matrix<double> A2(n_size, n_size);
-    Matrix<double> ws2(n_size, n_size);
-    Matrix<double> T2(n_size, n_size);
-    Matrix<double> B2(m_size, n_size);
+    int64_t start = rdtsc();
 
-    int32_t ldt = T2._cs;
-
-    int32_t ldb = B2._cs;
-
-    int32_t lda = A2._cs;
-    auto A2_00 = A2.submatrix(0,0,n,n);
-    A2_00.copy(*this);
-
-    int64_t start, end;
-    start = rdtsc();
-    auto B2_00 = B2.submatrix(0,0,m,n);
-    B2_00.copy(B);
-*/
-/*    dtpqrt_(&m, &n, &l, &nb,
-            A2._values, &lda, B2._values, &ldb, T2._values, &ldt,
-            ws2._values, &info);*/
-/*
-    B.copy(B2_00);
-    this->copy(A2_00);
-*/
- //   end = rdtsc();
- //   PerfLog::get().log_total("TPQR TIME", end - start);
     LAPACKE_dtpqrt(LAPACK_COL_MAJOR, m, n, l, nb,
             _values, this->_cs, B._values, B._cs, T._values, T._cs);
+
+    int64_t end = rdtsc();
+
+    PerfLog::get().log_total("TPQR TIME", end - start);
 }
 
 template<>
@@ -1560,11 +1584,10 @@ void Matrix<float>::syrk(CBLAS_UPLO uplo, float alpha, const Matrix<float>& A, f
     assert(_m == A._m && _m == _n && "Nonconformal syrk");
     assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1));
 
-    int64_t start = rdtsc();
-
     auto ATrans = CblasNoTrans;
     int64_t lda = A._rs * A._cs;
 
+    int64_t start = rdtsc();
     if(_rs == 1) {
         if(A._rs != 1) ATrans = CblasTrans;
         cblas_ssyrk(CblasColMajor, uplo, ATrans, _n, A._n, 
@@ -1576,7 +1599,9 @@ void Matrix<float>::syrk(CBLAS_UPLO uplo, float alpha, const Matrix<float>& A, f
             alpha, A._values, lda,
             beta, _values, _rs);
     }
-
+    int64_t end = rdtsc();
+    PerfLog::get().log_total("SYRK FLOPS", _n*_n*A._n);
+    PerfLog::get().log_total("SYRK TIME", end - start);
 }
 
 template<>
@@ -1604,29 +1629,24 @@ void Matrix<float>::qr(Vector<float>& t)
 //Then stores the reflectors in that block
 //TODO: handle row-major
 template<>
-void Matrix<float>::tpqr(Matrix<float>& B, Matrix<float>& T, int64_t l_in, int64_t nb_in, Matrix<float>& ws)
+void Matrix<float>::tpqr(Matrix<float>& B, Matrix<float>& T, int64_t l_in, int64_t nb_in)
 {
     assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
     assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
     assert(_rs == 1 && "Only column major qr supported");
+    assert(T._rs == 1); assert(B._rs == 1);
 
-    int m = B.height();
-    int n = B.width();
-    int l = l_in;
-    int nb = std::min(B.width(), nb_in);
-    int lda = this->_cs;
-    int ldt = T._cs;
-    int ldb = B._cs;
-    int info;
+    int32_t m = B.height();
+    int32_t n = B.width();
+    int32_t l = l_in;
+    int32_t nb = std::min(n, (int32_t)nb_in);
 
-    int64_t start, end;
-    start = rdtsc();
+    int64_t start = rdtsc();
 
-    stpqrt_(&m, &n, &l, &nb,
-            _values, &lda, B._values, &ldb, T._values, &ldt,
-            ws._values, &info);
+    LAPACKE_stpqrt(LAPACK_COL_MAJOR, m, n, l, nb,
+            _values, this->_cs, B._values, B._cs, T._values, T._cs);
 
-    end = rdtsc();
+    int64_t end = rdtsc();
 
     PerfLog::get().log_total("TPQR TIME", end - start);
 }

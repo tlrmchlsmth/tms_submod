@@ -26,8 +26,6 @@ std::vector<bool> mnp_order_k(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps,
     w(0) = 1.0;
 
     Vector<DT> w2_base(F.n+1);
-    auto w2 = w_base.subvector(0, 1);
-    w2(0) = 1.0;
 
     //Initialize S and R.
     Matrix<DT> S_base(F.n,F.n+1);
@@ -36,6 +34,7 @@ std::vector<bool> mnp_order_k(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps,
     auto R = R_base.submatrix(0, 1);
 
     Matrix<DT> S2_base(F.n,F.n+1);
+    IncQRMatrix<DT> R2_base(F.n+1);
 
     Vector<DT> s0 = S.subcol(0);
     F.polyhedron_greedy_decending(wA, s0);
@@ -47,14 +46,6 @@ std::vector<bool> mnp_order_k(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps,
     while(1) {
         assert(S.width() <= F.n);
 
-        //Initialize data structures for other direction
-        Matrix<DT> S2 = S2_base.submatrix(0,0,S.height(), S.width());
-        S2.copy(S);
-        IncQRMatrix<DT> R2(S2.height());
-        R2._a.mmm(1.0, S2.transposed(), S2, 0.0);
-        R2._a.chol('U');
-        R2._am_a = true;
-        R2._am_upper_tri = true;
         
         //Find current x
         S.mvm(1.0, w, 0.0, x_hat);
@@ -68,32 +59,20 @@ std::vector<bool> mnp_order_k(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps,
             xnrm = 0.0;
         }
 
+        //
+        //Regular FW direction.
+        //
         // Get p_hat using the greedy algorithm
         Vector<DT> p_hat = S_base.subcol(S.width());
         DT F_curr = F.polyhedron_greedy_ascending(x_hat, p_hat);
-        F.polyhedron_greedy_ascending(p_hat, p_hat);
-
+        
+        //Determine current duality gap.
         if (F_curr < F_best) {
             F_best = F_curr;
             for(int64_t i = 0; i < F.n; i++)
                 A[i] = x_hat(i) <= 0.0;
         }
-        
-        // Update R to account for modifying S.
-        R.add_col_inc_qr(S, p_hat);
-        S.enlarge_n(1);
-        w.enlarge(1);
-        w(w.length()-1) = 0.0;
 
-        //Second order stuff
-        Vector<DT> p_hat2 = S2_base.subcol(S2.width);
-        F.polyhedron_greedy_ascending(p_hat, p_hat2);
-        R2.add_col_inc_qr(S2, p_hat2);
-        S2.enlarge_n(1);
-        w2.enlarge(1);
-        w2(w2.length()-1) = 0.0;
-
-        // Get suboptimality bound
         DT sum_x_hat_lt_0 = 0.0;
         for (int64_t i = 0; i < F.n; i++) {
             sum_x_hat_lt_0 += std::min(x_hat(i), 0.0);
@@ -109,17 +88,70 @@ std::vector<bool> mnp_order_k(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps,
             break;
         }
 
-        // Update x_hat order 1
+        Vector<DT> d(F.n);
+        d.copy(p_hat);
+        d.axpy(-1.0, x_hat); 
+        DT alpha_minimizing = std::min(std::max((x_hat.dot(x_hat) - x_hat.dot(p_hat)) / d.dot(d), 0.0), 1.0); //The alpha that minimizes the norm
+        DT alpha_max = alpha_minimizing / 2.0; //Hyperparameter
+
+        // Speculative directions
+        int64_t n_speculations = 64; //Hyperparameter
+        DT best_alpha = 0.0;
+        DT best_resulting_norm = x_hat.dot(x_hat);
+        int64_t best_index = 0;
+        for(int i = 0; i < n_speculations; i++) {
+            //  Initialize data structures for this direction
+            auto S2 = S2_base.submatrix(0, 0, S.height(), S.width());
+            auto R2 = R2_base.submatrix(0, S.width());
+            auto w2 = w2_base.subvector(0, S.width());
+            S2.copy(S);
+            R2.current_matrix().copy(R.current_matrix());
+            w2.copy(w);
+
+            //Get this speculative direction
+            DT alpha = alpha_max * (double) i / n_speculations;
+            Vector<DT> x_hat2(F.n);
+            x_hat2.copy(x_hat);
+            x_hat2.axpby(alpha, p_hat, 1.0 - alpha);
+            Vector<DT> p_hat2 = S2_base.subcol(S2.width());
+            F.polyhedron_greedy_ascending(x_hat2, p_hat2);
+            
+            //Enlarge S, R, w
+            R2.add_col_inc_qr(S2, p_hat2);
+            S2.enlarge_n(1);
+            w2.enlarge(1);
+            w2(w2.length()-1) = 0.0;
+
+            //Do the update for this direction
+            // Update x_hat order 2
+            mnp_update_w(w2, v_base, S2, R2, tolerance);
+            S2.mvm(1.0, w2, 0.0, x_hat2);
+            DT xnrm2 = x_hat2.norm2();
+            if(xnrm2 < best_resulting_norm) {
+                best_resulting_norm = xnrm2;
+                best_alpha = alpha;
+                best_index = i;
+            }
+            //std::cout << std::endl << best_alpha << "\t" << alpha << "\t" << alpha_minimizing << "\t" << best_index << std::endl;
+
+           // std::cout << std::setw(8) << xnrm2;
+        }
+//        std::cout << std::endl;
+
+        //Actually go in the best direction
+        DT alpha = best_alpha;
+        x_hat.axpby(alpha, p_hat, 1.0 - alpha);
+        F.polyhedron_greedy_ascending(x_hat, p_hat);
+
+        //Enlarge S, R, w
+        R.add_col_inc_qr(S, p_hat);
+        S.enlarge_n(1);
+        w.enlarge(1);
+        w(w.length()-1) = 0.0;
+
+        //Do (redundant) update.
         mnp_update_w(w, v_base, S, R, tolerance);
         S.mvm(1.0, w, 0.0, x_hat);
-        DT xnrm = x_hat.norm2();
-
-        // Update x_hat order 2
-        mnp_update_w(w2, v_base, S2, R2, tolerance);
-        S2.mvm(1.0, w2, 0.0, x_hat);
-        DT xnrm2 = x_hat.norm2();
-
-        std::cout << xnrm << "\t" << xnrm2 << std::endl;
 
         PerfLog::get().log_total("S WIDTH", S.width());
         if(k % LOG_FREQ == 0) {

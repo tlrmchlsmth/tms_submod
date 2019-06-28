@@ -60,7 +60,7 @@ void mnp_update_w(Vector<DT>& w, Vector<DT>& v_base,
         std::list<int64_t> to_remove;
         int64_t j = 0;
         for(int64_t i = 0; i < S.width(); i++){
-            if(w(i) <= 0 /*tolerance*/){
+            if(w(i) <= tolerance){
                 to_remove.push_back(i);
             } else {
                 v(j) = w(i);
@@ -93,7 +93,6 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     std::vector<bool> A_curr(F.n);
     std::vector<bool> A_best(F.n);
 
-
     Vector<DT> x_hat(F.n);
 
     Vector<DT> w_base(F.n+1);
@@ -110,9 +109,7 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     Vector<DT> s0 = S.subcol(0);
     F.polyhedron_greedy_decending(wA, s0);
     R(0,0) = s0.norm2();
-    DT pt_p_max = s0.dot(s0);
 
-    DT last_xtx = pt_p_max + 1.0;
     int64_t k = 0;
     int64_t initial_time = rdtsc();
     while(1) {
@@ -148,13 +145,12 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
         //Test to see if we are done
         DT xt_p = x_hat.dot(p_hat);
-        pt_p_max = std::max(p_hat.dot(p_hat), pt_p_max);
-        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps /*|| last_xtx - xt_x < tolerance*/) {
+        //std::cerr << "MNP:\txt_x\t" << xt_x << "\txt_p\t" << xt_p << "\tgap\t" << duality_gap << std::endl;
+        if( xt_p > xt_x - tolerance * p_hat.dot(p_hat) || duality_gap < eps /*|| last_xtx - xt_x < tolerance*/) {
             PerfLog::get().log_sequence("MNP CUMMULATIVE TIME", rdtsc() - initial_time);
             PerfLog::get().log_sequence("MNP DUALITY", duality_gap);
             break;
         }
-        last_xtx = xt_x;
 
         // Update R to account for modifying S.
         R.add_col_inc_qr(S, p_hat);
@@ -171,7 +167,7 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         if(std::isnan(R(R.height()-1, R.width()-1))) break; 
 
         // Update x_hat
-        mnp_update_w(w, v_base, S, R, tolerance);
+        mnp_update_w(w, v_base, S, R, 1e-10);
        
         PerfLog::get().log_total("S WIDTH", S.width());
         if(k % LOG_FREQ == 0) {

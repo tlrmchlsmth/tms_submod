@@ -43,6 +43,7 @@ public:
         buckets[bucket]++;
     }
     void print(std::string s) {
+        std::cout << s << std::endl;
         for(int i = 0; i < buckets.size(); i++) {
             std::cout << "\033[1;34m" << std::setw(8) << min + bucket_size * i << "\033[0m";
         }

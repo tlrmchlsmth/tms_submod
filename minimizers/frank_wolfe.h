@@ -20,7 +20,6 @@ std::vector<bool> FrankWolfe(SubmodularFunction<DT>& F, DT eps)
     std::vector<bool> A_curr(F.n);
     std::vector<bool> A_best(F.n);
 
-    DT F_thresh;
     DT duality_gap = 1.0;
     while(duality_gap > eps) {
         //Find s

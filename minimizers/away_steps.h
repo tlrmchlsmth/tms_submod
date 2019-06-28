@@ -47,7 +47,6 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps, int64_t pruning_f
     std::vector<bool> A_best(F.n);
     
     DT F_best = std::numeric_limits<DT>::max();
-    DT F_thresh;
     DT duality_gap = 1.0;
     int64_t initial_time = rdtsc();
     while(duality_gap > eps) {
@@ -105,7 +104,7 @@ std::vector<bool> AwaySteps(SubmodularFunction<DT>& F, DT eps, int64_t pruning_f
             //Todo: fix this extra copying
             auto s_to = S_base.subcol(S.width());
             s_to.copy(s);
-            s = s_to;
+            s = S_base.subcol(S.width());
         }
 
         if(-x.dot(dFW) >= -x.dot(dA)) {

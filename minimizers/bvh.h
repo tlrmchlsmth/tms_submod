@@ -29,10 +29,10 @@ template<class DT>
 void cleanup_cols(Vector<DT>& w, Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& R, DT tolerance) {
     std::list<int64_t> to_remove;
     std::list<int64_t> to_remove_D;
-    bool remove_s0 = w(0) < 1e-10;
+    bool remove_s0 = w(0) < tolerance;
     if(remove_s0) to_remove.push_back(0);
     for(int64_t j = 1; j < w.length(); j++) {
-        if(w(j) < 1e-10) {
+        if(w(j) < tolerance) {
             to_remove.push_back(j);
             to_remove_D.push_back(j-1);
         }
@@ -60,10 +60,8 @@ void cleanup_cols(Vector<DT>& w, Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& 
 
 template<class DT>
 void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
-        Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& R, DT tolerance)
+        Matrix<DT>& S, Matrix<DT>& D, IncQRMatrix<DT>& R, DT tolerance, DT tolerance2)
 {
-    double last_xtx = 0;
-    
     int64_t minor_cycles = 0;
     while(1) {
         minor_cycles++;
@@ -83,8 +81,8 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         R.trsv(u_linear); //Now u is the direction we will be moving in.
 
         //Return to major cycle if u = 0
-        if(u_linear.dot(u_linear) < 1e-15) { 
-            cleanup_cols(w, S, D, R, tolerance);
+        if(u_linear.dot(u_linear) < tolerance2) { 
+            cleanup_cols(w, S, D, R, 1e-10);
             break;
         }
         u_linear.axpy(1.0, w_linear);
@@ -98,7 +96,7 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
         }
         lambda = 1.0 / lambda;
         
-        if(std::abs(lambda) < 1e-15) {
+        if(std::abs(lambda) < tolerance2) {
             S.mvm(1.0, w, 0.0, x);
             cleanup_cols(w, S, D, R, tolerance);
             break;
@@ -143,7 +141,7 @@ void bvh_update_w(Vector<DT>& w, Vector<DT>& x,
 }
 
 template<class DT>
-std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tolerance) 
+std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tolerance, DT tolerance2) 
 {
     PerfLog::get().add_sequence("BVH CUMMULATIVE TIME");
     PerfLog::get().add_sequence("BVH DUALITY");
@@ -151,6 +149,8 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
     DT F_best = std::numeric_limits<DT>::max();
     std::vector<bool> A_best(F.n);
     std::vector<bool> A_curr(F.n);
+
+    Vector<DT> d_FW(F.n);
 
     Vector<DT> x_hat(F.n);
     Vector<DT> w_base(F.n+2);
@@ -168,11 +168,9 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
     Vector<DT> s0 = S.subcol(0);
     F.polyhedron_greedy_decending(wA, s0);
-    DT pt_p_max = s0.dot(s0);
 
     //Find current x
     S.mvm(1.0, w, 0.0, x_hat);
-    double last_xtx = x_hat.dot(x_hat);
     int64_t k = 0;
     int64_t initial_time = rdtsc();
     while(1) {
@@ -199,11 +197,9 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         //Test to see if we are done
         DT xt_p = x_hat.dot(p_hat);
         DT xt_x = x_hat.dot(x_hat);
-        pt_p_max = std::max(p_hat.dot(p_hat), pt_p_max);
-        if( xt_p > xt_x - tolerance * pt_p_max || duality_gap < eps /* last_xtx - xt_x < tolerance*/) {
+        if( xt_p > xt_x - tolerance || duality_gap < eps ) {
             break;
         }
-        last_xtx = xt_x;
 
         //Update R and D to account for modifying S
         auto d_hat = D_base.subcol(D.width());
@@ -220,10 +216,9 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
         //Take a FW step
         //(Just because we need to be in the interior of the polytope)
-        Vector<DT> d_FW(F.n);
         d_FW.copy(p_hat);
         d_FW.axpy(-1.0, x_hat);
-        DT gamma = std::min(std::max(-x_hat.dot(d_FW) / d_FW.dot(d_FW), 0.0), .5);
+        DT gamma = std::min(std::max(-x_hat.dot(d_FW) / d_FW.dot(d_FW), 0.0), .1);
         w.scale(1.0 - gamma);
         assert(w.min() > -tolerance);
         w.enlarge(1);
@@ -231,7 +226,7 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         assert(std::abs(1.0 - w.sum()) < tolerance);
 
         //Minor cycle
-        bvh_update_w(w, x_hat, S, D, R, tolerance);
+        bvh_update_w(w, x_hat, S, D, R, tolerance, tolerance2);
 
         //Snap to zero
         if(x_hat.dot(x_hat) < tolerance)
@@ -252,11 +247,11 @@ std::vector<bool> bvh(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
 
 
 template<class DT>
-std::vector<bool> bvh(SubmodularFunction<DT>& F, DT eps, DT tolerance) {
+std::vector<bool> bvh(SubmodularFunction<DT>& F, DT eps, DT tolerance, DT tolerance2) {
     Vector<DT> wA(F.n);
     for(int64_t i = 0; i < F.n; i++)
         wA(i) = i;
-    return bvh(F, wA, eps, tolerance);
+    return bvh(F, wA, eps, tolerance, tolerance2);
 }
 
 #endif

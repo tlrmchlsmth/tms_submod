@@ -8,8 +8,8 @@
 template<class DT>
 class MinOneX {
 public:
-    MinOneX(int64_t k) {}
-    DT eval(DT x, int64_t j) {
+    MinOneX(int64_t) {}
+    DT eval(DT x, int64_t) {
         return std::min(1.0, x);
     }
 };

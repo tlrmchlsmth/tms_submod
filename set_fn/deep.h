@@ -16,7 +16,10 @@ DT rectify_sqrt(DT x) {
     return sqrt(x);
 }
 
-
+template<class DT>
+DT rectify_min_1_x(DT x) {
+    return std::min(1.0, x);
+}
 
 template<class DT>
 class Deep : public SubmodularFunction<DT> {
@@ -28,12 +31,7 @@ public:
     Vector<DT> final_layer;
     std::vector<Vector<DT>> inputs;
 
-    //First kind of deep submodular functions generated.
-    void init_type_0(std::vector<int64_t>& layer_sizes) {
-        std::random_device rd; 
-        std::mt19937 gen{rd()};
-        std::uniform_real_distribution<DT> uniform(0.0, 1.0);
-        
+    void init_layers(std::vector<int64_t>& layer_sizes) {
         layers.reserve(layer_sizes.size());
         inputs.reserve(layer_sizes.size()+1);
 
@@ -43,14 +41,6 @@ public:
             previous_layer_size = layer_sizes[layer];
         }
 
-        //Generate monotone submodular model with random weights
-        //First layer
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
-            layers[layer].fill_rand(gen, uniform);
-        }
-        final_layer.fill_rand(gen, uniform);
-
-
         //Create workspace for the model
         inputs.emplace_back(n);
         for(int layer = 0; layer < layer_sizes.size(); layer++) {
@@ -58,53 +48,35 @@ public:
         }
     }
 
-    void init_type_1(std::vector<int64_t>& layer_sizes, DT p) {
-        std::random_device rd; 
-        std::mt19937 gen{rd()};
-        std::uniform_real_distribution<DT> uniform(0.0, 1.0);
-        std::bernoulli_distribution<DT> bern(p);
-        
-        layers.reserve(layer_sizes.size());
-        inputs.reserve(layer_sizes.size()+1);
-
-        int64_t previous_layer_size = n;
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
-            layers.emplace_back(layer_sizes[layer], previous_layer_size);
-            previous_layer_size = layer_sizes[layer];
+    template<class RNG, class DIST>
+    void init_weights(RNG &gen, DIST &dist) {
+        for(int layer = 0; layer < layers.size(); layer++) {
+            layers[layer].fill_rand(gen, dist);
         }
-
-        //Generate monotone submodular model with random weights
-        //First layer
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
-            layers[layer].fill_rand_bernoulli();
-        }
-        final_layer.fill_rand(gen, bern);
-
-
-        //Create workspace for the model
-        inputs.emplace_back(n);
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
-            inputs.emplace_back(layer_sizes[layer]);
-        }
+        final_layer.fill_rand(gen, dist);
     }
 
+    //Generate default function
     Deep(int64_t n_in) : SubmodularFunction<DT>(n_in), 
         n(n_in), final_layer(4), layers(), inputs(), rectify(rectify_sqrt)
     {
         std::vector<int64_t> layer_sizes;
         layer_sizes.push_back(16);
         layer_sizes.push_back(4);
-        init_type_0(layer_sizes);
-
+        init_layers(layer_sizes);
+        
+        std::random_device rd; 
+        std::mt19937 gen{rd()};
+        std::bernoulli_distribution dist(0.3);
+        init_weights(gen, dist);
     }
     
     Deep(int64_t n_in, std::vector<int64_t>& layer_sizes) : SubmodularFunction<DT>(n_in), 
-        n(n_in), final_layer(layer_sizes.back()), layers(), inputs()
+        n(n_in), final_layer(layer_sizes.back()), layers(), inputs(), rectify(rectify_sqrt)
     {
-        init_type_0(layer_sizes);
+        init_layers(layer_sizes);
     }
-
-
+    
     DT eval(const std::vector<bool>& A) 
     {
         assert(A.size() == n);
@@ -166,7 +138,7 @@ public:
 
     template<class DT>
     void rectify_vec(Vector<DT>& x) {
-        _Pragma("omp parallel for")
+        //_Pragma("omp parallel for")
         for(int64_t i = 0; i < x.length(); i++) {
             assert(x(i) >= 0);
             x(i) = rectify(x(i));

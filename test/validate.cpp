@@ -194,7 +194,6 @@ void val_brute_force_sum_submodular()
     }
 }
 
-//Make sure log det greedy algorithm and eval function are consistent
 template<class F, class DT>
 void val_gains(std::string name)
 {
@@ -280,7 +279,6 @@ void val_incremental_qr_remove_cols()
     int64_t start = 128;
     int64_t end = 1024;
     int64_t inc = 128; 
-    double percent_to_remove = 0.2; 
 
 
     std::cout << "===========================================================" << std::endl;
@@ -293,8 +291,6 @@ void val_incremental_qr_remove_cols()
         int64_t task_size = 16;
         int64_t nb = 4;
 
-//        std::vector<double> cycles;
-//        std::list<int64_t> cols_to_remove = get_cols_to_remove(n, percent_to_remove);
         std::list<int64_t> cols_to_remove;
         cols_to_remove.push_back(30); 
 
@@ -319,7 +315,7 @@ void val_incremental_qr_remove_cols()
         S.remove_cols(cols_to_remove);
         R1.remove_cols_incremental_qr_householder(cols_to_remove, t);
         R2.remove_column_iqr_givens(cols_to_remove.front(), T, nb);
-//        R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
+        R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
         R.remove_cols_incremental_qr_kressner(R3, cols_to_remove, T, V_ws, nb, ws);
         R.remove_cols_incremental_qr_tasks_kressner(R4, cols_to_remove, T, V_ws, task_size, nb, ws);
         R1.set_subdiagonal(0.0); R2.set_subdiagonal(0.0); R3.set_subdiagonal(0.0); R4.set_subdiagonal(0.0);
@@ -372,15 +368,12 @@ void val_incremental_qr_remove_cols()
         std::cout << std::setw(w) << m << std::setw(w) << n;
         print_err(error1, w); print_err(error2, w); print_err(error3, w); print_err(error4, w);
         std::cout << std::endl;
-#ifdef DEBUGGING        
-        exit(1);
-#endif
     }
 
 }
 
 #ifdef VALIDATE_LEMON
-void val_mincut()
+void val_mincut_lemon()
 {
     int64_t start = 8;
     int64_t end = 512;
@@ -464,6 +457,52 @@ void val_mincut()
 }
 #endif
 
+template<class F, class DT>
+void eval_modularity(std::string name)
+{
+    int64_t start = 16;
+    int64_t end = 1024; 
+    int64_t inc = 16; 
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Evaluating Modularity of " << name << " (Random S) " << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "F(S)";
+    std::cout << std::setw(w) << "m_hat(S)";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        F prob(n);
+        
+        //Generate random S
+        std::vector<bool> S(n);
+
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+        std::bernoulli_distribution dist(0.3);
+        std::generate(S.begin(), S.end(), [&dist, &gen](){ return dist(gen); });
+
+        DT F_S = prob.eval(S);
+
+        DT m_hat_S = 0.0;
+        std::vector<bool> S_i(n);
+        std::fill(S_i.begin(), S_i.end(), false);
+        for(int64_t i = 0; i < n; i++) {
+            if(S[i]) {
+                S_i[i] = true;
+                m_hat_S += prob.eval(S_i);
+                S_i[i] = false;
+            }
+        }
+
+        std::cout << std::setw(w) << n;
+        std::cout << std::setw(w) << F_S;
+        std::cout << std::setw(w) << m_hat_S;
+        std::cout << std::endl;
+    }
+}
+
 void run_validation_suite() 
 {
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
@@ -471,37 +510,41 @@ void run_validation_suite()
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
 
 
+//    eval_modularity<STConstrain<double,PlusModular<double, Deep<double>>>, double>("Deep Plus Modular S,T Constrained");
+    eval_modularity<PlusModular<double,Deep<double>>, double>("Deep Plus Modular");
+
+    //Mincut stuff
+    val_submodularity<MinCut<double>>("MinCut");
+    val_gains<MinCut<double>, double>("MinCut");
+    val_mnp_brute_force<MinCut<double>, double>("MinCut");
+    val_mincut_greedy_eval();
+#ifdef VALIDATE_LEMON
+    val_mincut_lemon();
+#endif
+
+    //LogDet stuff
+    val_submodularity<LogDet<double>>("Log Det");
+    val_gains<LogDet<double>, double>("LogDet");
+    val_mnp_brute_force<LogDet<double>, double>("Log Det");
+
+    //SCMM
+    val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");
+    val_gains<SCMM<double, MinusAXSqr<double>>, double>("SCMM");
+    val_mnp_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
+    val_mnp_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
+    val_brute_force_sum_submodular<double>();
+    
+    //Deep submodular FNs
+    val_submodularity<Deep<double>>("Deep");
     val_submodularity<STConstrain<double,PlusModular<double,Deep<double>>>>("Deep Plus Modular S,T Constrained");
     val_gains<PlusModular<double,Deep<double>>, double>("Deep Plus Modular");
     val_gains<STConstrain<double,PlusModular<double,Deep<double>>>, double>("Deep Plus Modular S,T Constrained");
-    val_mnp_brute_force<STConstrain<double,PlusModular<double,Deep<double>>>, double>("Deep Plus Modular S,T Constrained");
-
-    //Validate submodularity
-    val_submodularity<MinCut<double>>("MinCut");
-    val_submodularity<LogDet<double>>("Log Det");
-    val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");
-    val_submodularity<Deep<double>>("Deep");
-    
-    //Validate consistency of gains vs eval
-    val_gains<IwataTest<double>, double>("Iwata's Test Fn");
-    val_gains<LogDet<double>, double>("LogDet");
-    val_gains<MinCut<double>, double>("MinCut");
-    val_gains<SCMM<double, MinusAXSqr<double>>, double>("SCMM");
-    val_mincut_greedy_eval();
-
-    //Validate mnp solution using brute force
     val_mnp_brute_force<Deep<double>, double>("Deep submodular function");
-    val_mnp_brute_force<LogDet<double>, double>("Log Det");
-    val_mnp_brute_force<MinCut<double>, double>("MinCut");
-    val_brute_force_sum_submodular<double>();
-    val_mnp_brute_force<SCMM<double, MinOneX<double>>, double>("SCMM with min(1.0, x)");
-    val_mnp_brute_force<SCMM<double, MinusAXSqr<double>>, double>("SCMM with ax^2");
+    val_mnp_brute_force<STConstrain<double,PlusModular<double,Deep<double>>>, double>("Deep Plus Modular S,T Constrained");
+    
+    //Iwata's test fn, I guess
+    val_gains<IwataTest<double>, double>("Iwata's Test Fn");
 
     //Validate incremental qr column removal
     val_incremental_qr_remove_cols();
-
-    //Compare mincut mnp solution to that of an external library  
-#ifdef VALIDATE_LEMON
-    val_mincut();
-#endif
 }

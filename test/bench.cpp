@@ -129,9 +129,9 @@ void benchmark_remove_cols()
             R1.remove_cols_incremental_qr_householder(cols_to_remove, t);
             cycles1.push_back(cycles_count_stop().time);
 
-            cycles_count_start();
-            R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
-            cycles2.push_back(cycles_count_stop().time);
+            //cycles_count_start();
+            //R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
+            //cycles2.push_back(cycles_count_stop().time);
 
             cycles_count_start();
             R.remove_cols_incremental_qr_kressner(R3, cols_to_remove, T, V, nb, ws);

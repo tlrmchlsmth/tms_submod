@@ -13,7 +13,6 @@ template <typename T> int sgn(T val) {
 
 template<class DT>
 class Vector {
-
 public:
     DT * _values;
     int64_t _len;
@@ -21,7 +20,6 @@ public:
     int64_t _base_len;
     bool _mem_manage;
 
-//public:
     Vector(int64_t s) : _len(s), _base_len(s), _stride(1), _mem_manage(true)
     {
         auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
@@ -33,8 +31,7 @@ public:
 
     Vector(DT* values, int64_t len, int64_t base_len, int64_t stride, bool mem_manage) :
         _values(values), _len(len), _base_len(base_len), _stride(stride), _mem_manage(mem_manage)
-    {
-    }
+    { }
 
     ~Vector()
     {
@@ -43,7 +40,36 @@ public:
         }
     }
 
-    void realloc(int64_t len) {
+    Vector& operator=(Vector&& x) = default;
+    Vector(Vector&& x) = default;
+    Vector& operator=(const Vector& x)
+    {
+        _len = x._len;
+        _base_len = x._len;
+        _stride = 1;
+        _mem_manage = true;
+
+        auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
+        if(ret != 0){
+            std::cout << "Could not allocate memory for vector of length " << _len *sizeof(DT) / 1e9 << " GB. Exiting..." << std::endl;
+            exit(1);
+        }
+        this->copy(x);
+    }
+    Vector(const Vector& x) :
+        _len(x._len), _base_len(x._len), _stride(1), _mem_manage(true)
+    {
+        auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
+        if(ret != 0){
+            std::cout << "Could not allocate memory for vector of length " << _len *sizeof(DT) / 1e9 << " GB. Exiting..." << std::endl;
+            exit(1);
+        }
+        this->copy(x);
+    }
+
+
+    void realloc(int64_t len) 
+    {
         //Can only reallocate "base object"
         assert(_mem_manage == true);
         assert(len >= _len);
@@ -363,7 +389,6 @@ public:
             }
         }
     }
-
 };
 
 #include "matrix.h"

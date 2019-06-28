@@ -46,7 +46,6 @@ std::vector<bool> Pairwise(SubmodularFunction<DT>& F, DT eps, int64_t pruning_fa
     a(0) = 1.0;
 
     DT F_best = std::numeric_limits<DT>::max();
-    DT F_thresh;
     DT duality_gap = 1.0;
     while(duality_gap > eps) {
         assert(S.width() > 0);

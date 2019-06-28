@@ -32,7 +32,7 @@ public:
         //Generate modular function
         std::vector<bool> A(n);
         std::fill(A.begin(), A.end(), true); 
-        std::normal_distribution<> modular_dist(1.0, 1.0);
+        std::normal_distribution<> modular_dist(1.0, 10.0);
         modular.fill_rand(gen, modular_dist);
         modular.scale(-submodular.eval(A) / modular.sum());
     }

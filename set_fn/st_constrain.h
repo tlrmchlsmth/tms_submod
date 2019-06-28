@@ -41,7 +41,7 @@ public:
 
     STConstrain(int64_t n_in, SFN fn_in) : SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), A_ws(n_in+2), perm_ws(n_in+2), x_ws(n_in+2) 
     {
-        assert(fn_in._n == n+2);
+        assert(fn_in.n == n+2);
         std::random_device rd;
         std::mt19937 gen{rd()};
 

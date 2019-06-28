@@ -44,7 +44,7 @@ public:
     IncQRMatrix(int64_t n, int64_t base_n, bool am_upper_tri, bool am_a,
             Matrix<DT> a, Matrix<DT> b, Matrix<DT> T, Matrix<DT> V, Matrix<DT> ws) :
         _n(n), _base_n(base_n), _am_upper_tri(am_upper_tri), _am_a(am_a),
-        _a(a), _b(b), _T(T), _V(V), _ws(ws)
+        _a(std::move(a)), _b(std::move(b)), _T(std::move(T)), _V(std::move(V)), _ws(std::move(ws))
     { }
 
     void transpose()
