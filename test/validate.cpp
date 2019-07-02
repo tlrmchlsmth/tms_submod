@@ -315,7 +315,6 @@ void val_incremental_qr_remove_cols()
         S.remove_cols(cols_to_remove);
         R1.remove_cols_incremental_qr_householder(cols_to_remove, t);
         R2.remove_column_iqr_givens(cols_to_remove.front(), T, nb);
-        R2.remove_cols_incremental_qr_blocked_householder(cols_to_remove, t, nb);
         R.remove_cols_incremental_qr_kressner(R3, cols_to_remove, T, V_ws, nb, ws);
         R.remove_cols_incremental_qr_tasks_kressner(R4, cols_to_remove, T, V_ws, task_size, nb, ws);
         R1.set_subdiagonal(0.0); R2.set_subdiagonal(0.0); R3.set_subdiagonal(0.0); R4.set_subdiagonal(0.0);
