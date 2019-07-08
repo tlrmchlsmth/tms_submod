@@ -38,10 +38,10 @@ public:
         return V;
     }
 
-    virtual DT gain(const std::vector<bool>& A, DT FA, int64_t b) {
-        std::vector<bool> Ab = A;
-        Ab[b] = 1;
-        DT FAb = this->eval(Ab);
+    virtual DT gain(std::vector<bool>& A, DT FA, int64_t b) {
+        A[b] = true;
+        DT FAb = this->eval(A);
+        A[b] = false;
         return FAb - FA;
     }
 
@@ -95,9 +95,10 @@ public:
         return min_val;
     }
     
-    virtual DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool>& A_out) 
+    virtual DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool>& A) 
     {
-        std::vector<bool> A(n);
+        assert(A.size() == n);
+
         std::fill(A.begin(), A.end(), false);
         auto F_A = eval(A); 
 
@@ -109,20 +110,18 @@ public:
                 if(A[i]) continue;
 
                 //Get the gain
-                A[i] = true;
-                auto F_A_plus_i = eval(A);
-                A[i] = false;
-                if(F_A_plus_i - F_A > greatest_gain) {
-                    greatest_gain = F_A_plus_i - F_A;
+                auto gain_i = gain(A, F_A, i);
+                if(gain_i > greatest_gain) {
+                    greatest_gain = gain_i;
                     elem_to_add = i;
                 }
             }
+
             if(greatest_gain < 0.0) break;
             A[elem_to_add] = true;
-            F_A = F_A + greatest_gain;
+            F_A += greatest_gain;
         }
 
-        A_out = A;
         return F_A;
     }
 
