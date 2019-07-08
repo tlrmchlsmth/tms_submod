@@ -502,6 +502,34 @@ void eval_modularity(std::string name)
     }
 }
 
+template<class F, class DT>
+void val_greedy_maximize(std::string name)
+{
+    int64_t start = 4;
+    int64_t end = 256; 
+    int64_t inc = 4; 
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Validating Consistency " << name << " Greedy Maximization" << std::endl;
+    std::cout << "===========================================================" << std::endl;
+    int w = 18;
+    std::cout << std::setw(w) << "n";
+    std::cout << std::setw(w) << "error";
+    std::cout << std::endl;
+    for(int64_t n = start; n <= end; n += inc) {
+        F prob(n);
+        std::vector<bool> A(n); 
+        DT base_F_A = prob.SubmodularFunction<DT>::greedy_maximize(n / 4, A);
+        DT F_A = prob.greedy_maximize(n / 4, A);
+
+        DT error = base_F_A - F_A;
+
+        std::cout << std::setw(w) << n;
+        print_err(error, w);
+        std::cout << std::endl;
+    }
+}
+
 void run_validation_suite() 
 {
     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << std::endl;
@@ -525,6 +553,7 @@ void run_validation_suite()
     val_submodularity<LogDet<double>>("Log Det");
     val_gains<LogDet<double>, double>("LogDet");
     val_mnp_brute_force<LogDet<double>, double>("Log Det");
+    val_greedy_maximize<LogDet<double>, double>("Log Det");
 
     //SCMM
     val_submodularity<SCMM<double, MinusAXSqr<double>>>("SCMM");

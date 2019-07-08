@@ -94,6 +94,38 @@ public:
 
         return min_val;
     }
+    
+    virtual DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool>& A_out) 
+    {
+        std::vector<bool> A(n);
+        std::fill(A.begin(), A.end(), false);
+        auto F_A = eval(A); 
+
+        int64_t k = 0;
+        while(k < cardinality_constraint) {
+            DT greatest_gain = -1.0;
+            int64_t elem_to_add = -1;
+            for(int64_t i = 0; i < n; i++) {
+                if(A[i]) continue;
+
+                //Get the gain
+                A[i] = true;
+                auto F_A_plus_i = eval(A);
+                A[i] = false;
+                if(F_A_plus_i - F_A > greatest_gain) {
+                    greatest_gain = F_A_plus_i - F_A;
+                    elem_to_add = i;
+                }
+            }
+            if(greatest_gain < 0.0) break;
+            A[elem_to_add] = true;
+            F_A = F_A + greatest_gain;
+        }
+
+        A_out = A;
+        return F_A;
+    }
+
 };
 
 #endif

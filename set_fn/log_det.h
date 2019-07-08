@@ -47,8 +47,7 @@ public:
         Cov.mmm(1.0, UT, U, 0.0);
     }
 
-    std::vector<bool> greedy_maximize2() {
-        std::vector<bool> A(n);
+    DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool> A) {
         auto U0 = LogDet<DT>::U.submatrix(0,0,0,0);
         Matrix<DT> C_base(n,n);
         auto C = C_base.submatrix(0,0,0,n);
@@ -60,7 +59,7 @@ public:
         }
 
         //Add one element at a time
-        for(int64_t i = 0; i < n; i++) {
+        for(int64_t i = 0; i <= cardinality_constraint && i < n; i++) {
             assert(U0.height() == i);
             assert(U0.height() == C.height());
             assert(C.width() == n-i);
@@ -89,10 +88,9 @@ public:
             for(j = 0, cov_j = columns.begin(); j < d.length(); j++, cov_j++) {
                 if(d(j) > d(best_j)) {
                     best_j = j;
-                    best_cov_j = cov_j;
-                }
+                    best_cov_j = cov_j; }
             }
-            if(d(best_j) > 1.0) {
+            if(d(best_j) >= 0.0) {
                 A[*best_cov_j] = true;
             } else {
                 break;
@@ -120,10 +118,10 @@ public:
             }
         }
 
-        return A;
+        return eval(A);
     }
 
-    std::vector<bool> greedy_maximize1() {
+    std::vector<bool> greedy_maximize_trsv() {
         std::vector<bool> A(n);
         for(int64_t i = 0; i < n; i++) {
             A[i] = false;

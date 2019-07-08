@@ -421,66 +421,6 @@ void test_versus_fujishige()
     }
 }
 
-template<class DT>
-void test_greedy_maximize()
-{
-    int64_t start = 8;
-    int64_t end = 2048;
-    int64_t inc = 8;
-    int64_t n_reps = 10;
-
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Benchmarking greedy maximization" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(fw) << "|A1|"; 
-    std::cout << std::setw(fw) << "|A2|"; 
-    std::cout << std::setw(2*fw) << "maximize 1 F(A)"; 
-    std::cout << std::setw(2*fw) << "maximize 2 F(A)"; 
-    std::cout << std::setw(2*fw) << "maximize 1";
-    std::cout << std::setw(2*fw) << "maximize 2";
-    std::cout << std::endl;
-
-    for(int64_t i = start; i <= end; i += inc) {
-        int64_t n = i;
-
-        for(int64_t r = 0; r < n_reps; r++) {
-            LogDet<DT> problem(n);
-
-            //unfused
-            cycles_count_start();
-            auto A1 = problem.greedy_maximize1();
-            double seconds1 = (double) cycles_count_stop().time;
-            double fA1 = problem.eval(A1);
-            
-            //fused
-            cycles_count_start();
-            auto A2 = problem.greedy_maximize2();
-            double seconds2 = (double) cycles_count_stop().time;
-            double fA2 = problem.eval(A2);
-
-            int64_t cardinality = 0;
-            int64_t cardinality2 = 0;
-            for(int i = 0; i < n; i++) {
-                if(A1[i]) cardinality++;
-                if(A2[i]) cardinality2++;
-            }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(fw) << cardinality2;
-            std::cout << std::setw(2*fw) << fA1;
-            std::cout << std::setw(2*fw) << fA2;
-            std::cout << std::setw(2*fw) << seconds1;
-            std::cout << std::setw(2*fw) << seconds2;
-            std::cout << std::endl;
-            if(std::abs(fA1 - fA2) > 1e-10)
-                exit(1);
-        }
-    }
-}
-
 #include "minimizers/mnp_fw.h"
 template<class DT>
 void mnp_fw()
@@ -619,6 +559,8 @@ void mnp_deep(GEN &gen, DIST &dist)
 }
 int main() 
 {
+    run_validation_suite();
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::bernoulli_distribution bern(0.3);
@@ -630,7 +572,6 @@ int main()
     mnp_fw<double>();
 
 
-    run_validation_suite();
     exit(1);
 
     run_validation_suite();
@@ -653,6 +594,5 @@ int main()
     exit(1);
     frank_wolfe_wolfe_mincut<double>();
 
-    test_greedy_maximize<double>();
     run_benchmark_suite();
 }
