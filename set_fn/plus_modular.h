@@ -11,31 +11,41 @@ public:
     SFN submodular;
     Vector<DT> modular;
 
-    PlusModular(int64_t n_in) : SubmodularFunction<DT>(n_in), n(n_in), submodular(n_in), modular(n_in)
+    PlusModular(int64_t n_in) :
+        SubmodularFunction<DT>(n_in), n(n_in), submodular(n_in), modular(n_in)
     {
         std::random_device rd;
         std::mt19937 gen{rd()};
 
         //Generate modular function
-        std::vector<bool> A(n);
-        std::fill(A.begin(), A.end(), true); 
-        std::normal_distribution<> modular_dist(1.0, 1.0);
-        modular.fill_rand(gen, modular_dist);
-        modular.scale(-submodular.eval(A) / modular.sum());
-    }
-
-    PlusModular(int64_t n_in, SFN fn_in) : SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), modular(n_in)
-    {
-        std::random_device rd;
-        std::mt19937 gen{rd()};
-
-        //Generate modular function
-        std::vector<bool> A(n);
-        std::fill(A.begin(), A.end(), true); 
         std::normal_distribution<> modular_dist(1.0, 10.0);
         modular.fill_rand(gen, modular_dist);
-        modular.scale(-submodular.eval(A) / modular.sum());
+
+        //Scale it so F(V) = 0
+        std::vector<bool> V(n);
+        std::fill(V.begin(), V.end(), true); 
+        modular.scale(-submodular.eval(V) / modular.sum());
     }
+
+    template<class DIST>
+    PlusModular(int64_t n_in, SFN fn_in, DIST d) :
+        SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), modular(n_in)
+    {
+        std::random_device rd;
+        std::mt19937 gen{rd()};
+
+        //Generate modular function
+        modular.fill_rand(gen, d);
+        
+        //Scale it so F(V) = 0
+        std::vector<bool> V(n);
+        std::fill(V.begin(), V.end(), true); 
+        modular.scale(-submodular.eval(V) / modular.sum());
+    }
+
+    PlusModular(int64_t n_in, SFN fn_in) : 
+        SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), modular(n_in)
+    { }
 
     DT eval(const std::vector<bool>& A) 
     {

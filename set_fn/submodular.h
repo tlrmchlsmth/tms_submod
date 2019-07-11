@@ -94,6 +94,21 @@ public:
 
         return min_val;
     }
+
+    DT m_hat(const std::vector<bool>& S) 
+    {
+        DT m_hat_S = 0.0;
+        std::vector<bool> S_i(n);
+        std::fill(S_i.begin(), S_i.end(), false);
+        for(int64_t i = 0; i < n; i++) {
+            if(S[i]) {
+                S_i[i] = true;
+                m_hat_S += this->eval(S_i);
+                S_i[i] = false;
+            }
+        }
+        return m_hat_S;
+    }
     
     virtual DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool>& A) 
     {

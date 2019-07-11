@@ -499,7 +499,7 @@ void mnp_fw()
 }
 
 template<class DT, class GEN, class DIST>
-void mnp_deep(GEN &gen, DIST &dist)
+void mnp_deep(GEN &gen, DIST &dist, const std::vector<int64_t> layers, const std::string desc)
 {
     int64_t start = 1000;
     int64_t end = 10000;
@@ -508,6 +508,7 @@ void mnp_deep(GEN &gen, DIST &dist)
 
     std::cout << "===========================================================" << std::endl;
     std::cout << "Benchmarking MNP for Deep Submodular Functions" << std::endl;
+    std::cout << std::setw(25) << desc << std::endl;
     std::cout << "===========================================================" << std::endl;
 
     int fw = 8;
@@ -518,6 +519,7 @@ void mnp_deep(GEN &gen, DIST &dist)
     std::cout << std::setw(2*fw) << "MNP_N";
     std::cout << std::setw(2*fw) << "MNP_C";
     std::cout << std::setw(2*fw) << "MNP_|S|";
+    std::cout << std::setw(2*fw) << "mhat test";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -525,12 +527,13 @@ void mnp_deep(GEN &gen, DIST &dist)
 
         for(int64_t r = 0; r < n_reps; r++) {
             //Initialize deep submodular problem
-            Deep<double> deep(n);
+            Deep<double> deep(n+2, layers);
             deep.init_weights(gen, dist);
-            deep.rectify = rectify_min_1_x;
-            PlusModular<double, Deep<double>> problem(n, deep);
-//            PlusModular<double, Deep<double>> problem(n, Deep<double>(n));
-//            STConstrain<double, PlusModular<double, Deep<double>>> problem(n, deep_plus_modular);
+//            deep.rectify = [](double x){ return std::sqrt(x); };
+            deep.rectify = [](double x){ return std::min(x, 1.0); };
+
+            PlusModular<double, Deep<double>> deep_plus_modular(n+2, deep, dist);
+            STConstrain<double, PlusModular<double, Deep<double>>> problem(n, deep_plus_modular);
 
             //MNP
             PerfLog::get().clear();
@@ -549,29 +552,67 @@ void mnp_deep(GEN &gen, DIST &dist)
             std::cout << std::setw(fw) << n;
             std::cout << std::setw(fw) << cardinality;
             std::cout << std::setw(2*fw) << mnp_fa;
-            std::cout << std::setw(2*fw) << mnp_seconds << ",";
-            std::cout << std::setw(2*fw) << mnp_iterations << ",";
-            std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
+            std::cout << std::setw(2*fw) << mnp_seconds;
+            std::cout << std::setw(2*fw) << mnp_iterations;
+            std::cout << std::setw(2*fw) << mnp_minor_cycles;
             std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
+            
+            std::vector<bool> S(n);
+            std::random_device rd;
+            std::mt19937 gen{rd()};
+            std::bernoulli_distribution dist(0.3);
+            std::generate(S.begin(), S.end(), [&dist, &gen](){ return dist(gen); });
+            std::cout << std::setw(2*fw) << problem.m_hat(S) - problem.eval(S);
             std::cout << std::endl;
         }
     }
 }
+
 int main() 
 {
-    run_validation_suite();
-
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::bernoulli_distribution bern(0.3);
+    std::bernoulli_distribution bern(0.20);
     std::uniform_real_distribution<double> uniform(0.0, 1.0);
 
-    //Compare MNP to this MNP with frank wolfe step variant
-    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern); 
-    mnp_deep<double, std::mt19937, std::uniform_real_distribution<double>>(gen, uniform); 
-    mnp_fw<double>();
+    std::vector<int64_t> layers;
+    //layers.push_back(10);
+    //layers.push_back(10);
+    layers.push_back(10);
+
+    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 1 layer size 10"); 
+    layers.push_back(10);
+    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 2 layers size 10"); 
+    layers.push_back(10);
+    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 3 layers size 10"); 
+
+    run_validation_suite();
+    exit(1);
+
+    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution"); 
+    mnp_deep<double, std::mt19937, std::uniform_real_distribution<double>>(gen, uniform, layers, "Uniform Distribution"); 
 
 
+
+    for(int i = 4; i < 64; i+=4) {
+        layers.clear();
+        for(int j = 0; j < 4; j++){
+            layers.push_back(i);
+        }
+        mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, 
+                std::string() + "Bernoulli Distribution. 4 Layers. Layer size " + std::to_string(i)); 
+    }
+
+
+    layers.clear();
+    for(int i = 0; i < 16; i++) {
+        layers.push_back(16);
+        mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, 
+                std::string() + "Bernoulli Distribution. " + std::to_string(i) + " Layers."); 
+    }
+
+
+    run_validation_suite();
     exit(1);
 
     run_validation_suite();

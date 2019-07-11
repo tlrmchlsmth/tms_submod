@@ -414,7 +414,7 @@ public:
         return val - baseline;
     }
 
-    DT gain(const std::vector<bool>& A, int64_t b) 
+    DT gain(std::vector<bool>& A, int64_t b) 
     {
         //Gain from adding b
         DT gain = 0.0;

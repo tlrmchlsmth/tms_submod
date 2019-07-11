@@ -59,7 +59,7 @@ public:
         }
 
         //Add one element at a time
-        for(int64_t i = 0; i <= cardinality_constraint && i < n; i++) {
+        for(int64_t i = 0; i < cardinality_constraint && i < n; i++) {
             assert(U0.height() == i);
             assert(U0.height() == C.height());
             assert(C.width() == n-i);
@@ -78,7 +78,7 @@ public:
             int64_t j;
             std::list<int64_t>::iterator cov_j;
 
-            //for(int64_t j = 0; j < d.length(); j++) {
+            //for(int64_t j = 0; j < d.length(); j++) 
             for(j = 0, cov_j = columns.begin(); j < d.length(); j++, cov_j++) {
                 d(j) = sqrt(std::abs(Cov(*cov_j, *cov_j) - d(j)));
             }

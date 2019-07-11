@@ -6,19 +6,9 @@
 #include "../la/matrix.h"
 
 template<class DT>
-DT rectify_id(DT x) {
-    return x;
-}
-
-template<class DT>
 DT rectify_sqrt(DT x) {
     assert(x >= 0);
     return sqrt(x);
-}
-
-template<class DT>
-DT rectify_min_1_x(DT x) {
-    return std::min(1.0, x);
 }
 
 template<class DT>
@@ -31,7 +21,7 @@ public:
     Vector<DT> final_layer;
     std::vector<Vector<DT>> inputs;
 
-    void init_layers(std::vector<int64_t>& layer_sizes) {
+    void init_layers(const std::vector<int64_t>& layer_sizes) {
         layers.reserve(layer_sizes.size());
         inputs.reserve(layer_sizes.size()+1);
 
@@ -71,7 +61,7 @@ public:
         init_weights(gen, dist);
     }
     
-    Deep(int64_t n_in, std::vector<int64_t>& layer_sizes) : SubmodularFunction<DT>(n_in), 
+    Deep(int64_t n_in, const std::vector<int64_t>& layer_sizes) : SubmodularFunction<DT>(n_in), 
         n(n_in), final_layer(layer_sizes.back()), layers(), inputs(), rectify(rectify_sqrt)
     {
         init_layers(layer_sizes);
