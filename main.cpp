@@ -568,29 +568,100 @@ void mnp_deep(GEN &gen, DIST &dist, const std::vector<int64_t> layers, const std
     }
 }
 
+#include "set_fn/hypergraph_cut.h"
+template<class DT>
+void mnp_hyper(int64_t r)
+{
+    int64_t start = 1000;
+    int64_t end = 5000;
+    int64_t inc = 1000;
+    int64_t n_reps = 10;
+
+    std::cout << "===========================================================" << std::endl;
+    std::cout << "Benchmarking MNP for Hypergraph cuts. r = " << r << std::endl;
+    std::cout << "===========================================================" << std::endl;
+
+    int fw = 8;
+    std::cout << std::setw(fw) << "n"; 
+    std::cout << std::setw(fw) << "MNP_|A|"; 
+    std::cout << std::setw(2*fw) << "MNP_F(A)";
+    std::cout << std::setw(2*fw) << "MNP_T";
+    std::cout << std::setw(2*fw) << "MNP_N";
+    std::cout << std::setw(2*fw) << "MNP_C";
+    std::cout << std::endl;
+
+    for(int64_t i = start; i <= end; i += inc) {
+        int64_t n = i;
+
+        for(int64_t r = 0; r < n_reps; r++) {
+            //Initialize min norm point problem
+            HyperCut<DT> cut(n+2);
+            cut.GeneralizedWattsStrogatz(16, r, 0.25);
+            STConstrain<double, HyperCut<double>> problem(n, cut);
+
+            for(auto & e: problem.submodular.edges) {
+                if(std::find(e.v.begin(), e.v.end(), problem.s) != e.v.end() || std::find(e.v.begin(), e.v.end(), problem.t) != e.v.end()) {
+                    e.w += 10.0;
+                }
+            }
+            problem.recalculate_baseline();
+            std::vector<bool> empty(n);
+            std::fill(empty.begin(), empty.end(), false);
+            assert(problem.eval(empty) == 0.0);
+
+            //MNP
+            PerfLog::get().clear();
+            cycles_count_start();
+            auto mnp_A = mnp(problem, 1e-5, 1e-10);
+            double mnp_seconds = (double) cycles_count_stop().time;
+            double mnp_fa = problem.eval(mnp_A);
+            int64_t mnp_iterations = PerfLog::get().get_total("ITERATIONS");
+            int64_t mnp_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
+
+            int64_t cardinality = 0;
+            for(int i = 0; i < n; i++) {
+                if(mnp_A[i]) cardinality++;
+            }
+            std::cout << std::setw(fw) << n;
+            std::cout << std::setw(fw) << cardinality;
+            std::cout << std::setw(2*fw) << mnp_fa;
+            std::cout << std::setw(2*fw) << mnp_seconds << ",";
+            std::cout << std::setw(2*fw) << mnp_iterations << ",";
+            std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
+            std::cout << std::endl;
+        }
+    }
+}
+
 int main() 
 {
+    run_validation_suite();
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::bernoulli_distribution bern(0.20);
     std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    
 
     std::vector<int64_t> layers;
-    //layers.push_back(10);
-    //layers.push_back(10);
     layers.push_back(10);
-
     mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 1 layer size 10"); 
+
     layers.push_back(10);
     mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 2 layers size 10"); 
+
     layers.push_back(10);
     mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 3 layers size 10"); 
 
-    run_validation_suite();
     exit(1);
 
     mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution"); 
     mnp_deep<double, std::mt19937, std::uniform_real_distribution<double>>(gen, uniform, layers, "Uniform Distribution"); 
+
+    //Some hypergraph stuff.
+    for(int64_t r = 1; r <= 8; r *= 2) {
+        mnp_hyper<double>(r);
+    }
 
 
 
@@ -611,29 +682,7 @@ int main()
                 std::string() + "Bernoulli Distribution. " + std::to_string(i) + " Layers."); 
     }
 
-
-    run_validation_suite();
     exit(1);
-
-    run_validation_suite();
-    mnp_bvh<double>();
-    exit(1);
-
-    //Test Simplicical Decomposition
-    mnp_bvh<double>();
-    exit(1);
-
-    //Error vs time experiments
-    frank_wolfe_mincut_err_vs_time<double>();
-    exit(1);
-
-    //Compare with Fujishige's implementation
-    test_versus_fujishige();
-    exit(1);
-    
-    mkl_free_buffers(); 
-    exit(1);
-    frank_wolfe_wolfe_mincut<double>();
-
     run_benchmark_suite();
+    mkl_free_buffers(); 
 }

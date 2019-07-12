@@ -59,7 +59,7 @@ public:
         }
 
         //Add one element at a time
-        for(int64_t i = 0; i < cardinality_constraint && i < n; i++) {
+        for(int64_t i = 0; i <= cardinality_constraint && i < n; i++) {
             assert(U0.height() == i);
             assert(U0.height() == C.height());
             assert(C.width() == n-i);

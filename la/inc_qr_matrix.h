@@ -14,7 +14,7 @@
 #include "list_matrix.h"
 
 #define NB 32
-#define MAX_COLS_AT_ONCE 32
+#define MAX_COLS_AT_ONCE 512
 
 template<class DT>
 class IncQRMatrix {
@@ -259,6 +259,14 @@ public:
         assert(_a._n == _a._m);
         assert(_a._m == _b._m);
         assert(_a._n == _b._n);
+
+        int64_t v_height = _V.height();
+        bool resize_V = false;
+        while(v_height < cols_to_remove.size()) {
+            v_height *= 2;
+            resize_V = true;
+        }
+        if(resize_V) _V.realloc(v_height, _V.width());
 
         int64_t task_size = 128;
         int64_t n_remove = cols_to_remove.size();

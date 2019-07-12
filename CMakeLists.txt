@@ -4,7 +4,8 @@ project(tms_submodular)
 
 #    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_LIST_DIR}
 if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wunused -mkl=parallel -ipp -qopenmp -O3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wunused -qopenmp -mkl=parallel -ipp")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 endif()
 
 if (VALIDATE_WITH_LEMON)

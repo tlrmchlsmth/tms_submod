@@ -43,7 +43,7 @@ public:
         for(int layer = 0; layer < layers.size(); layer++) {
             layers[layer].fill_rand(gen, dist);
         }
-        final_layer.fill_rand(gen, dist);
+        final_layer.set_all(1.0);
     }
 
     //Generate default function
@@ -86,7 +86,7 @@ public:
         }
 
         //Final layer
-        return rectify(final_layer.dot(inputs.back()));
+        return final_layer.dot(inputs.back());
     }
 
     //Only limited savings from gains fn
@@ -109,7 +109,7 @@ public:
                 rectify_vec(inputs[layer+1]);
             }
 
-            DT FA = rectify(final_layer.dot(inputs.back()));
+            DT FA = final_layer.dot(inputs.back());
             x(perm[i]) += FA - FA_old;
             FA_old = FA;
         }

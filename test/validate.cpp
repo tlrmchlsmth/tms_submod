@@ -10,6 +10,7 @@
 //Set function includes
 #include "../set_fn/submodular.h"
 #include "../set_fn/graph_cut.h"
+#include "../set_fn/hypergraph_cut.h"
 #include "../set_fn/log_det.h"
 #include "../set_fn/iwata_test.h"
 #include "../set_fn/scmm.h"
@@ -120,7 +121,7 @@ void val_mnp_brute_force(std::string name)
     int64_t inc = start;
 
     std::cout << "===========================================================" << std::endl;
-    std::cout << "Validating " << name << " Brute Force" << std::endl;
+    std::cout << "Validating " << name << " MNP Brute Force" << std::endl;
     std::cout << "===========================================================" << std::endl;
     int w = 18;
     std::cout << std::setw(w) << "n";
@@ -548,6 +549,12 @@ void run_validation_suite()
 #ifdef VALIDATE_LEMON
     val_mincut_lemon();
 #endif
+
+    val_gains<HyperCut<double>, double>("HyperCut");
+    val_submodularity<HyperCut<double>>("HyperCut");
+    val_submodularity<STConstrain<double, HyperCut<double>>>("ST constrained HyperCut");
+    val_mnp_brute_force<HyperCut<double>, double>("HyperCut");
+    val_mnp_brute_force<STConstrain<double, HyperCut<double>>, double>("ST constrained HyperCut");
 
     //LogDet stuff
     val_submodularity<LogDet<double>>("Log Det");

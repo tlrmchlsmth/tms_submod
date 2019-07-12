@@ -158,10 +158,6 @@ std::vector<bool> mnp(SubmodularFunction<DT>& F, Vector<DT>& wA, DT eps, DT tole
         w.enlarge(1);
         w(w.length()-1) = 0.0;
 
-        if(std::isnan(R(R.height()-1, R.width()-1))) {
-            std::cout << "Warning: rho is nan.\n" << std::endl;
-        }
-
         //In this case we necessarily already have our answer
         if(R(R.height()-1, R.width()-1) <= 1e-10) break; 
         if(std::isnan(R(R.height()-1, R.width()-1))) break; 

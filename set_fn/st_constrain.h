@@ -49,7 +49,11 @@ public:
         std::uniform_int_distribution<> st_dist(0, n+2-1);
         s = st_dist(gen);
         do { t = st_dist(gen); } while(t == s);
+        
+        recalculate_baseline();
+    }
 
+    void recalculate_baseline() {
         //Get baseline
         std::fill(A_ws.begin(), A_ws.end(), false);
         A_ws[s] = true;
@@ -86,23 +90,6 @@ public:
         }
         submodular.gains(perm_ws, x_ws);
 
-        //Copy output
-/*        int64_t i1 = std::min(s,t);
-        int64_t i2 = std::max(s,t);
-        auto x_ws_1 = x_ws.subvector(0, i1);
-        auto x_1 = x.subvector(0, i1);
-        x_1.copy(x_ws_1);
-        if(i1 < n) {
-            auto x_ws_2 = x_ws.subvector(i1+1, i2 - i1);
-            auto x_2 = x.subvector(i1, i2 - i1);
-            x_2.copy(x_ws_2);
-        }
-        if(i2 < n) {
-            auto x_ws_3 = x_ws.subvector(i2+2, n+2 - i2);
-            auto x_3 = x.subvector(i2, n+2 - i2);
-            x_3.copy(x_ws_3);
-        }
-        */
         for(int64_t i = 0; i < n; i++) {
             int64_t offset = 0 + (i >= i1) + (i+1 >= i2);
             x(i) = x_ws(i + offset); 
