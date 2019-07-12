@@ -332,22 +332,27 @@ public:
                 
                 if(b == n+1) {
                     //This edge goes to sink node, so there's a gain when the source vertex joins
+                    #pragma omp atomic
                     x(a) += edge.weight;
                 }
                 else {
                     assert(a != b && b < n);
                     //We gain when the first vertex joins A and lose when the second joins
                     if(index_a < index_b) {
+                        #pragma omp atomic
                         x(a) += edge.weight;
-                        //x(b) -= edge.weight;
+                        #pragma omp atomic
+                        x(b) -= edge.weight;
                     } else {
-                        //x(b) += edge.weight;
+                        #pragma omp atomic
                         x(a) -= edge.weight;
+                        #pragma omp atomic
+                        x(b) += edge.weight;
                     }
                 }
             }
         }
-
+/*
         _Pragma("omp parallel for")
         for(int64_t a = 0; a < n; a++) {
             int64_t index_a = perm_lookup[a];
@@ -370,11 +375,12 @@ public:
                 }
             }
         }
+*/
 
         //Iterate over source vertex edges
-       /* for(auto edge : adj_out[n]) {
+        for(auto edge : adj_out[n]) {
             if(edge.index != n+1) x(edge.index) -= edge.weight;
-        }*/
+        }
     }
 };
 
