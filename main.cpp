@@ -35,6 +35,7 @@
 
 //#define SLOW_GREEDY
 //#define PRINT_HIST
+int64_t fw = 8;
 
 template<class DT>
 void frank_wolfe_wolfe_mincut()
@@ -48,19 +49,18 @@ void frank_wolfe_wolfe_mincut()
     std::cout << "Benchmarking min cut" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(2*fw) << "MNP T";
-    std::cout << std::setw(2*fw) << "FrankWolfe T";
-    std::cout << std::setw(2*fw) << "AwaySteps T";
-    std::cout << std::setw(2*fw) << "Pairwise T";
-    std::cout << std::setw(2*fw) << "MNP N";
-    std::cout << std::setw(2*fw) << "FrankWolfe N";
-    std::cout << std::setw(2*fw) << "AwaySteps N";
-    std::cout << std::setw(2*fw) << "Pairwise N";
-    std::cout << std::setw(2*fw) << "MNP |S|";
-    std::cout << std::setw(2*fw) << "AS |S|";
-    std::cout << std::setw(2*fw) << "PW |S|";
+    std::cout << std::setw(fw) << "n" << ","; 
+    std::cout << std::setw(2*fw) << "MNP T" << ",";
+    std::cout << std::setw(2*fw) << "FrankWolfe T" << ",";
+    std::cout << std::setw(2*fw) << "AwaySteps T" << ",";
+    std::cout << std::setw(2*fw) << "Pairwise T" << ",";
+    std::cout << std::setw(2*fw) << "MNP N" << ",";
+    std::cout << std::setw(2*fw) << "FrankWolfe N" << ",";
+    std::cout << std::setw(2*fw) << "AwaySteps N" << ",";
+    std::cout << std::setw(2*fw) << "Pairwise N" << ",";
+    std::cout << std::setw(2*fw) << "MNP |S|" << ",";
+    std::cout << std::setw(2*fw) << "AS |S|" << ",";
+    std::cout << std::setw(2*fw) << "PW |S|" << ",";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -110,19 +110,19 @@ void frank_wolfe_wolfe_mincut()
             for(int i = 0; i < n; i++) {
                 if(mnp_A[i]) cardinality++;
             }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(2*fw) << mnp_seconds;
-            std::cout << std::setw(2*fw) << fw_seconds;
-            std::cout << std::setw(2*fw) << as_seconds;
-            std::cout << std::setw(2*fw) << pw_seconds;
-            std::cout << std::setw(2*fw) << mnp_iterations;
-            std::cout << std::setw(2*fw) << fw_iterations;
-            std::cout << std::setw(2*fw) << as_iterations;
-            std::cout << std::setw(2*fw) << pw_iterations;
-            std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
-            std::cout << std::setw(2*fw) << (double) as_s_card / (double) as_iterations;
-            std::cout << std::setw(2*fw) << (double) pw_s_card / (double) pw_iterations;
-            std::cout << std::setw(2*fw) << mnp_fa - fw_fa + as_fa - pw_fa;
+            std::cout << std::setw(fw) << n << ",";
+            std::cout << std::setw(2*fw) << mnp_seconds << ",";
+            std::cout << std::setw(2*fw) << fw_seconds << ",";
+            std::cout << std::setw(2*fw) << as_seconds << ",";
+            std::cout << std::setw(2*fw) << pw_seconds << ",";
+            std::cout << std::setw(2*fw) << mnp_iterations << ",";
+            std::cout << std::setw(2*fw) << fw_iterations << ",";
+            std::cout << std::setw(2*fw) << as_iterations << ",";
+            std::cout << std::setw(2*fw) << pw_iterations << ",";
+            std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations << ",";
+            std::cout << std::setw(2*fw) << (double) as_s_card / (double) as_iterations << ",";
+            std::cout << std::setw(2*fw) << (double) pw_s_card / (double) pw_iterations << ",";
+            std::cout << std::setw(2*fw) << mnp_fa - fw_fa + as_fa - pw_fa << ",";
             std::cout << std::endl;
         }
     }
@@ -140,7 +140,6 @@ void mnp_bvh()
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
     std::cout << std::setw(fw) << "n"; 
     std::cout << std::setw(fw) << "MNP_|A|"; 
     std::cout << std::setw(2*fw) << "MNP_F(A)";
@@ -219,7 +218,6 @@ void mnp_order_k()
     std::cout << "Benchmarking MNP and Simplicial Decomposition" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
     std::cout << std::setw(fw) << "n"; 
     std::cout << std::setw(2*fw) << "MNP F(A)";
     std::cout << std::setw(2*fw) << "Spec F(A)";
@@ -284,7 +282,6 @@ template<class DT>
 void frank_wolfe_mincut_err_vs_time()
 {
     int64_t n = 100;
-    int fw = 11;
 
     std::vector<std::vector<double>> times;
     std::vector<std::vector<double>> dualities;
@@ -371,7 +368,6 @@ void test_versus_fujishige()
     std::cout << "Benchmarking min cut" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
     std::cout << std::setw(fw) << "n"; 
     std::cout << std::setw(2*fw) << "F cycles"; 
     std::cout << std::setw(2*fw) << "T cycles"; 
@@ -434,7 +430,6 @@ void mnp_fw()
     std::cout << "Benchmarking MNP and MNP_FW" << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
     std::cout << std::setw(fw) << "n"; 
     std::cout << std::setw(fw) << "MNP_|A|"; 
     std::cout << std::setw(2*fw) << "MNP_F(A)";
@@ -511,15 +506,14 @@ void mnp_deep(GEN &gen, DIST &dist, const std::vector<int64_t> layers, const std
     std::cout << std::setw(25) << desc << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(fw) << "MNP_|A|"; 
-    std::cout << std::setw(2*fw) << "MNP_F(A)";
-    std::cout << std::setw(2*fw) << "MNP_T";
-    std::cout << std::setw(2*fw) << "MNP_N";
-    std::cout << std::setw(2*fw) << "MNP_C";
-    std::cout << std::setw(2*fw) << "MNP_|S|";
-    std::cout << std::setw(2*fw) << "mhat test";
+    std::cout << std::setw(fw) << "n" << ","; 
+    std::cout << std::setw(fw) << "MNP_|A|" << ","; 
+    std::cout << std::setw(2*fw) << "MNP_F(A)" << ",";
+    std::cout << std::setw(2*fw) << "MNP_T" << ",";
+    std::cout << std::setw(2*fw) << "MNP_N" << ",";
+    std::cout << std::setw(2*fw) << "MNP_C" << ",";
+    std::cout << std::setw(2*fw) << "MNP_|S|" << ",";
+    std::cout << std::setw(2*fw) << "mhat test" << ",";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -532,7 +526,7 @@ void mnp_deep(GEN &gen, DIST &dist, const std::vector<int64_t> layers, const std
 //            deep.rectify = [](double x){ return std::sqrt(x); };
             deep.rectify = [](double x){ return std::min(x, 1.0); };
 
-            PlusModular<double, Deep<double>> deep_plus_modular(n+2, deep, dist);
+            PlusModular<double, Deep<double>> deep_plus_modular(n+2, std::move(deep), dist);
             STConstrain<double, PlusModular<double, Deep<double>>> problem(n, deep_plus_modular);
 
             //MNP
@@ -549,13 +543,13 @@ void mnp_deep(GEN &gen, DIST &dist, const std::vector<int64_t> layers, const std
             for(int i = 0; i < n; i++) {
                 if(mnp_A[i]) cardinality++;
             }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(2*fw) << mnp_fa;
-            std::cout << std::setw(2*fw) << mnp_seconds;
-            std::cout << std::setw(2*fw) << mnp_iterations;
-            std::cout << std::setw(2*fw) << mnp_minor_cycles;
-            std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations;
+            std::cout << std::setw(fw) << n << ",";
+            std::cout << std::setw(fw) << cardinality << ",";
+            std::cout << std::setw(2*fw) << mnp_fa << ",";
+            std::cout << std::setw(2*fw) << mnp_seconds << ",";
+            std::cout << std::setw(2*fw) << mnp_iterations << ",";
+            std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
+            std::cout << std::setw(2*fw) << (double) mnp_s_card / (double) mnp_iterations << ",";
             
             std::vector<bool> S(n);
             std::random_device rd;
@@ -581,13 +575,12 @@ void mnp_hyper(int64_t r)
     std::cout << "Benchmarking MNP for Hypergraph cuts. r = " << r << std::endl;
     std::cout << "===========================================================" << std::endl;
 
-    int fw = 8;
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(fw) << "MNP_|A|"; 
-    std::cout << std::setw(2*fw) << "MNP_F(A)";
-    std::cout << std::setw(2*fw) << "MNP_T";
-    std::cout << std::setw(2*fw) << "MNP_N";
-    std::cout << std::setw(2*fw) << "MNP_C";
+    std::cout << std::setw(fw) << "n" << ","; 
+    std::cout << std::setw(fw) << "MNP_|A|" << ","; 
+    std::cout << std::setw(2*fw) << "MNP_F(A)" << ",";
+    std::cout << std::setw(2*fw) << "MNP_T" << ",";
+    std::cout << std::setw(2*fw) << "MNP_N" << ",";
+    std::cout << std::setw(2*fw) << "MNP_C" << ",";
     std::cout << std::endl;
 
     for(int64_t i = start; i <= end; i += inc) {
@@ -622,9 +615,9 @@ void mnp_hyper(int64_t r)
             for(int i = 0; i < n; i++) {
                 if(mnp_A[i]) cardinality++;
             }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(2*fw) << mnp_fa;
+            std::cout << std::setw(fw) << n << ",";
+            std::cout << std::setw(fw) << cardinality << ",";
+            std::cout << std::setw(2*fw) << mnp_fa << ",";
             std::cout << std::setw(2*fw) << mnp_seconds << ",";
             std::cout << std::setw(2*fw) << mnp_iterations << ",";
             std::cout << std::setw(2*fw) << mnp_minor_cycles << ",";
@@ -637,26 +630,24 @@ int main()
 {
     run_validation_suite();
 
+    fw = 0; //Make excel-readable
+    //fw = 8; //Make human-readable
+
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::bernoulli_distribution bern(0.20);
-    std::uniform_real_distribution<double> uniform(0.0, 1.0);
     
-
+    double p = 0.19;
+    int64_t layer_size = 10;
+    std::bernoulli_distribution bern(p);
     std::vector<int64_t> layers;
-    layers.push_back(10);
-    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 1 layer size 10"); 
-
-    layers.push_back(10);
-    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 2 layers size 10"); 
-
-    layers.push_back(10);
-    mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = 0.2, 3 layers size 10"); 
-
+    for(int64_t i = 1; i < 10; i++) {
+        layers.push_back(layer_size);
+        mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution p = " + std::to_string(p) + " " + std::to_string(i) + " layer size " + std::to_string(layer_size)); 
+    }
     exit(1);
 
     mnp_deep<double, std::mt19937, std::bernoulli_distribution>(gen, bern, layers, "Bernoulli Distribution"); 
-    mnp_deep<double, std::mt19937, std::uniform_real_distribution<double>>(gen, uniform, layers, "Uniform Distribution"); 
+//    mnp_deep<double, std::mt19937, std::uniform_real_distribution<double>>(gen, uniform, layers, "Uniform Distribution"); 
 
     //Some hypergraph stuff.
     for(int64_t r = 1; r <= 8; r *= 2) {

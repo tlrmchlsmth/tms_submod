@@ -52,7 +52,7 @@ public:
 
     Vector(Vector&& x) :
         _values(x._values), _mem_manage(x._mem_manage),
-        _len(x._len), _base_len(x._base_len), _stride(x._stride),
+        _len(x._len), _base_len(x._base_len), _stride(x._stride)
     {
         x._values = NULL;
     }
