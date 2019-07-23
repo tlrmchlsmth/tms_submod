@@ -40,8 +40,23 @@ public:
         }
     }
 
-    Vector& operator=(Vector&& x) = default;
-    Vector(Vector&& x) = default;
+    Vector& operator=(Vector&& x) 
+    {
+        _len = x._len;
+        _base_len = x._base_len
+        _stride = x._stride;
+        _mem_manage = x._mem_manage;
+        _values = x._values;
+        x._values = NULL;
+    }
+
+    Vector(Vector&& x) :
+        _values(x._values), _mem_manage(x._mem_manage),
+        _len(x._len), _base_len(x._base_len), _stride(x._stride),
+    {
+        x._values = NULL;
+    }
+
     Vector& operator=(const Vector& x)
     {
         _len = x._len;

@@ -53,8 +53,26 @@ public:
         }
     }
 
-    Matrix& operator=(Matrix&& x) = default;
-    Matrix(Matrix&& x) = default;
+    Matrix& operator=(Matrix&& A) {
+        _m = A._m;
+        _m = A._n;
+        _base_m = A._m;
+        _base_n = A._n;
+        _cs = A._cs;
+        _rs = A._rs;
+        _mem_manage = A._mem_manage;
+        _values = A._values;
+        A._values = NULL;
+    };
+
+    Matrix(Matrix&& A) : 
+        _m(A._m), _n(A._n),
+        _base_m(A._base_m), _base_n(A._base_n),
+        _rs(A._rs), _cs(A._cs),
+        _mem_manage(A._mem_manage), _values(A._values)
+    {
+        A._values = NULL;
+    }
 
     Matrix& operator=(const Matrix& A)
     {
