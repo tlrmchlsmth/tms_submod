@@ -5,7 +5,7 @@
 #include "../la/vector.h"
 
 template<class DT>
-class SumSubmodulars : public SubmodularFunction<DT> {
+class SumSubmodulars final : public SubmodularFunction<DT> {
 public:
     std::vector<std::unique_ptr<SubmodularFunction<DT>>> _fns;
 
@@ -15,7 +15,7 @@ public:
         _fns = std::move(fns);
     }
 
-    DT eval(const std::vector<bool>& A) {
+    DT eval(const std::vector<bool>& A) override {
         DT val = 0.0;
         for( auto&& f : _fns ) {
             val += f->eval(A);
@@ -23,7 +23,7 @@ public:
         return val;
     }
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& p) {
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& p) override {
         Vector<DT> tmp(p.length());
         p.set_all(0.0);
         for( auto&& f : _fns) {

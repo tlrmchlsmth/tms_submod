@@ -30,7 +30,7 @@ public:
 };
 
 template<class DT, class CONV>
-class SCMM : public SubmodularFunction<DT> {
+class SCMM final : public SubmodularFunction<DT> {
 public:
     int64_t _n;
     int64_t _k;
@@ -70,7 +70,8 @@ public:
         }
     }
 
-    DT eval(const std::vector<bool>& A) {
+    DT eval(const std::vector<bool>& A) override 
+    {
         _y.set_all(0.0);
         for(int64_t i = 0; i < _n; i++) { 
             if(A[i]) {
@@ -87,7 +88,8 @@ public:
         return val + _normalization;
     }
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& p) {
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& p) override
+    {
         _y.set_all(0.0);
         DT f_perm_i_minus_one = _normalization;
         for(int i = 0; i < _n; i++) {

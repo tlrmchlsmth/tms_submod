@@ -15,7 +15,7 @@ public:
 
 
 template<class DT>
-class HyperCut : public SubmodularFunction<DT> {
+class HyperCut final : public SubmodularFunction<DT> {
 public:
     int64_t n;
     std::vector<HyperEdge<DT>> edges;
@@ -72,7 +72,7 @@ public:
     }
 
 
-    DT eval(const std::vector<bool>& A) 
+    DT eval(const std::vector<bool>& A) override
     {
         DT val = 0.0;
 
@@ -92,7 +92,7 @@ public:
     }
 
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         std::vector<int64_t> perm_lookup(n);
         _Pragma("omp parallel for")

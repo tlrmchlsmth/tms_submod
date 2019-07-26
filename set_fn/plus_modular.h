@@ -5,7 +5,7 @@
 #include "../la/vector.h"
 
 template<class DT, class SFN>
-class PlusModular : public SubmodularFunction<DT> {
+class PlusModular final : public SubmodularFunction<DT> {
 public:
     int64_t n;
     SFN submodular;
@@ -43,11 +43,14 @@ public:
         modular.scale(-submodular.eval(V) / modular.sum());
     }
 
-    PlusModular(int64_t n_in, SFN fn_in) : 
-        SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), modular(n_in)
+    PlusModular(int64_t n_in, SFN&& fn_in, Vector<DT>&& modular_in) : 
+        SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), modular(modular_in)
+    { }
+    PlusModular(int64_t n_in, const SFN& fn_in, const Vector<DT>& modular_in) : 
+        SubmodularFunction<DT>(n_in), n(n_in), submodular(fn_in), modular(modular_in)
     { }
 
-    DT eval(const std::vector<bool>& A) 
+    DT eval(const std::vector<bool>& A) final 
     {
         DT modular_val = 0.0;
         for(int64_t i = 0; i < n; i++) {
@@ -56,7 +59,8 @@ public:
         return modular_val + submodular.eval(A);
     }
 
-    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) {
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override 
+    {
         submodular.gains(perm, x);
         x.axpy(1.0, modular);
     }

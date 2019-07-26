@@ -2,11 +2,14 @@
 #define IWATA_TEST_H
 
 template<class DT>
-class IwataTest : public SubmodularFunction<DT> {
+class IwataTest final : public SubmodularFunction<DT> {
 public:
     int64_t n;
+
     IwataTest(int64_t n) : SubmodularFunction<DT>(n), n(n) {};
-    DT eval(const std::vector<bool>& A) {
+
+    DT eval(const std::vector<bool>& A) override 
+    {
         int64_t cardinality = 0;
         DT val = 0.0;
         _Pragma("omp parallel for reduction(+:val, cardinality)")
@@ -20,7 +23,8 @@ public:
         val += cardinality * (n-cardinality);
         return val;
     }
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         _Pragma("omp parallel for")
         for(int64_t i = 0; i < n; i++) {

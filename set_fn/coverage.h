@@ -6,7 +6,7 @@
 
 
 template<class DT>
-class Coverage : public SubmodularFunction<DT> {
+class Coverage final : public SubmodularFunction<DT> {
 public:
     double alpha; //Cardinality penalty coefficient
     int64_t _n;
@@ -32,7 +32,7 @@ public:
         return 0;
     }
 
-    DT eval(const std::vector<bool>& A) {
+    DT eval(const std::vector<bool>& A) override {
         std::fill(b_ws.begin(), b_ws.end(), false);
         b_ws[0] = true;
         b_ws[N*N] = true;
@@ -56,7 +56,7 @@ public:
         return sum + alpha*g(cardinality);
     }
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) {
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override {
         assert(perm.size() == _n && x.length() == _n);
         assert(std::abs(g(0)- 0.0) < 1e-5);
 
@@ -111,7 +111,7 @@ public:
     Coverage2(Coverage<DT> cdag, int64_t s) : SubmodularFunction<DT>(cdag._n-1), _cdag(cdag), _s(s) { }
     Coverage2(int64_t N, int64_t s) : SubmodularFunction<DT>(N*N*N-1), _s(s), _cdag(build_mmma_coverage<DT>(N,N,N)) { }
 
-    DT eval(const std::vector<bool>& A) {
+    DT eval(const std::vector<bool>& A) override {
         std::vector<bool> B(_cdag._n);
         for(int64_t i = 0; i < _s; i++) {
             B[i] = A[i];
@@ -124,7 +124,7 @@ public:
         return _cdag.eval(B);
     }
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& y) {
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& y) override {
         std::vector<int64_t> perm_cdag(_cdag._n);
         Vector<DT> x_cdag(_cdag._n);
        

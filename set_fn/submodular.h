@@ -10,8 +10,6 @@
 #include "../la/matrix.h"
 #include "../perf_log.h"
 
-#include <omp.h>
-
 template<class DT>
 class SubmodularFunction {
 public:
@@ -32,11 +30,11 @@ public:
 
     virtual DT eval(const std::vector<bool>& A) = 0;
 
-    std::vector<bool> get_set() const {
+/*    std::vector<bool> get_set() const {
         std::vector<bool> V(n);
         std::fill(V.begin(), V.end(), 1);
         return V;
-    }
+    }*/
 
     virtual DT gain(std::vector<bool>& A, DT FA, int64_t b) {
         A[b] = true;

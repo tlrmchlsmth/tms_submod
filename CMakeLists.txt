@@ -4,7 +4,8 @@ project(tms_submodular)
 
 #    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_LIST_DIR}
 if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wunused -qopenmp -mkl=parallel -ipp")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -qopenmp -mkl=parallel -ipp")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -qopt-report=4 -qopt-report-phase ipo")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 endif()
 
@@ -16,7 +17,7 @@ endif()
 include_directories( ${MY_SOURCE_DIR} )
 include_directories( ${MY_SOURCE_DIR}/perf )
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 set(SOURCE_FILES
     main.cpp

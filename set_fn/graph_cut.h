@@ -17,7 +17,7 @@ public:
 //submodular function for a flow network
 //1 source and 1 sink, 2 groups
 template<class DT>
-class MinCut : public SubmodularFunction<DT> {
+class MinCut final : public SubmodularFunction<DT> {
 public:
     //Each node has a list of edges in and a list of edges out.
     //Each edge has an index and a weight, and we will have the source and sink node have index n and n+1, respectively.
@@ -287,7 +287,7 @@ public:
         this->sanity_check();
     }
 
-    DT eval(const std::vector<bool>& A) 
+    DT eval(const std::vector<bool>& A) override
     {
         DT val = 0.0;
         for(int64_t i = 0; i < n; i++) {
@@ -312,7 +312,7 @@ public:
     }
 
 
-    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         std::vector<int64_t> perm_lookup(n);
         _Pragma("omp parallel for")
@@ -401,7 +401,7 @@ public:
         baseline = other.baseline;
     }
 
-    DT eval(const std::vector<bool>& A) 
+    DT eval(const std::vector<bool>& A) override
     {
         DT val = 0.0;
         for(int64_t i = 0; i < n; i++) {
@@ -420,7 +420,7 @@ public:
         return val - baseline;
     }
 
-    DT gain(std::vector<bool>& A, int64_t b) 
+    DT gain(std::vector<bool>& A, DT, int64_t b) override
     {
         //Gain from adding b
         DT gain = 0.0;
@@ -439,7 +439,7 @@ public:
         return gain + loss;
     }
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         _Pragma("omp parallel") 
         {
@@ -454,11 +454,13 @@ public:
             std::vector<bool> A(perm.size());
             std::fill(A.begin(), A.end(), 0);
             for(int64_t i = 0; i < std::min(start, n); i++) A[perm[i]] = 1;
-
+            
+            DT F_A = 0.0;
             for(int64_t j = start; j < end; j++) {
                 int64_t b = perm[j];
-                x(b) = gain(A, b);
+                x(b) = gain(A, F_A, b);
                 A[b] = 1;
+                F_A += x(b);
             }
         }
     }

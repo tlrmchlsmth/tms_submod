@@ -11,7 +11,7 @@
  * Two extra elements - one of them will always be in A, the other will never be
  */
 template<class DT, class SFN>
-class STConstrain : public SubmodularFunction<DT> {
+class STConstrain final : public SubmodularFunction<DT> {
 public:
     int64_t n;
 
@@ -53,14 +53,15 @@ public:
         recalculate_baseline();
     }
 
-    void recalculate_baseline() {
+    void recalculate_baseline() 
+    {
         //Get baseline
         std::fill(A_ws.begin(), A_ws.end(), false);
         A_ws[s] = true;
         baseline = submodular.eval(A_ws);
     }
 
-    DT eval(const std::vector<bool>& A_in) 
+    DT eval(const std::vector<bool>& A_in) override
     {
         int64_t i1 = std::min(s,t);
         int64_t i2 = std::max(s,t);
@@ -77,7 +78,8 @@ public:
         return submodular.eval(A_ws) - baseline;
     }
 
-    virtual void gains(const std::vector<int64_t>& perm, Vector<DT>& x) {
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
+    {
         perm_ws.front() = s;
         perm_ws.back() = t;
 

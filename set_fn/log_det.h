@@ -47,7 +47,7 @@ public:
         Cov.mmm(1.0, UT, U, 0.0);
     }
 
-    DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool> A) {
+    DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool>& A) override {
         auto U0 = LogDet<DT>::U.submatrix(0,0,0,0);
         Matrix<DT> C_base(n,n);
         auto C = C_base.submatrix(0,0,0,n);
@@ -194,7 +194,8 @@ public:
         return A;
     }
 
-    DT eval(const std::vector<bool>& A) {
+    DT eval(const std::vector<bool>& A) override
+    {
         int64_t cardinality = 0;
         for(auto a : A) { if(a) cardinality++; }
         if(cardinality == 0) return 0.0;
@@ -219,7 +220,7 @@ public:
         return log_det;
     }
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         //Permute rows and columns of covariance matrix and perform cholesky factorization
         auto Ua = U.submatrix(0,0,n,n);
@@ -241,7 +242,7 @@ public:
 
     SlowLogDet(int64_t n_in) : LogDet<DT>(n_in) {}
 
-    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) 
+    void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         //Get initial KA 
         auto Ua = LogDet<DT>::U.submatrix(0,0,1,1);
