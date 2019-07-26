@@ -12,6 +12,12 @@ DT rectify_sqrt(DT x) {
 }
 
 template<class DT>
+DT rectify_min_1_x(DT x) {
+    assert(x >= 0);
+    return std::min(1.0, x);
+}
+
+template<class DT>
 class Deep : public SubmodularFunction<DT> {
 public:
     int64_t n;
@@ -66,6 +72,32 @@ public:
     {
         init_layers(layer_sizes);
     }
+
+    //Constructor taking weights using move semantics
+    Deep(int64_t n_in, const std::vector<int64_t>& layer_sizes, std::vector<Matrix<DT>>&& weights) : SubmodularFunction<DT>(n_in), 
+        n(n_in), final_layer(layer_sizes.back()), rectify(rectify_min_1_x), layers(weights)
+    {
+        //Create workspace for the model
+        inputs.emplace_back(n);
+        for(int layer = 0; layer < layer_sizes.size(); layer++) {
+            inputs.emplace_back(layer_sizes[layer]);
+        }
+
+        final_layer.set_all(1.0);
+    }
+
+    //Constructor taking weights using copy semantics
+    Deep(int64_t n_in, const std::vector<int64_t>& layer_sizes, const std::vector<Matrix<DT>>& weights) : SubmodularFunction<DT>(n_in), 
+        n(n_in), final_layer(layer_sizes.back()), rectify(rectify_min_1_x), layers(weights)
+    {
+        //Create workspace for the model
+        inputs.emplace_back(n);
+        for(int layer = 0; layer < layer_sizes.size(); layer++) {
+            inputs.emplace_back(layer_sizes[layer]);
+        }
+
+        final_layer.set_all(1.0);
+    }
     
     DT eval(const std::vector<bool>& A) 
     {
@@ -108,7 +140,6 @@ public:
                 layers[layer].mvm(1.0, inputs[layer], 0.0, inputs[layer+1]);
                 rectify_vec(inputs[layer+1]);
             }
-
             DT FA = final_layer.dot(inputs.back());
             x(perm[i]) += FA - FA_old;
             FA_old = FA;

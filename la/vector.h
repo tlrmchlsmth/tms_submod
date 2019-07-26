@@ -3,6 +3,7 @@
 
 #include <list>
 #include <assert.h>
+#include <random>
 #include "mkl.h"
 
 template<class DT> class Matrix;
@@ -32,6 +33,13 @@ public:
     Vector(DT* values, int64_t len, int64_t base_len, int64_t stride, bool mem_manage) :
         _values(values), _len(len), _base_len(base_len), _stride(stride), _mem_manage(mem_manage)
     { }
+    Vector(DT* values, int64_t len) :
+        _values(values), _len(len), _base_len(len), _stride(1), _mem_manage(false)
+    { }
+
+    Vector(DT* values, int64_t len, int64_t stride) :
+        _values(values), _len(len), _base_len(len), _stride(stride), _mem_manage(false)
+    { }
 
     ~Vector()
     {
@@ -43,18 +51,18 @@ public:
     Vector& operator=(Vector&& x) 
     {
         _len = x._len;
-        _base_len = x._base_len
+        _base_len = x._base_len;
         _stride = x._stride;
         _mem_manage = x._mem_manage;
         _values = x._values;
-        x._values = NULL;
+        x._values = nullptr;
     }
 
     Vector(Vector&& x) :
         _values(x._values), _mem_manage(x._mem_manage),
         _len(x._len), _base_len(x._base_len), _stride(x._stride)
     {
-        x._values = NULL;
+        x._values = nullptr;
     }
 
     Vector& operator=(const Vector& x)
@@ -382,7 +390,7 @@ public:
 
         DT alpha = tau * vt_x;
         x(0) -= alpha;
-        for(int i = 1; i < _len, i++) {
+        for(int i = 1; i < _len; i++) {
             x(i) -= alpha * (*this)(i);
         }
     }

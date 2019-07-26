@@ -67,19 +67,27 @@ void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, d
     for(int j = 0; j < n; j++) {
         //BLAS VERSION
 #ifdef BLAS_HOUSE
-        double vt_x = X[j*x_cs] + cblas_ddot(_len-1, &v[1], stride, &X[1 + j*x_cs], x_rs);
+        double vt_x = X[j*x_cs] + cblas_ddot(m-1, &v[1], stride, &X[1 + j*x_cs], x_rs);
         double alpha = tau * vt_x;
         X[0 + j*x_cs] -= alpha;
         cblas_daxpy(m-1, -alpha, &v[1], stride, &X[x_rs + j*x_cs], x_rs);
 #else
-        //IPP version
-        assert(x_rs == 1);
-        double vt_x;
-        ippsDotProd_64f(&v[1], &X[1 + j*x_cs], m-1, &vt_x);
-        vt_x += X[j*x_cs];
-        double alpha = tau * vt_x;
-        X[j*x_cs] -= alpha;
-        ippsAddProductC_64f(&v[1], -alpha, &X[1 + j*x_cs], m-1);
+        if(stride != 1 || x_rs != 1) {
+            //Default to BLAS version
+            double vt_x = X[j*x_cs] + cblas_ddot(m-1, &v[1], stride, &X[1 + j*x_cs], x_rs);
+            double alpha = tau * vt_x;
+            X[0 + j*x_cs] -= alpha;
+            cblas_daxpy(m-1, -alpha, &v[1], stride, &X[x_rs + j*x_cs], x_rs);
+        }
+        else {
+            //IPP version
+            double vt_x;
+            ippsDotProd_64f(&v[1], &X[1 + j*x_cs], m-1, &vt_x);
+            vt_x += X[j*x_cs];
+            double alpha = tau * vt_x;
+            X[j*x_cs] -= alpha;
+            ippsAddProductC_64f(&v[1], -alpha, &X[1 + j*x_cs], m-1);
+        }
 #endif
     }
 }

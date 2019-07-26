@@ -149,7 +149,7 @@ public:
             
         return toret;
     }
-
+/*
     inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
         if(_am_a) {
@@ -182,7 +182,7 @@ public:
             return _b.subcol(row,col,nc);
         }
     }
-
+*/
     inline const IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc) const
     {
         assert(diag_start < _n && "Matrix index out of bounds.");
@@ -197,7 +197,7 @@ public:
             
         return toret;
     }
-
+/*
     inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
         if(_am_a) {
@@ -225,12 +225,12 @@ public:
     inline const Vector<DT> subcol(int64_t col) const
     {
         if(_am_a) {
-            return _a.subrow(row,col,nc);
+            return _a.subrow(col);
         } else {
-            return _b.subcol(row,col,nc);
+            return _b.subcol(0,col,nc);
         }
     }
-
+*/
     inline void enlarge_n(int64_t n_inc)
     {
         assert(_n + n_inc <= _base_n && "Cannot enlarge matrix.");
@@ -345,7 +345,7 @@ public:
         //Now r0 = Rv for some v
         Vector<DT> v(this->width());
         v.copy(r0);
-        this.trsv(v);
+        this->trsv(v);
         v.print("v");
 
         // rho1^2 = s' * s - r0' * r0;

@@ -46,6 +46,10 @@ public:
         _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(base_m), _base_n(base_n), _mem_manage(mem_manage)
     { }
 
+    Matrix(DT* values, int64_t m, int64_t n, int64_t rs, int64_t cs) :
+        _values(values), _m(m), _n(n), _rs(rs), _cs(cs), _base_m(m), _base_n(n), _mem_manage(false)
+    { }
+
     ~Matrix()
     {
         if(_mem_manage){
@@ -62,7 +66,7 @@ public:
         _rs = A._rs;
         _mem_manage = A._mem_manage;
         _values = A._values;
-        A._values = NULL;
+        A._values = nullptr;
     };
 
     Matrix(Matrix&& A) : 
@@ -71,7 +75,7 @@ public:
         _rs(A._rs), _cs(A._cs),
         _mem_manage(A._mem_manage), _values(A._values)
     {
-        A._values = NULL;
+        A._values = nullptr;
     }
 
     Matrix& operator=(const Matrix& A)
@@ -469,7 +473,7 @@ public:
     //
     // Routines related to removing columns of a matrix
     //
-    inline void trap_qr(Vector<DT>& t, int64_t l)
+    void trap_qr(Vector<DT>& t, int64_t l)
     {
         assert(_n + l >= _m && "Nonconformal trap_qr");
         assert( t._len >= std::min(_m, _n) && "Cannot perform trap qr.");
@@ -483,7 +487,7 @@ public:
         }
     }
 
-    inline void apply_trap_q(Matrix<DT>& A, const Vector<DT>& t, int64_t l) const
+    void apply_trap_q(Matrix<DT>& A, const Vector<DT>& t, int64_t l) const
     {
         assert(_n + l >= _m && "Nonconformal apply_trap_q");
         assert(t._len >= std::min(_m, _n) && "Cannot apply q from trap qr.");
@@ -573,7 +577,7 @@ public:
     }
 
 
-    inline void shift_trapezoid_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t y_dist) 
+    void shift_trapezoid_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t y_dist) 
     {
         if(_rs == 1) {
             int64_t end_n = std::min(_n, dest_n_coord + nc);
@@ -597,7 +601,7 @@ public:
         }
     }
 
-    inline void shift_trapezoid_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t x_dist) 
+    void shift_trapezoid_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t h, int64_t x_dist) 
     {
         if(_rs == 1) {
             int64_t end_n = std::min(_n - x_dist, dest_n_coord + nc);
@@ -621,7 +625,7 @@ public:
         }
     }
 
-    inline void shift_triangle_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t x_dist) 
+    void shift_triangle_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t x_dist) 
     {
         DT* src =  lea(dest_m_coord, dest_n_coord + x_dist);
         DT* dest = lea(dest_m_coord, dest_n_coord);
@@ -648,7 +652,7 @@ public:
         }
     }
 
-    inline void shift_triangle_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t y_dist) 
+    void shift_triangle_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t nc, int64_t y_dist) 
     {
         DT* src =  lea(dest_m_coord + y_dist, dest_n_coord);
         DT* dest = lea(dest_m_coord, dest_n_coord);
@@ -678,7 +682,7 @@ public:
         }
     }
 
-    inline void shift_dense_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t x_dist) 
+    void shift_dense_left(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t x_dist) 
     {
         int64_t end_n = std::min(_n - x_dist, dest_n_coord + nc);
         int64_t end_m = std::min(_m, dest_m_coord + mc);
@@ -702,7 +706,7 @@ public:
         }
     }
 
-    inline void shift_dense_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t y_dist) 
+    void shift_dense_up(int64_t dest_m_coord, int64_t dest_n_coord, int64_t mc, int64_t nc, int64_t y_dist) 
     {
         int64_t end_n = std::min(_n, dest_n_coord + nc);
         int64_t end_m = std::min(_m - y_dist, dest_m_coord + mc);
