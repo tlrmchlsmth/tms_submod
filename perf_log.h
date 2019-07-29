@@ -32,23 +32,23 @@ public:
     double max;
     double bucket_size;
 
-    PerfHist() : min(0), max(100), bucket_size(1), buckets(100){}
-    PerfHist(double min, double max, int64_t num_buckets) : min(min), max(max), bucket_size((max - min) / (double) num_buckets), buckets(num_buckets) 
+    PerfHist() : buckets(100), min(0), max(100), bucket_size(1) {}
+    PerfHist(double min, double max, int64_t num_buckets) : buckets(num_buckets), min(min), max(max), bucket_size((max - min) / (double) num_buckets)
     { 
         std::fill(buckets.begin(), buckets.end(), 0);
     }
     void log(double x) {
         int64_t bucket = (x - min) / bucket_size;
-        bucket = std::min(bucket, (int64_t)buckets.size() - 1);
+        bucket = std::min(bucket, (int64_t) buckets.size() - 1);
         buckets[bucket]++;
     }
     void print(std::string s) {
         std::cout << s << std::endl;
-        for(int i = 0; i < buckets.size(); i++) {
+        for(uint64_t i = 0; i < buckets.size(); i++) {
             std::cout << "\033[1;34m" << std::setw(8) << min + bucket_size * i << "\033[0m";
         }
         std::cout << std::endl;
-        for(int i = 0; i < buckets.size(); i++) {
+        for(uint64_t i = 0; i < buckets.size(); i++) {
             std::cout << "\033[1;34m" << std::setw(8) << buckets[i] << "\033[0m";
         }
         std::cout << std::endl;

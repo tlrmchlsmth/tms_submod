@@ -33,7 +33,7 @@ public:
     //
     // Constructors
     //
-    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _mem_manage(true), _base_m(m), _base_n(n)
+    Matrix(int64_t m, int64_t n) : _m(m), _n(n), _rs(1), _cs(m), _base_m(m), _base_n(n), _mem_manage(true) 
     {
         const int ret = posix_memalign((void **) &_values, 4096, _m * _n * sizeof(DT));
         if (ret != 0) {
@@ -60,20 +60,21 @@ public:
     Matrix& operator=(Matrix&& A) {
         _m = A._m;
         _m = A._n;
+        _rs = A._rs;
+        _cs = A._cs;
         _base_m = A._m;
         _base_n = A._n;
-        _cs = A._cs;
-        _rs = A._rs;
         _mem_manage = A._mem_manage;
         _values = A._values;
         A._values = nullptr;
     };
 
     Matrix(Matrix&& A) : 
+        _values(A._values),
         _m(A._m), _n(A._n),
-        _base_m(A._base_m), _base_n(A._base_n),
         _rs(A._rs), _cs(A._cs),
-        _mem_manage(A._mem_manage), _values(A._values)
+        _base_m(A._base_m), _base_n(A._base_n),
+        _mem_manage(A._mem_manage)
     {
         A._values = nullptr;
     }

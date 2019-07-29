@@ -53,7 +53,7 @@ public:
 
         //With probability beta, rewire each vertex in edge
         for(auto e : edges) {
-            for(int64_t i = 0; i < e.v.size(); i++) {
+            for(uint64_t i = 0; i < e.v.size(); i++) {
                 if(connect_dist(gen) < beta) {
                     int64_t new_v = e.v[i];
                     int64_t k = 0;
@@ -77,9 +77,9 @@ public:
         DT val = 0.0;
 
         #pragma omp parallel for reduction(+ : val)
-        for(int64_t j = 0; j < edges.size(); j++) {
+        for(uint64_t j = 0; j < edges.size(); j++) {
             bool is_cut = false;
-            for(int64_t i = 1; i < edges[j].v.size(); i++) {
+            for(uint64_t i = 1; i < edges[j].v.size(); i++) {
                 if(A[edges[j].v[i]] != A[edges[j].v[0]]) {
                     is_cut = true;
                     break;

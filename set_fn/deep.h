@@ -32,21 +32,21 @@ public:
         inputs.reserve(layer_sizes.size()+1);
 
         int64_t previous_layer_size = n;
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
+        for(uint64_t layer = 0; layer < layer_sizes.size(); layer++) {
             layers.emplace_back(layer_sizes[layer], previous_layer_size);
             previous_layer_size = layer_sizes[layer];
         }
 
         //Create workspace for the model
         inputs.emplace_back(n);
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
+        for(uint64_t layer = 0; layer < layer_sizes.size(); layer++) {
             inputs.emplace_back(layer_sizes[layer]);
         }
     }
 
     template<class RNG, class DIST>
     void init_weights(RNG &gen, DIST &dist) {
-        for(int layer = 0; layer < layers.size(); layer++) {
+        for(uint64_t layer = 0; layer < layers.size(); layer++) {
             layers[layer].fill_rand(gen, dist);
         }
         final_layer.set_all(1.0);
@@ -54,7 +54,7 @@ public:
 
     //Generate default function
     Deep(int64_t n_in) : SubmodularFunction<DT>(n_in), 
-        n(n_in), final_layer(4), layers(), inputs(), rectify(rectify_sqrt)
+        n(n_in), rectify(rectify_sqrt), final_layer(4)
     {
         std::vector<int64_t> layer_sizes;
         layer_sizes.push_back(16);
@@ -68,7 +68,7 @@ public:
     }
     
     Deep(int64_t n_in, const std::vector<int64_t>& layer_sizes) : SubmodularFunction<DT>(n_in), 
-        n(n_in), final_layer(layer_sizes.back()), layers(), inputs(), rectify(rectify_sqrt)
+        n(n_in),  rectify(rectify_sqrt), final_layer(layer_sizes.back())
     {
         init_layers(layer_sizes);
     }
@@ -92,7 +92,7 @@ public:
     {
         //Create workspace for the model
         inputs.emplace_back(n);
-        for(int layer = 0; layer < layer_sizes.size(); layer++) {
+        for(uint64_t layer = 0; layer < layer_sizes.size(); layer++) {
             inputs.emplace_back(layer_sizes[layer]);
         }
 
@@ -101,18 +101,18 @@ public:
     
     DT eval(const std::vector<bool>& A) 
     {
-        assert(A.size() == n);
+        assert(n >= 0 && A.size() == (uint64_t) n);
 
         //Initialize first layer's input
         inputs[0].set_all(0.0);
-        for(int i = 0; i < n; i++) {
+        for(int64_t i = 0; i < n; i++) {
             if(A[i]) { 
                 inputs[0](i) = 1.0; 
             }
         }
 
         //Middle layers
-        for(int layer = 0; layer < layers.size(); layer++) {
+        for(uint64_t layer = 0; layer < layers.size(); layer++) {
             layers[layer].mvm(1.0, inputs[layer], 0.0, inputs[layer+1]);
             rectify_vec(inputs[layer+1]);
         }
@@ -136,7 +136,7 @@ public:
             layer1_ws.axpy(1.0, layers[0].subcol(perm[i]));
             rectify_vec(inputs[1], layer1_ws);
 
-            for(int layer = 1; layer < layers.size(); layer++) {
+            for(uint64_t layer = 1; layer < layers.size(); layer++) {
                 layers[layer].mvm(1.0, inputs[layer], 0.0, inputs[layer+1]);
                 rectify_vec(inputs[layer+1]);
             }

@@ -14,7 +14,6 @@
 #include "../set_fn/log_det.h"
 #include "../set_fn/iwata_test.h"
 #include "../set_fn/scmm.h"
-#include "../set_fn/coverage.h"
 #include "../set_fn/deep.h"
 #include "../set_fn/sum_submodular.h"
 

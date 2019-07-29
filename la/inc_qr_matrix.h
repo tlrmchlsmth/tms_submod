@@ -11,7 +11,6 @@
 
 #include <list>
 #include "matrix.h"
-#include "list_matrix.h"
 
 #define NB 32
 #define MAX_COLS_AT_ONCE 512
@@ -34,8 +33,8 @@ public:
 
     // Constructors
     // Supports resizing, so n is the initial n
-    IncQRMatrix(int64_t n) : _n(n), _base_n(n), _am_a(true), _am_upper_tri(true),
-        _a(Matrix<DT>(_n,_n)), _b(Matrix<DT>(_n,_n)), _ws(Matrix<DT>(2*NB, _n)), _T(2*NB, _n), _V(MAX_COLS_AT_ONCE, _n)
+    IncQRMatrix(int64_t n) : _n(n), _base_n(n), _am_upper_tri(true), _am_a(true),
+        _a(Matrix<DT>(_n,_n)), _b(Matrix<DT>(_n,_n)), _T(2*NB, _n), _V(MAX_COLS_AT_ONCE, _n), _ws(Matrix<DT>(2*NB, _n))
     {
        _b.set_all(0.0); 
        _a.set_all(0.0); 
@@ -194,7 +193,7 @@ public:
         assert(_a._m == _b._m);
         assert(_a._n == _b._n);
 
-        int64_t v_height = _V.height();
+        uint64_t v_height = _V.height();
         bool resize_V = false;
         while(v_height < cols_to_remove.size()) {
             v_height *= 2;
@@ -251,39 +250,6 @@ public:
 
         // rho1^2 = s' * s - r0' * r0;
         DT rho1 = sqrt(s.dot(s) - r0.dot(r0));
-        this->enlarge_n(1);
-        (*this)(_n-1, _n-1) = rho1;
-    }
-
-    //If the column s is to be added to S, update this matrix to maintain factorization
-    void add_col_inc_qr(const ColListMatrix<DT>& S, const Vector<DT>& s) 
-    {
-        assert(_am_upper_tri);
-
-        DT* r0_buffer;
-        int64_t stride;
-        if(_am_a) {
-            r0_buffer = _a._values + _n * _a._cs;
-            stride = _a._rs;
-        } else {
-            r0_buffer = _b._values + _n * _b._cs;
-            stride = _b._rs;
-        }
-        
-        // Let [r0 rho1]^T be the vector to add to r
-        // r0 = R' \ (S' * s)
-        Vector<DT> r0(r0_buffer, _n, _n, stride, false);
-        S.transposed_mvm(1.0, s, 0.0, r0);
-        this->transpose(); this->trsv(r0); this->transpose();
-        
-        //Now r0 = Rv for some v
-        Vector<DT> v(this->width());
-        v.copy(r0);
-        this->trsv(v);
-        v.print("v");
-
-        // rho1^2 = s' * s - r0' * r0;
-        DT rho1 = sqrt(std::abs(s.dot(s) - r0.dot(r0)));
         this->enlarge_n(1);
         (*this)(_n-1, _n-1) = rho1;
     }

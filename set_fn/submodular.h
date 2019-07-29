@@ -14,15 +14,15 @@ template<class DT>
 class SubmodularFunction {
 public:
     //Workspace for the greedy algorithm
+    int64_t n;
     std::vector<bool> A;
     std::vector<int64_t> permutation;
-    int64_t n;
     Vector<DT> ws;
 
     SubmodularFunction(int64_t n_in) : n(n_in), A(n_in), ws(n)
     {
         permutation.reserve(n);
-        for(int i = 0; i < n; i++) 
+        for(int64_t i = 0; i < n; i++) 
             permutation.push_back(i);
     }
 
@@ -47,7 +47,7 @@ public:
     {
         std::fill(A.begin(), A.end(), 0);
         DT FA_old = 0.0;
-        for(int i = 0; i < p.length(); i++) {
+        for(int64_t i = 0; i < p.length(); i++) {
             DT gain_i = gain(A, FA_old, perm[i]);
             p(perm[i]) = gain_i;
             A[perm[i]] = 1;
@@ -110,7 +110,7 @@ public:
     
     virtual DT greedy_maximize(int64_t cardinality_constraint, std::vector<bool>& A) 
     {
-        assert(A.size() == n);
+        assert(n > 0 && (int64_t) A.size() == n);
 
         std::fill(A.begin(), A.end(), false);
         auto F_A = eval(A); 
@@ -118,7 +118,7 @@ public:
         int64_t k = 0;
         while(k < cardinality_constraint) {
             DT greatest_gain = -1.0;
-            int64_t elem_to_add = -1;
+            int64_t elem_to_add = 0;
             for(int64_t i = 0; i < n; i++) {
                 if(A[i]) continue;
 
@@ -137,7 +137,6 @@ public:
 
         return F_A;
     }
-
 };
 
 #endif

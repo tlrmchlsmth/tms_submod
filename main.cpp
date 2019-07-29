@@ -9,7 +9,6 @@
 #include "set_fn/graph_cut.h"
 #include "set_fn/log_det.h"
 #include "set_fn/iwata_test.h"
-#include "set_fn/coverage.h"
 #include "set_fn/deep.h"
 #include "set_fn/st_constrain.h"
 #include "set_fn/plus_modular.h"
@@ -246,7 +245,6 @@ void mnp_order_k()
             double mnp_fa = problem.eval(mnp_A);
             int64_t mnp_iterations = PerfLog::get().get_total("ITERATIONS");
             int64_t mnp_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
-            int64_t mnp_s_card = PerfLog::get().get_total("S WIDTH");
 
             //MNP
             PerfLog::get().clear();
@@ -257,7 +255,6 @@ void mnp_order_k()
 
             int64_t mnp_speculate_iterations = PerfLog::get().get_total("ITERATIONS");
             int64_t mnp_speculate_minor_cycles = PerfLog::get().get_total("MINOR CYCLES");
-            int64_t mnp_speculate_s_card = PerfLog::get().get_total("S WIDTH");
 
             int64_t cardinality = 0;
             for(int i = 0; i < n; i++) {
@@ -341,9 +338,9 @@ void frank_wolfe_mincut_err_vs_time()
     std::cout << std::endl;
 
     size_t max_len = 0;
-    for(int i = 0; i < times.size(); i++) max_len = std::max(max_len, times[i].size());
-    for(int j = 0; j < max_len; j++) {
-        for(int i = 0; i < times.size(); i++) {
+    for(uint64_t i = 0; i < times.size(); i++) max_len = std::max(max_len, times[i].size());
+    for(uint64_t j = 0; j < max_len; j++) {
+        for(uint64_t i = 0; i < times.size(); i++) {
             assert(times[i].size() == dualities[i].size());
             if(j < times[i].size()) { 
                 std::cout << std::setw(fw) << times[i][j] / 3.6e9 << ", " << std::setw(fw) << dualities[i][j] << ", ";

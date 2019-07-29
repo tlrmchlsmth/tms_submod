@@ -23,7 +23,7 @@ public:
     int64_t _base_len;
     bool _mem_manage;
 
-    Vector(int64_t s) : _len(s), _base_len(s), _stride(1), _mem_manage(true)
+    Vector(int64_t s) : _len(s), _stride(1), _base_len(s), _mem_manage(true)
     {
         auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
         if(ret != 0){
@@ -33,14 +33,14 @@ public:
     }
 
     Vector(DT* values, int64_t len, int64_t base_len, int64_t stride, bool mem_manage) :
-        _values(values), _len(len), _base_len(base_len), _stride(stride), _mem_manage(mem_manage)
+        _values(values), _len(len), _stride(stride), _base_len(base_len), _mem_manage(mem_manage)
     { }
     Vector(DT* values, int64_t len) :
-        _values(values), _len(len), _base_len(len), _stride(1), _mem_manage(false)
+        _values(values), _len(len), _stride(1), _base_len(len), _mem_manage(false)
     { }
 
     Vector(DT* values, int64_t len, int64_t stride) :
-        _values(values), _len(len), _base_len(len), _stride(stride), _mem_manage(false)
+        _values(values), _len(len), _stride(stride), _base_len(len), _mem_manage(false)
     { }
 
     ~Vector()
@@ -61,8 +61,9 @@ public:
     }
 
     Vector(Vector&& x) :
-        _values(x._values), _mem_manage(x._mem_manage),
-        _len(x._len), _base_len(x._base_len), _stride(x._stride)
+        _values(x._values), 
+        _len(x._len), _stride(x._stride), 
+        _base_len(x._base_len), _mem_manage(x._mem_manage)
     {
         x._values = nullptr;
     }
@@ -81,8 +82,9 @@ public:
         }
         this->copy(x);
     }
+
     Vector(const Vector& x) :
-        _len(x._len), _base_len(x._len), _stride(1), _mem_manage(true)
+        _len(x._len), _stride(1), _base_len(x._len), _mem_manage(true)
     {
         auto ret = posix_memalign((void **) &_values, 4096, _len * sizeof(DT));
         if(ret != 0){

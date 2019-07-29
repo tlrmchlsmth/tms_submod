@@ -100,10 +100,10 @@ private:
        
         double weight_factor = 4.0; 
         //scale outgoing weights of source and incoming weights of sink
-        for(int64_t j = 0; j < adj_out[n].size(); j++) {
+        for(uint64_t j = 0; j < adj_out[n].size(); j++) {
             adj_out[n][j].weight *= weight_factor;
         }
-        for(int64_t j = 0; j < adj_in[n+1].size(); j++) {
+        for(uint64_t j = 0; j < adj_in[n+1].size(); j++) {
             adj_in[n+1][j].weight *= weight_factor;
         }
 
@@ -114,7 +114,7 @@ private:
             adj_in [i].erase(std::remove_if(adj_in [i].begin(), adj_in [i].end(), [=](Edge<DT> e){ return e.index == sink;   }), adj_in [i].end());
 
             //Redirect edges to their new sources and destinations
-            for(int64_t e = 0; e < adj_out[i].size(); e++) {
+            for(uint64_t e = 0; e < adj_out[i].size(); e++) {
                 if(adj_out[i][e].index == sink) {
                     adj_out[i][e].index = n+1; 
                     adj_out[i][e].weight *= weight_factor;
@@ -124,7 +124,7 @@ private:
                     adj_out[i][e].index = sink;
                 }
             }
-            for(int64_t e = 0; e < adj_in[i].size(); e++) {
+            for(uint64_t e = 0; e < adj_in[i].size(); e++) {
                 if(adj_in[i][e].index == source)  {
                     adj_in[i][e].index = n;
                     adj_in[i][e].weight *= weight_factor;
@@ -387,9 +387,9 @@ public:
 template<class DT>
 class SlowMinCut : public SubmodularFunction<DT> {
 public:
+    int64_t n;
     std::vector<std::vector<Edge<DT>>> adj_in;
     std::vector<std::vector<Edge<DT>>> adj_out;
-    int64_t n;
     DT baseline;
 
     SlowMinCut(const MinCut<DT>& other) : SubmodularFunction<DT>(other.n), n(other.n), adj_in(other.adj_in), adj_out(other.adj_out), baseline(other.baseline) { }
@@ -424,14 +424,14 @@ public:
     {
         //Gain from adding b
         DT gain = 0.0;
-        for(int64_t i = 0; i < adj_out[b].size(); i++) {
+        for(uint64_t i = 0; i < adj_out[b].size(); i++) {
             if(!A[adj_out[b][i].index])
                 gain += adj_out[b][i].weight;
         }
     
         //Loss from adding b
         DT loss = 0.0;
-        for(int64_t i = 0; i < adj_in[b].size(); i++) {
+        for(uint64_t i = 0; i < adj_in[b].size(); i++) {
             if(adj_in[b][i].index == n || A[adj_in[b][i].index])
                 loss -= adj_in[b][i].weight;
         }
