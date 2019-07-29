@@ -438,13 +438,18 @@ public:
 
         return gain + loss;
     }
-
+/*
     void gains(const std::vector<int64_t>& perm, Vector<DT>& x) override
     {
         _Pragma("omp parallel") 
         {
+#ifdef _OPENMP
             int64_t t_id = omp_get_thread_num();
             int64_t nt = omp_get_num_threads();
+#else   
+            int64_t t_id = 0;
+            int64_t nt = 1;
+#endif
 
             int64_t n_per_thread = (n - 1) / nt + 1;
             int64_t start = n_per_thread * t_id;
@@ -463,6 +468,6 @@ public:
                 F_A += x(b);
             }
         }
-    }
+    } */
 };
 #endif

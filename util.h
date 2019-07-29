@@ -66,27 +66,9 @@ DT house_gen(int64_t m, DT* x, int64_t stride)
     return tau;
 }
 
-//Givens rotation
 //Givens rotations
-inline void rotg(float* a, float* b, float* c, float* s) 
-{
-    cblas_srotg(a, b, c, s);
-}
-inline void rotg(double* a, double* b, double* c, double* s) 
-{
-    cblas_drotg(a, b, c, s);
-}
-inline void rot(int64_t n, float* x, int64_t stride_x, float* y, int64_t stride_y, float c, float s)
-{
-    cblas_srot(n, x, stride_x, y, stride_y, c, s);
-}
-inline void rot(int64_t n, double* x, int64_t stride_x, double* y, int64_t stride_y, double c, double s)
-{
-    cblas_drot(n, x, stride_x, y, stride_y, c, s);
-}
-/*inline void rotg(float* a, float* b, float* c, float* s);
-inline void rotg(double* a, double* b, double* c, double* s);
-
-inline void rot(int64_t n, float* x, int64_t stride_x, float* y, int64_t stride_y, float c, float s);
-inline void rot(int64_t n, double* x, int64_t stride_x, double* y, int64_t stride_y, double c, double s);*/
+void rotg(float* a, float* b, float* c, float* s);
+void rotg(double* a, double* b, double* c, double* s); 
+void rot(int64_t n, float* x, int64_t stride_x, float* y, int64_t stride_y, float c, float s);
+void rot(int64_t n, double* x, int64_t stride_x, double* y, int64_t stride_y, double c, double s);
 #endif

@@ -54,9 +54,9 @@ public:
         _am_upper_tri = ! _am_upper_tri;
     }
     
-    inline int64_t height() const { return _n; }
+    int64_t height() const { return _n; }
 
-    inline int64_t width() const { return _n; }
+    int64_t width() const { return _n; }
 
     void print() {
         if(_am_a) {
@@ -74,7 +74,7 @@ public:
         }
     }
 
-    inline DT& operator() (int64_t row, int64_t col)
+    DT& operator() (int64_t row, int64_t col)
     {
         if(_am_a) {
             return _a(row,col);
@@ -82,7 +82,7 @@ public:
             return _b(row,col);
         }
     }
-    inline DT operator() (int64_t row, int64_t col) const
+    DT operator() (int64_t row, int64_t col) const
     {
         if(_am_a) {
             return _a(row,col);
@@ -91,7 +91,7 @@ public:
         }
     }
 
-    inline DT* lea (int64_t row, int64_t col) 
+    DT* lea (int64_t row, int64_t col) 
     {
         if(_am_a) {
             return _a.lea(row,col);
@@ -99,7 +99,7 @@ public:
             return _b.lea(row,col);
         }
     }
-    inline const DT* lea (int64_t row, int64_t col) const
+    const DT* lea (int64_t row, int64_t col) const
     {
         if(_am_a) {
             return _a.lea(row,col);
@@ -108,7 +108,7 @@ public:
         }
     }
 
-    inline Matrix<DT>& current_matrix() {
+    Matrix<DT>& current_matrix() {
         if(_am_a) {
             assert(_a._m == _n);
             assert(_a._n == _n);
@@ -120,7 +120,7 @@ public:
         }
     }
 
-    inline const Matrix<DT> current_matrix() const {
+    const Matrix<DT> current_matrix() const {
         if(_am_a) {
             assert(_a._m == _n);
             assert(_a._n == _n);
@@ -135,7 +135,7 @@ public:
     //
     // Acquiring submatrices, subvectors
     //
-    inline IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc)
+    IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc)
     {
         assert(diag_start < _n && "Matrix index out of bounds.");
         auto n = std::min(nc, _n - diag_start);
@@ -149,41 +149,8 @@ public:
             
         return toret;
     }
-/*
-    inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
-    {
-        if(_am_a) {
-            return _a.subrow(row,col,nc);
-        } else {
-            return _b.subcol(row,col,nc);
-        }
-    }
-    inline Vector<DT> subrow(int64_t row)
-    {
-        if(_am_a) {
-            return _a.subrow(row);
-        } else {
-            return _b.subcol(row);
-        }
-    }
-    inline Vector<DT> subcol(int64_t row, int64_t col, int64_t mc)
-    {
-        if(_am_a) {
-            return _a.subcol(row,col,mc);
-        } else {
-            return _b.subrow(row,col,mc);
-        }
-    }
-    inline Vector<DT> subcol(int64_t col)
-    {
-        if(_am_a) {
-            return _a.subrow(row,col,nc);
-        } else {
-            return _b.subcol(row,col,nc);
-        }
-    }
-*/
-    inline const IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc) const
+    
+    const IncQRMatrix<DT> submatrix(int64_t diag_start, int64_t nc) const
     {
         assert(diag_start < _n && "Matrix index out of bounds.");
         auto n = std::min(nc, _n - diag_start);
@@ -197,41 +164,8 @@ public:
             
         return toret;
     }
-/*
-    inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
-    {
-        if(_am_a) {
-            return _a.subrow(row,col,nc);
-        } else {
-            return _b.subcol(row,col,nc);
-        }
-    }
-    inline const Vector<DT> subrow(int64_t row) const
-    {
-        if(_am_a) {
-            return _a.subrow(row);
-        } else {
-            return _b.subcol(row);
-        }
-    }
-    inline const Vector<DT> subcol(int64_t row, int64_t col, int64_t mc) const
-    {
-        if(_am_a) {
-            return _a.subcol(row,col,mc);
-        } else {
-            return _b.subrow(row,col,mc);
-        }
-    }
-    inline const Vector<DT> subcol(int64_t col) const
-    {
-        if(_am_a) {
-            return _a.subrow(col);
-        } else {
-            return _b.subcol(0,col,nc);
-        }
-    }
-*/
-    inline void enlarge_n(int64_t n_inc)
+    
+    void enlarge_n(int64_t n_inc)
     {
         assert(_n + n_inc <= _base_n && "Cannot enlarge matrix.");
         _n += n_inc;

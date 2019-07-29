@@ -147,7 +147,6 @@ public:
     }
     
     //Helper rectifiers
-    template<class DT>
     void rectify_vec(Vector<DT>& y, const Vector<DT>& x) {
         assert(y.length() == x.length());
         _Pragma("omp parallel for")
@@ -157,7 +156,6 @@ public:
         }
     }
 
-    template<class DT>
     void rectify_vec(Vector<DT>& x) {
         //_Pragma("omp parallel for")
         for(int64_t i = 0; i < x.length(); i++) {

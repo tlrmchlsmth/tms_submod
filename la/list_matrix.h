@@ -32,24 +32,25 @@ public:
         }
     }
 
-    inline int64_t width()  const { return _k; }
-    inline int64_t height() const { return _n; }
+    int64_t width()  const { return _k; }
+    int64_t height() const { return _n; }
     
-    inline Vector<DT> subcol(int64_t col) {
-        assert(col < _k && "Matrix index out of bounds.");
-        return Vector<DT>(&_buffer[_cols[col]*_cs], _n, _n, 1, false);
-    }
-    inline const Vector<DT> subcol(int64_t col) const {
+    Vector<DT> subcol(int64_t col) {
         assert(col < _k && "Matrix index out of bounds.");
         return Vector<DT>(&_buffer[_cols[col]*_cs], _n, _n, 1, false);
     }
 
-    inline Vector<DT> next_col() {
+    const Vector<DT> subcol(int64_t col) const {
+        assert(col < _k && "Matrix index out of bounds.");
+        return Vector<DT>(&_buffer[_cols[col]*_cs], _n, _n, 1, false);
+    }
+
+    Vector<DT> next_col() {
         assert(_k < _cols.size());
         return Vector<DT>(&_buffer[_cols[_k]*_cs], _n, _n, 1, false);
     }
     
-    inline void enlarge_width() {
+    void enlarge_width() {
         _k++;
     }
 
@@ -94,14 +95,14 @@ public:
 
 //specialization
 template<>
-inline void ColListMatrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const {
+void ColListMatrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const {
     y.scale(beta);
     for(int64_t j = 0; j < _k; j++) {
         cblas_daxpy(_n, alpha * x(j), &_buffer[_cols[j]*_cs], 1, y._values, y._stride);
     }
 }
 template<>
-inline void ColListMatrix<double>::transposed_mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const {
+void ColListMatrix<double>::transposed_mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const {
     y.scale(beta);
     _Pragma("omp parallel for")
     for(int64_t j = 0; j < _k; j++) {

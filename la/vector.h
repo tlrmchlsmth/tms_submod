@@ -1,9 +1,11 @@
 #ifndef TMS_SUBMOD_VECTOR_H
 #define TMS_SUBMOD_VECTOR_H
 
+#include <iostream>
 #include <list>
 #include <assert.h>
 #include <random>
+
 #include "mkl.h"
 
 template<class DT> class Matrix;
@@ -136,25 +138,25 @@ public:
         return Vector(_values + start*_stride, length, _len, _stride, false);
     }
 
-    inline DT& operator() (int64_t index)
+    DT& operator() (int64_t index)
     {
         assert(index < _len && "Vector index out of bounds");
         return _values[index * _stride];
     }
 
-    inline DT operator() (int64_t index) const
+    DT operator() (int64_t index) const
     {
         assert(index < _len && "Vector index out of bounds.");
         return _values[index * _stride];
     }
 
-    inline DT* lea (int64_t index)
+    DT* lea (int64_t index)
     {
         assert(index < _len && "Vector index out of bounds.");
         return &_values[index * _stride];
     }
 
-    inline int64_t length() const
+    int64_t length() const
     {
         return _len;
     }
@@ -321,17 +323,17 @@ public:
         std::cout << "norm2 not implemented for datatype" << std::endl;
         exit(1);
     }
-    DT dot(const Vector<DT>& other) const
+    DT dot(const Vector<DT>&) const
     {
         std::cout << "dot not implemented for datatype" << std::endl;
         exit(1);
     }
-    void axpy(const DT alpha, const Vector<DT>& other)
+    void axpy(const DT, const Vector<DT>&)
     {
         std::cout << "axpy not implemented for datatype" << std::endl;
         exit(1);
     }
-    void axpby(const DT alpha, const Vector<DT>& other, const DT beta)
+    void axpby(const DT, const Vector<DT>&, const DT)
     {
         std::cout << "axpby not implemented for datatype" << std::endl;
         exit(1);
@@ -395,7 +397,7 @@ public:
         }
     }
 
-    inline void house_apply(DT tau, Matrix<DT>& X) const 
+    void house_apply(DT tau, Matrix<DT>& X) const 
     {
         _Pragma("omp parallel for")
         for(int j = 0; j < X.width(); j++) {
@@ -414,81 +416,43 @@ public:
     }
 };
 
-#include "matrix.h"
-#include "immintrin.h"
-#include "ipps.h"
-
 //
-// Double precision vector ops
+// Specialized function prototypes
 //
 template<>
-inline double Vector<double>::norm2() const
-{
-    double nrm = cblas_dnrm2( _len, _values, _stride);
-    return nrm;
-}
-template<>
-inline double Vector<double>::dot(const Vector<double>& other) const
-{
-    assert(_len == other.length());
-    double alpha = cblas_ddot( _len, _values, _stride, other._values, other._stride);
-    return alpha;
-}
-template<>
-inline void Vector<double>::scale(const double alpha)
-{
-    cblas_dscal(_len, alpha, _values, _stride);
-}
-template<>
-inline void Vector<double>::axpy(const double alpha, const Vector<double>& other)
-{
-    cblas_daxpy(_len, alpha, other._values, other._stride, _values, _stride);
-}
-template<>
-inline void Vector<double>::axpby(const double alpha, const Vector<double>& other, const double beta)
-{
-    cblas_daxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
-}
+double Vector<double>::norm2() const;
 
 template<>
-void Vector<double>::copy(const Vector<double>& from) {
-    cblas_dcopy(_len, from._values, from._stride, _values, _stride);
-}
-
-//
-// Single precision vector ops
-//
-template<>
-inline float Vector<float>::norm2() const
-{
-    float nrm = cblas_snrm2( _len, _values, _stride);
-    return nrm;
-}
-template<>
-inline float Vector<float>::dot(const Vector<float>& other) const
-{
-    float alpha = cblas_sdot( _len, _values, _stride, other._values, other._stride);
-    return alpha;
-}
-template<>
-inline void Vector<float>::scale(const float alpha)
-{
-    cblas_sscal(_len, alpha, _values, _stride);
-}
-template<>
-inline void Vector<float>::axpy(const float alpha, const Vector<float>& other)
-{
-    cblas_saxpy(_len, alpha, other._values, other._stride, _values, _stride);
-}
-template<>
-inline void Vector<float>::axpby(const float alpha, const Vector<float>& other, const float beta)
-{
-    cblas_saxpby(_len, alpha, other._values, other._stride, beta, _values, _stride);
-}
+double Vector<double>::dot(const Vector<double>& other) const;
 
 template<>
-void Vector<float>::copy(const Vector<float>& from) {
-    cblas_scopy(_len, from._values, from._stride, _values, _stride);
-}
+void Vector<double>::scale(const double alpha);
+
+template<>
+void Vector<double>::axpy(const double alpha, const Vector<double>& other);
+
+template<>
+void Vector<double>::axpby(const double alpha, const Vector<double>& other, const double beta);
+
+template<>
+void Vector<double>::copy(const Vector<double>& from);
+
+template<>
+float Vector<float>::norm2() const;
+
+template<>
+float Vector<float>::dot(const Vector<float>& other) const;
+
+template<>
+void Vector<float>::scale(const float alpha);
+
+template<>
+void Vector<float>::axpy(const float alpha, const Vector<float>& other);
+
+template<>
+void Vector<float>::axpby(const float alpha, const Vector<float>& other, const float beta);
+
+template<>
+void Vector<float>::copy(const Vector<float>& from);
 
 #endif

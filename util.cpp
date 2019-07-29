@@ -65,13 +65,7 @@ void scramble(std::vector<int64_t>& v) {
 void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, double* X, int64_t x_rs, int64_t x_cs) {
     #pragma omp parallel for
     for(int j = 0; j < n; j++) {
-        //BLAS VERSION
-#ifdef BLAS_HOUSE
-        double vt_x = X[j*x_cs] + cblas_ddot(m-1, &v[1], stride, &X[1 + j*x_cs], x_rs);
-        double alpha = tau * vt_x;
-        X[0 + j*x_cs] -= alpha;
-        cblas_daxpy(m-1, -alpha, &v[1], stride, &X[x_rs + j*x_cs], x_rs);
-#else
+#ifdef INTEL_IPP
         if(stride != 1 || x_rs != 1) {
             //Default to BLAS version
             double vt_x = X[j*x_cs] + cblas_ddot(m-1, &v[1], stride, &X[1 + j*x_cs], x_rs);
@@ -88,8 +82,33 @@ void house_apply(int64_t m, int64_t n, double * v, int64_t stride, double tau, d
             X[j*x_cs] -= alpha;
             ippsAddProductC_64f(&v[1], -alpha, &X[1 + j*x_cs], m-1);
         }
+#else
+        //BLAS VERSION
+        double vt_x = X[j*x_cs] + cblas_ddot(m-1, &v[1], stride, &X[1 + j*x_cs], x_rs);
+        double alpha = tau * vt_x;
+        X[0 + j*x_cs] -= alpha;
+        cblas_daxpy(m-1, -alpha, &v[1], stride, &X[x_rs + j*x_cs], x_rs);
 #endif
     }
 }
 
 
+void rotg(float* a, float* b, float* c, float* s) 
+{
+    cblas_srotg(a, b, c, s);
+}
+
+void rotg(double* a, double* b, double* c, double* s) 
+{
+    cblas_drotg(a, b, c, s);
+}
+
+void rot(int64_t n, float* x, int64_t stride_x, float* y, int64_t stride_y, float c, float s)
+{
+    cblas_srot(n, x, stride_x, y, stride_y, c, s);
+}
+
+void rot(int64_t n, double* x, int64_t stride_x, double* y, int64_t stride_y, double c, double s)
+{
+    cblas_drot(n, x, stride_x, y, stride_y, c, s);
+}

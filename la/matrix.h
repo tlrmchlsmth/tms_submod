@@ -156,34 +156,34 @@ public:
         _base_n = n;
     }
 
-    inline int64_t height() const 
+    int64_t height() const 
     { 
         return _m; 
     }
-    inline int64_t width() const 
+    int64_t width() const 
     { 
         return _n; 
     }
 
-    inline 
     DT& operator() (int64_t row, int64_t col)
     {
         assert(row < _m && col < _n && "Matrix index out of bounds");
         return _values[row * _rs + col * _cs];
     }
-    inline 
+    
     DT operator() (int64_t row, int64_t col) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds");
         return _values[row * _rs + col * _cs];
     }
 
-    inline DT* lea (int64_t row, int64_t col) 
+    DT* lea (int64_t row, int64_t col) 
     {
         assert(row < _m && col < _n && "Matrix index out of bounds");
         return &_values[row * _rs + col * _cs];
     }
-    inline const DT* lea (int64_t row, int64_t col) const
+
+    const DT* lea (int64_t row, int64_t col) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds");
         return &_values[row * _rs + col * _cs];
@@ -192,7 +192,7 @@ public:
     //
     // Acquiring submatrices, subvectors
     //
-    inline Matrix<DT> submatrix(int64_t row, int64_t col, int64_t mc, int64_t nc)
+    Matrix<DT> submatrix(int64_t row, int64_t col, int64_t mc, int64_t nc)
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
@@ -200,54 +200,62 @@ public:
 
         return Matrix<DT>(lea(row,col), height, width, _rs, _cs, _m, _n, false);
     }
-    inline Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
+
+    Vector<DT> subrow(int64_t row, int64_t col, int64_t nc)
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto width  = std::min(nc, _n - col);
         return Vector<DT>(&_values[row*_rs + col*_cs], width, _n, _cs, false);
     }
-    inline Vector<DT> subrow(int64_t row)
+
+    Vector<DT> subrow(int64_t row)
     {
         assert(row < _m && "Matrix index out of bounds.");
         return Vector<DT>(&_values[row*_rs], _n, _n, _cs, false);
     }
-    inline Vector<DT> subcol(int64_t row, int64_t col, int64_t mc)
+
+    Vector<DT> subcol(int64_t row, int64_t col, int64_t mc)
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         return Vector<DT>(&_values[row*_rs + col*_cs], height, _m, _rs, false);
     }
-    inline Vector<DT> subcol(int64_t col)
+
+    Vector<DT> subcol(int64_t col)
     {
         assert(col < _n && "Matrix index out of bounds.");
         return Vector<DT>(&_values[col*_cs], _m, _m, _rs, false);
     }
 
-    inline const Matrix<DT> submatrix(int64_t row, int64_t col, int64_t mc, int64_t nc) const
+    const Matrix<DT> submatrix(int64_t row, int64_t col, int64_t mc, int64_t nc) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         auto width  = std::min(nc, _n - col);
         return Matrix<DT>(&_values[row*_rs + col*_cs], height, width, _rs, _cs, _m, _n, false);
     }
-    inline const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
+
+    const Vector<DT> subrow(int64_t row, int64_t col, int64_t nc) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto width  = std::min(nc, _n - col);
         return Vector<DT>(&_values[row*_rs + col*_cs], width, _n, _cs, false);
     }
-    inline const Vector<DT> subrow(int64_t row) const
+
+    const Vector<DT> subrow(int64_t row) const
     {
         assert(row < _m && "Matrix index out of bounds.");
         return Vector<DT>(&_values[row*_rs], _n, _n, _cs, false);
     }
-    inline const Vector<DT> subcol(int64_t row, int64_t col, int64_t mc) const
+
+    const Vector<DT> subcol(int64_t row, int64_t col, int64_t mc) const
     {
         assert(row < _m && col < _n && "Matrix index out of bounds.");
         auto height = std::min(mc, _m - row);
         return Vector<DT>(&_values[row*_rs + col*_cs], height, _m, _rs, false);
     }
-    inline const Vector<DT> subcol(int64_t col) const
+
+    const Vector<DT> subcol(int64_t col) const
     {
         assert(col < _n && "Matrix index out of bounds.");
         return Vector<DT>(&_values[col*_cs], _m, _m, _rs, false);
@@ -356,7 +364,7 @@ public:
         return sqrt(fro_nrm);
     }
 
-    inline void transpose()
+    void transpose()
     {
         std::swap(_m, _n);
         std::swap(_rs, _cs);
@@ -395,13 +403,13 @@ public:
         std::cout << std::endl;
     }
 
-    inline void enlarge_m(int64_t m_inc)
+    void enlarge_m(int64_t m_inc)
     {
         assert(_m + m_inc <= _base_m && "Cannot add row to matrix.");
         _m += m_inc;
     }
 
-    inline void enlarge_n(int64_t n_inc)
+    void enlarge_n(int64_t n_inc)
     {
         assert(_n + n_inc <= _base_n && "Cannot add colum to matrix.");
         _n += n_inc;
@@ -410,61 +418,61 @@ public:
     //
     // BLAS, LAPACK routines
     //
-    void mvm(DT alpha, const Vector<DT>& x, DT beta, Vector<DT>& y) const
+    void mvm(DT, const Vector<DT>&, DT, Vector<DT>&) const
     {
         std::cout << "Gemv not implemented for datatype" << std::endl;
         exit(1);
     }
-    void trsv(CBLAS_UPLO uplo, Vector<DT>& x) const
+    void trsv(CBLAS_UPLO, Vector<DT>&) const
     {
         std::cout << "Trsv not implemented for datatype" << std::endl;
         exit(1);
     }
 
-    void trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<DT>& x) const
+    void trsm(CBLAS_UPLO, CBLAS_SIDE, Matrix<DT>&) const
     {
         std::cout << "Trsv not implemented for datatype" << std::endl;
         exit(1);
     }
-
-    void mmm(DT alpha, const Matrix<DT>& A, const Matrix<DT>& B, DT beta)
+    
+    void mmm(DT, const Matrix<DT>&, const Matrix<DT>&, DT)
     {
         std::cout << "Gemm not implemented for datatype" << std::endl;
         exit(1);
 
     }
 
-    void syrk(CBLAS_UPLO uplo, DT alpha, const Matrix<DT>& A, DT beta)
+    void syrk(CBLAS_UPLO, DT, const Matrix<DT>&, DT)
     {
         std::cout << "Syrk not implemented for datatype" << std::endl;
         exit(1);
 
     }
 
-    void qr(Vector<DT>& t)
+    void qr(Vector<DT>&)
     {
         std::cout << "QR factorization not implemented for datatype" << std::endl;
         exit(1);
     }
-    void chol(char uplo)
+    void chol(char)
     {
         std::cout << "Cholesky factorization not implemented for datatype" << std::endl;
         exit(1);
     }
 
-    void apply_q(Vector<DT>& t, Matrix<DT>& a) const
+    void apply_q(Vector<DT>&, Matrix<DT>&) const
     {
         std::cout << "Applying Q from qr factorization not implemented for datatype" << std::endl;
         exit(1);
     }
 
-    void tpqr(Matrix<DT>& V, Matrix<DT>& T, int64_t l, int64_t nb)
+    void tpqr(Matrix<DT>&, Matrix<DT>&, int64_t, int64_t)
     {
         std::cout << "TPQR factorization not implemented for datatype" << std::endl;
         exit(1);
     }
 
-    void apply_tpq(Matrix<DT>& A, Matrix<DT>& B, const Matrix<DT>& T, int64_t l, int64_t nb, Matrix<DT>& ws) const
+    void apply_tpq(Matrix<DT>&, Matrix<DT>&, const Matrix<DT>&, int64_t, int64_t, Matrix<DT>&) const
     {
         std::cout << "Applying TPQ not implemented for datatype" << std::endl;
         exit(1);
@@ -1063,566 +1071,60 @@ public:
 };
 
 template<>
-void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const
-{
-    assert(_m == y._len && _n == x._len && "Nonconformal mvm.");
-
-    int64_t start, end;
-    start = rdtsc();
-
-    if(_rs == 1) {
-        cblas_dgemv(CblasColMajor, CblasNoTrans, _m, _n, alpha, _values, _cs, 
-                x._values, x._stride, 
-                beta, y._values, y._stride);
-    } else if(_cs == 1) {
-        cblas_dgemv(CblasRowMajor, CblasNoTrans, _m, _n, alpha, _values, _rs, 
-                x._values, x._stride, 
-                beta, y._values, y._stride);
-    } else {
-        std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
-        exit(1);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("MVM FLOPS", 2 * _m * _n);
-    PerfLog::get().log_total("MVM TIME", end - start);
-    PerfLog::get().log_total("MVM BYTES", sizeof(double) * (_m * _n + 2*_m + _n));
-}
-template<>
-void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x) const
-{
-    assert(_m == _n && _m == x._len && "Nonconformal trsv.");
-
-    int64_t start, end;
-    start = rdtsc();
-    
-    if(_rs == 1) {
-        cblas_dtrsv(CblasColMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _cs,
-                x._values, x._stride);
-    } else if(_cs == 1) {
-        cblas_dtrsv(CblasRowMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _rs,
-                x._values, x._stride);
-    } else {
-        std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
-        exit(1);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("TRSV FLOPS", _n*_n);
-    PerfLog::get().log_total("TRSV TIME", end - start);
-    PerfLog::get().log_total("TRSV BYTES", sizeof(double) * (_n*_n / 2 + 2*_n));
-}
+void Matrix<double>::mvm(double alpha, const Vector<double>& x, double beta, Vector<double>& y) const;
 
 template<>
-void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X) const
-{
-    if(side == CblasLeft) assert(_m == X.height() && "Nonconformal trsm");
-    else assert (_m == X.width() && "Nonconformal trsm");
-    assert(_m == _n && "Nonconformal trsm.");
-    assert((_rs == 1  || _cs == 1) && (X._rs == 1 || X._cs == 1));
-
-    int64_t start, end;
-    start = rdtsc();
-
-    int64_t ldx = X._cs * X._rs;
-    CBLAS_UPLO uplo_trans = CblasUpper;
-    if(uplo == CblasUpper) uplo_trans = CblasLower;
-
-    if(_rs == 1) {
-        if(X._rs != 1) {
-            cblas_dtrsm(CblasRowMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _cs,
-                    X._values, ldx);
-        }
-        else {
-            cblas_dtrsm(CblasColMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _cs,
-                    X._values, ldx);
-        }
-    } else {
-        if(X._cs != 1) {
-            cblas_dtrsm(CblasColMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _rs,
-                    X._values, ldx);
-        }
-        else {
-            cblas_dtrsm(CblasRowMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _rs,
-                    X._values, ldx);
-        }
-    }
-
-    end = rdtsc();
-
-    PerfLog::get().log_total("TRSM FLOPS", _n*_n*X.width());
-    PerfLog::get().log_total("TRSM TIME", end - start);
-    PerfLog::get().log_total("TRSM BYTES", sizeof(double) * (_n*_n/2 + 2*_n*X.width()));
-}
+void Matrix<double>::trsv(CBLAS_UPLO uplo, Vector<double>& x) const;
 
 template<>
-void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<double>& B, double beta)
-{
-    assert(_m == A._m && _n == B._n && A._n == B._m && "Nonconformal gemm");
-    assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1) && (B._rs == 1 || B._cs == 1)); 
-
-    auto ATrans = CblasNoTrans;
-    auto BTrans = CblasNoTrans;
-    int64_t lda = A._rs * A._cs;
-    int64_t ldb = B._rs * B._cs;
-
-    int64_t start = rdtsc();
-
-    if(_rs == 1) {
-        if(A._rs != 1) ATrans = CblasTrans;
-        if(B._rs != 1) BTrans = CblasTrans;
-
-        cblas_dgemm(CblasColMajor, ATrans, BTrans, _m, _n, A._n,
-                alpha, A._values, lda, B._values, ldb,
-                beta, _values, _cs);
-    } else {
-        if(A._cs != 1) ATrans = CblasTrans;
-        if(B._cs != 1) BTrans = CblasTrans;
-
-        cblas_dgemm(CblasRowMajor, ATrans, BTrans, _m, _n, A._n,
-                alpha, A._values, lda, B._values, ldb,
-                beta, _values, _rs);
-    }
-
-    PerfLog::get().log_total("MMM FLOPS", 2 * _m * _n * A._n);
-    PerfLog::get().log_total("MMM TIME", rdtsc() - start);
-    PerfLog::get().log_total("MMM BYTES", sizeof(double) * (2*_m *_n + _m * A._n + A._n * _n)); 
-}
+void Matrix<double>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<double>& X) const;
 
 template<>
-void Matrix<double>::syrk(CBLAS_UPLO uplo, double alpha, const Matrix<double>& A, double beta)
-{
-    assert(_m == A._m && _m == _n && "Nonconformal syrk");
-    assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1));
-
-    auto ATrans = CblasNoTrans;
-    int64_t lda = A._rs * A._cs;
-
-    int64_t start = rdtsc();
-    if(_rs == 1) {
-        if(A._rs != 1) ATrans = CblasTrans;
-        cblas_dsyrk(CblasColMajor, uplo, ATrans, _n, A._n, 
-            alpha, A._values, lda,
-            beta, _values, _cs);
-    } else {
-        if(A._cs != 1) ATrans = CblasTrans;
-        cblas_dsyrk(CblasRowMajor, uplo, ATrans, _n, A._n, 
-            alpha, A._values, lda,
-            beta, _values, _rs);
-    }
-
-    int64_t end = rdtsc();
-    PerfLog::get().log_total("SYRK FLOPS", _n*_n*A._n);
-    PerfLog::get().log_total("SYRK TIME", end - start);
-}
+void Matrix<double>::mmm(double alpha, const Matrix<double>& A, const Matrix<double>& B, double beta);
 
 template<>
-void Matrix<double>::qr(Vector<double>& t)
-{
-    assert(t._stride == 1 && t._len >= std::min(_m, _n) && "Cannot perform qr.");
-    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
-
-    int64_t start, end;
-    start = rdtsc();
-
-    if(_rs == 1) {
-        LAPACKE_dgeqrf(LAPACK_COL_MAJOR, _m, _n, _values, _cs, t._values);
-    } else /*if(_cs == 1)*/ {
-        LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, _m, _n, _values, _rs, t._values);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
-    PerfLog::get().log_total("QR TIME", end - start);
-}
+void Matrix<double>::syrk(CBLAS_UPLO uplo, double alpha, const Matrix<double>& A, double beta);
 
 template<>
-void Matrix<double>::chol(char uplo)
-{
-    assert(_m == _n);
-    assert(_rs == 1 || _cs == 1);
-    int inf;
-    int n = _n;
-    if(_rs == 1) {
-        int lda = _cs;
-        dpotrf_(&uplo, &n, _values, &lda, &inf);
-    } else {
-        char uplo_trans = 'L';
-        if(uplo == 'L') uplo_trans = 'U';
-        int lda = _rs;
+void Matrix<double>::qr(Vector<double>& t);
 
-        dpotrf_(&uplo_trans, &n, _values, &lda, &inf);
-    }
-#if 0
-    if(_rs == 1) {
-        LAPACKE_dpotrf(LAPACK_COL_MAJOR, uplo, _m,  _values, _cs);
-    } else /*if(_cs == 1)*/ {
-        LAPACKE_dpotrf(LAPACK_ROW_MAJOR, uplo, _m,  _values, _rs);
-    }
-#endif
-}
 template<>
-void Matrix<float>::chol(char uplo)
-{
-    assert(_m == _n);
-    assert(_rs == 1 || _cs == 1);
-    int inf;
-    int n = _n;
-    if(_rs == 1) {
-        int lda = _cs;
-        spotrf_(&uplo, &n, _values, &lda, &inf);
-    } else {
-        char uplo_trans = 'L';
-        if(uplo == 'L') uplo_trans = 'U';
-        int lda = _rs;
+void Matrix<double>::chol(char uplo);
 
-        spotrf_(&uplo_trans, &n, _values, &lda, &inf);
-    }
-#if 0
-    if(_rs == 1) {
-        LAPACKE_spotrf(LAPACK_COL_MAJOR, uplo, _m,  _values, _cs);
-    } else /*if(_cs == 1)*/ {
-        LAPACKE_spotrf(LAPACK_ROW_MAJOR, uplo, _m,  _values, _rs);
-    }
-#endif
-}
+template<>
+void Matrix<float>::chol(char uplo);
 
+template<>
+void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in);
+
+template<>
+void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws) const;
+
+template<>
+void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<float>& y) const;
+
+template<>
+void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x) const;
+
+template<>
+void Matrix<float>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<float>& X) const;
+
+template<>
+void Matrix<float>::mmm(float alpha, const Matrix<float>& A, const Matrix<float>& B, float beta);
+
+template<>
+void Matrix<float>::syrk(CBLAS_UPLO uplo, float alpha, const Matrix<float>& A, float beta);
+
+template<>
+void Matrix<float>::qr(Vector<float>& t);
 
 //Use tpqrt to annihilate rectangle above the triangle.
 //Then stores the reflectors in that block
 //TODO: handle row-major
 template<>
-void Matrix<double>::tpqr(Matrix<double>& B, Matrix<double>& T, int64_t l_in, int64_t nb_in)
-{
-    int32_t m = B.height();
-    int32_t n = B.width();
-
-    assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
-    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
-    assert(_rs == 1 && "Only column major qr supported");
-    assert(T._rs == 1); assert(B._rs == 1);
-
-    int32_t l = l_in;
-    int32_t nb = std::min(n, (int32_t)nb_in);
-
-    int64_t start = rdtsc();
-
-    LAPACKE_dtpqrt(LAPACK_COL_MAJOR, m, n, l, nb,
-            _values, this->_cs, B._values, B._cs, T._values, T._cs);
-
-    int64_t end = rdtsc();
-
-    PerfLog::get().log_total("TPQR TIME", end - start);
-}
+void Matrix<float>::tpqr(Matrix<float>& B, Matrix<float>& T, int64_t l_in, int64_t nb_in);
 
 template<>
-void Matrix<double>::apply_tpq(Matrix<double>& A, Matrix<double>& B, const Matrix<double>& T, int64_t l_in, int64_t nb_in, Matrix<double>& ws) const
-{
-    int m = B.height();
-    int n = B.width();
-    int k = A.height();
-    int l = l_in;
-    
-    // A is k-by-n, B is m-by-n and V is m-by-k.
-    assert(_m == m && _n == k && A.width() == n && T.height() >= nb_in && T.width() == k && "Nonconformal apply tpq");
-    assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
-    assert(_rs == 1 && "Only column major qr supported");
-
-
-    //Apply from the left
-    int nb = std::min(nb_in, A.height());
-   
-    //TODO: make sure ws has enough size 
-    //TODO 2: handle row stride
-    assert(_rs == 1); 
-
-
-    char side = 'L';
-    char trans = 'T'; //WHY??
-    int ldv = _cs;
-    int ldt = T._cs;
-    int lda = A._cs;
-    int ldb = B._cs;
-    int info;
-
-    int64_t start, end;
-    start = rdtsc();
-
-    dtpmqrt_(&side, &trans, &m, &n, &k, &l, &nb,
-            _values, &ldv, T._values, &ldt,
-            A._values, &lda, B._values, &ldb,
-            ws._values, &info);
-
-    end = rdtsc();
-    PerfLog::get().log_total("APPLY TPQR FLOPS", k*k*n + 4*m*k);
-    PerfLog::get().log_total("APPLY TPQR TIME", end - start);
-}
-
-template<>
-void Matrix<float>::mvm(float alpha, const Vector<float>& x, float beta, Vector<float>& y) const
-{
-    assert(_m == y._len && _n == x._len && "Nonconformal mvm.");
-
-    int64_t start, end;
-    start = rdtsc();
-
-    if(_rs == 1) {
-        cblas_sgemv(CblasColMajor, CblasNoTrans, _m, _n, alpha, _values, _cs, 
-                x._values, x._stride, 
-                beta, y._values, y._stride);
-    } else if(_cs == 1) {
-        cblas_sgemv(CblasRowMajor, CblasNoTrans, _m, _n, alpha, _values, _rs, 
-                x._values, x._stride, 
-                beta, y._values, y._stride);
-    } else {
-        std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
-        exit(1);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("MVM FLOPS", 2 * _m * _n);
-    PerfLog::get().log_total("MVM TIME", end - start);
-    PerfLog::get().log_total("MVM BYTES", sizeof(float) * (_m * _n + 2*_m + _n));
-}
-template<>
-void Matrix<float>::trsv(CBLAS_UPLO uplo, Vector<float>& x) const
-{
-    assert(_m == _n && _m == x._len && "Nonconformal trsv.");
-
-    int64_t start, end;
-    start = rdtsc();
-    
-    if(_rs == 1) {
-        cblas_strsv(CblasColMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _cs,
-                x._values, x._stride);
-    } else if(_cs == 1) {
-        cblas_strsv(CblasRowMajor, uplo, CblasNoTrans, CblasNonUnit, _m, _values, _rs,
-                x._values, x._stride);
-    } else {
-        std::cout << "Only row or column major GEMV supported. Exiting..." << std::endl;
-        exit(1);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("TRSV FLOPS", _m * _n);
-    PerfLog::get().log_total("TRSV TIME", end - start);
-    PerfLog::get().log_total("TRSV BYTES", sizeof(float) * (_m * _n / 2 + 2*_m + _n));
-}
-
-template<>
-void Matrix<float>::trsm(CBLAS_UPLO uplo, CBLAS_SIDE side, Matrix<float>& X) const
-{
-    if(side == CblasLeft) assert(_m == X.height() && "Nonconformal trsm");
-    else assert (_m == X.width() && "Nonconformal trsm");
-    assert(_m == _n && "Nonconformal trsm.");
-    assert((_rs == 1  || _cs == 1) && (X._rs == 1 || X._cs == 1));
-
-    int64_t start, end;
-    start = rdtsc();
-
-    int64_t ldx = X._cs * X._rs;
-    CBLAS_UPLO uplo_trans = CblasUpper;
-    if(uplo == CblasUpper) uplo_trans = CblasLower;
-
-    if(_rs == 1) {
-        if(X._rs != 1) {
-            cblas_strsm(CblasRowMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _cs,
-                    X._values, ldx);
-        }
-        else {
-            cblas_strsm(CblasColMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _cs,
-                    X._values, ldx);
-        }
-    } else {
-        if(X._cs != 1) {
-            cblas_strsm(CblasColMajor, side, uplo_trans, CblasTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _rs,
-                    X._values, ldx);
-        }
-        else {
-            cblas_strsm(CblasRowMajor, side, uplo, CblasNoTrans, CblasNonUnit, 
-                    X.height(), X.width(), 1.0,
-                    _values, _rs,
-                    X._values, ldx);
-        }
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("TRSM FLOPS", _n*_n*X.width());
-    PerfLog::get().log_total("TRSM TIME", end - start);
-    PerfLog::get().log_total("TRSM BYTES", sizeof(float) * (_n*_n/2 + 2*_n*X.width()));
-}
-
-template<>
-void Matrix<float>::mmm(float alpha, const Matrix<float>& A, const Matrix<float>& B, float beta)
-{
-    assert(_m == A._m && _n == B._n && A._n == B._m && "Nonconformal gemm");
-    
-    if((_rs  != 1 && _cs != 1) || (A._rs != 1 && A._cs != 1) || (B._rs != 1 && B._cs != 1)) {
-        std::cout << "GEMM requires row or column major. Exiting..." << std::endl;
-        exit(1);
-    }
-
-    auto ATrans = CblasNoTrans;
-    auto BTrans = CblasNoTrans;
-    int64_t lda = A._rs * A._cs;
-    int64_t ldb = B._rs * B._cs;
-
-    int64_t start, end;
-    start = rdtsc();
-    if(_rs == 1) {
-        if(A._rs != 1) ATrans = CblasTrans;
-        if(B._rs != 1) BTrans = CblasTrans;
-
-        cblas_sgemm(CblasColMajor, ATrans, BTrans, _m, _n, A._n,
-                alpha, A._values, lda, B._values, ldb,
-                beta, _values, _cs);
-    } else if(_cs == 1) {
-        if(A._cs != 1) ATrans = CblasTrans;
-        if(B._cs != 1) BTrans = CblasTrans;
-
-        cblas_sgemm(CblasRowMajor, ATrans, BTrans, _m, _n, A._n,
-                alpha, A._values, lda, B._values, ldb,
-                beta, _values, _rs);
-    } else {
-        std::cout << "Only row or column major QR supported. Exiting..." << std::endl;
-        exit(1);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("MMM FLOPS", 2 * _m * _n * A._n);
-    PerfLog::get().log_total("MMM TIME", end - start);
-    PerfLog::get().log_total("MMM BYTES", sizeof(float) * (2*_m *_n + _m * A._n + A._n * _n)); 
-}
-
-template<>
-void Matrix<float>::syrk(CBLAS_UPLO uplo, float alpha, const Matrix<float>& A, float beta)
-{
-    assert(_m == A._m && _m == _n && "Nonconformal syrk");
-    assert((_rs == 1 || _cs == 1) && (A._rs == 1 || A._cs == 1));
-
-    auto ATrans = CblasNoTrans;
-    int64_t lda = A._rs * A._cs;
-
-    int64_t start = rdtsc();
-    if(_rs == 1) {
-        if(A._rs != 1) ATrans = CblasTrans;
-        cblas_ssyrk(CblasColMajor, uplo, ATrans, _n, A._n, 
-            alpha, A._values, lda,
-            beta, _values, _cs);
-    } else {
-        if(A._cs != 1) ATrans = CblasTrans;
-        cblas_ssyrk(CblasRowMajor, uplo, ATrans, _n, A._n, 
-            alpha, A._values, lda,
-            beta, _values, _rs);
-    }
-    int64_t end = rdtsc();
-    PerfLog::get().log_total("SYRK FLOPS", _n*_n*A._n);
-    PerfLog::get().log_total("SYRK TIME", end - start);
-}
-
-template<>
-void Matrix<float>::qr(Vector<float>& t)
-{
-    assert(t._stride == 1 && t._len >= std::min(_m, _n) && "Cannot perform qr.");
-    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
-
-    int64_t start, end;
-    start = rdtsc();
-
-    if(_rs == 1) {
-        LAPACKE_sgeqrf(LAPACK_COL_MAJOR, _m, _n, _values, _cs, t._values);
-    } else /*if(_cs == 1)*/ {
-        LAPACKE_sgeqrf(LAPACK_ROW_MAJOR, _m, _n, _values, _rs, t._values);
-    }
-
-    end = rdtsc();
-    PerfLog::get().log_total("QR FLOPS", 2*_m*(_n*_n - 2*_n/3));
-    PerfLog::get().log_total("QR TIME", end - start);
-}
-
-
-//Use tpqrt to annihilate rectangle above the triangle.
-//Then stores the reflectors in that block
-//TODO: handle row-major
-template<>
-void Matrix<float>::tpqr(Matrix<float>& B, Matrix<float>& T, int64_t l_in, int64_t nb_in)
-{
-    assert(_m == _n && _n == B.width() && _n == T.width() && T.height() >= nb_in && "Nonconformal tpqrt");
-    assert(_cs == 1 || _rs == 1 && "Only row or column major qr supported");
-    assert(_rs == 1 && "Only column major qr supported");
-    assert(T._rs == 1); assert(B._rs == 1);
-
-    int32_t m = B.height();
-    int32_t n = B.width();
-    int32_t l = l_in;
-    int32_t nb = std::min(n, (int32_t)nb_in);
-
-    int64_t start = rdtsc();
-
-    LAPACKE_stpqrt(LAPACK_COL_MAJOR, m, n, l, nb,
-            _values, this->_cs, B._values, B._cs, T._values, T._cs);
-
-    int64_t end = rdtsc();
-
-    PerfLog::get().log_total("TPQR TIME", end - start);
-}
-
-template<>
-void Matrix<float>::apply_tpq(Matrix<float>& A, Matrix<float>& B, const Matrix<float>& T, int64_t l_in, int64_t nb_in, Matrix<float>& ws) const
-{
-    int m = B.height();
-    int n = B.width();
-    int k = A.height();
-    int l = l_in;
-    
-    // A is k-by-n, B is m-by-n and V is m-by-k.
-    assert(_m == m && _n == k && A.width() == n && T.height() >= nb_in && T.width() == k && "Nonconformal apply tpq");
-    assert((_cs == 1 || _rs == 1) && "Only row or column major qr supported");
-    assert(_rs == 1 && "Only column major qr supported");
-
-
-    //Apply from the left
-    int nb = std::min(nb_in, A.height());
-   
-    //TODO: make sure ws has enough size 
-    //TODO 2: handle row stride
-    assert(_rs == 1); 
-
-
-    char side = 'L';
-    char trans = 'T'; //WHY??
-    int ldv = _cs;
-    int ldt = T._cs;
-    int lda = A._cs;
-    int ldb = B._cs;
-    int info;
-
-    int64_t start, end;
-    start = rdtsc();
-
-    stpmqrt_(&side, &trans, &m, &n, &k, &l, &nb,
-            _values, &ldv, T._values, &ldt,
-            A._values, &lda, B._values, &ldb,
-            ws._values, &info);
-
-    end = rdtsc();
-
-    PerfLog::get().log_total("APPLY TPQR FLOPS", k*k*n + 4*m*k);
-    PerfLog::get().log_total("APPLY TPQR TIME", end - start);
-}
+void Matrix<float>::apply_tpq(Matrix<float>& A, Matrix<float>& B, const Matrix<float>& T, int64_t l_in, int64_t nb_in, Matrix<float>& ws) const;
 
 #endif

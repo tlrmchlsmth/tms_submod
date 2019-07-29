@@ -15,11 +15,11 @@ public:
     int64_t count;
 
     PerfTotal() : total(0), count(0) { }
-    inline void log(int64_t x) {
+    void log(int64_t x) {
         total += x;
         count++;
     }
-    inline void set(int64_t x) {
+    void set(int64_t x) {
         total = x;
         count++;
     }
@@ -37,7 +37,7 @@ public:
     { 
         std::fill(buckets.begin(), buckets.end(), 0);
     }
-    inline void log(double x) {
+    void log(double x) {
         int64_t bucket = (x - min) / bucket_size;
         bucket = std::min(bucket, (int64_t)buckets.size() - 1);
         buckets[bucket]++;
@@ -63,7 +63,7 @@ public:
         sequence.reserve(1e9);
     }
 
-    inline void log(double x) {
+    void log(double x) {
         sequence.push_back(x);
     }
 };
