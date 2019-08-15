@@ -17,6 +17,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(SOURCE_FILES
     ../perf/perf.cpp
     ../util.cpp
+    ../la/vector.cpp
+    ../la/matrix.cpp
     libpymnp.cpp
 )
 

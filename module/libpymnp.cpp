@@ -6,7 +6,7 @@
 #include "../la/vector.h"
 #include "../la/matrix.h"
 
-#include "ndarray.h"
+//#include "ndarray.h"
 
 class User
 {
@@ -58,15 +58,14 @@ extern "C"
     }
 
     // The buffer flat_s_weights stores all weights for the deep submodular function (monotone submodular component) in a flat array.
-    // Each layer is stored as a contiguous column-major matrix
+    // Each layer is stored as a contiguous row-major matrix
     // Layers are stored contiguously from first layer to last
-    extern double mnp_deep_contig_w(int64_t n, double* contiguous_s_weights_in, double* m_weights_in, int64_t* layer_sizes_in, int64_t n_layers)
+    extern double mnp_deep_contig_w(int64_t n, double* contiguous_s_weights_in, double* m_weights_in, int64_t* layer_sizes_in, int64_t n_layers, double* p_y)
     {
         //Create Deep Submodular Function.
         std::vector<int64_t> layer_sizes(n_layers);
         for(int64_t i = 0; i < n_layers; i++) {
             layer_sizes[i] = layer_sizes_in[i];
-            std::cout << "Layer " << i << " size " << layer_sizes[i] << std::endl;
         }
 
         //Initialize submodular function weights
@@ -76,20 +75,22 @@ extern "C"
             int64_t layer_height = layer_sizes[i];
             int64_t layer_width = (i == 0) ? n : layer_sizes[i-1];
 
-            std::cout << "Layer " << i << " weights " << layer_height << " by " << layer_width << std::endl;
-
             //Creates a shallow copy, doesn't manage own memory
-            s_weights.emplace_back(contiguous_s_weights_in + offset, layer_height, layer_width, 1, layer_height); 
+            //Row major matrix
+            s_weights.emplace_back(contiguous_s_weights_in + offset, layer_height, layer_width, layer_width, 1); 
             offset += layer_width * layer_height;
         }
 
         Deep<double> deep(n, layer_sizes, std::move(s_weights));
-        deep.rectify = [](double x){ return std::min(x, 1.0); };
+//      deep.rectify = [](double x){ return std::min(x, 1.0); };
+        deep.rectify = [](double x){ return 1.0 / (1.0 + exp(-x)) ; };
 
         //Initialize modular function weights
         Vector<double> m_weights(m_weights_in, n);
         PlusModular<double, Deep<double>> problem(n, std::move(deep), std::move(m_weights));
-        auto A_star = mnp(problem, 1e-5, 1e-10);
+
+        Vector<double> y(p_y, n);
+        auto A_star = mnp(problem, y, 1e-5, 1e-10);
         return problem.eval(A_star);
     }
 }

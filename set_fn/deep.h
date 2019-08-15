@@ -151,19 +151,26 @@ public:
         assert(y.length() == x.length());
         _Pragma("omp parallel for")
         for(int64_t i = 0; i < x.length(); i++) {
-            assert(x(i) >= 0);
+            assert(x(i) >= 0.0);
             y(i) = rectify(x(i));
         }
     }
 
     void rectify_vec(Vector<DT>& x) {
-        //_Pragma("omp parallel for")
+        _Pragma("omp parallel for")
         for(int64_t i = 0; i < x.length(); i++) {
-            assert(x(i) >= 0);
+            assert(x(i) >= 0.0);
             x(i) = rectify(x(i));
         }
     }
 
+    //
+    // Input: y_prime is the minimum norm point of this deep submodular function's base polytope
+    // Output: grad is the gradient of y_prime with respect to the weights in this deep submodular function
+    //
+    void grad(const Vector<DT> y_prime, Vector<DT> grad) {
+
+    }
 };
 
 #endif
