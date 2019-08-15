@@ -108,20 +108,17 @@ class DeepSubmodular(torch.autograd.Function):
         #Create the DSF layers
         layers = assemble_dsf(n, layer_sizes, weights_submodular)
         
-        #Should there be a tolerance here? There is none in the total variation version
+        #Get groups to form Delta y
         grad_x = torch.zeros(n, dtype=torch.float64)
-        values = np.unique(yprime.detach().numpy()) #Sorted array of unique values (permutation is built-in)
-        groups = [(yprime.detach().numpy() == v).reshape(yprime.size()) for v in values]
+        values = np.unique(yprime.detach().numpy())
+        groups = [(yprime.detach().numpy() == v).reshape(yprime.size()) for v in values] #TODO: this really is terrible inefficient
         for group in groups:
             grad_x.numpy()[group] = np.mean(grad_output.numpy()[group])
-        
-        #Use backprogpogation to get the derivatives wrt to weights
-        sigma = yprime.argsort(descending=True)
-        grad_x_p = grad_x[sigma]
 
+        #Get the gradient of each F(A + sigma_i) - F(A)
+        sigma = yprime.argsort(descending=True)
         grad_weights_submodular = torch.zeros(weights_submodular.shape, dtype=torch.float64)
         dFAold_dW = torch.zeros(weights_submodular.shape, dtype=torch.float64)
-
         x = torch.zeros(n, dtype=torch.float64)
         dummy_optimizer = torch.optim.SGD(layers, lr=0.05)
         for i in range(n):
@@ -137,8 +134,7 @@ class DeepSubmodular(torch.autograd.Function):
                 grad_gain = dFA_dW - dFAold_dW
                 dFAold_dW = dFA_dW
 
-                #TODO: This only works in the case of distinct elements of yprime
-                grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain #axpy
+                grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain
         
         grad_weights_modular = grad_x
 
