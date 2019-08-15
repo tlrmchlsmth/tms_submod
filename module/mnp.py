@@ -117,8 +117,8 @@ class DeepSubmodular(torch.autograd.Function):
 
         #Get the gradient of each F(A + sigma_i) - F(A)
         sigma = yprime.argsort(descending=True)
-        grad_weights_submodular = torch.zeros(weights_submodular.shape, dtype=torch.float64)
-        dFAold_dW = torch.zeros(weights_submodular.shape, dtype=torch.float64)
+        grad_weights_submodular = torch.zeros_like(weights_submodular)
+        dFAold_dW = torch.zeros_like(weights_submodular)
         x = torch.zeros(n, dtype=torch.float64)
         dummy_optimizer = torch.optim.SGD(layers, lr=0.05)
         for i in range(n):
@@ -135,7 +135,7 @@ class DeepSubmodular(torch.autograd.Function):
                 dFAold_dW = dFA_dW
 
                 grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain
-        
+
         grad_weights_modular = grad_x
 
         return grad_weights_submodular, grad_weights_modular, None, None
@@ -154,8 +154,8 @@ def gen_deep_submodular_bernoulli(n, layers, p=0.2):
         submodular_w[i] = 1.0 if np.random.random() < p else 0.0
 
     modular_w = np.zeros(n, dtype=np.float64)
-    #for i in range(n):
-    #    modular_w[i] = 2.0 * (np.random.random() - 0.5)
+    for i in range(n):
+        modular_w[i] = 2.0 * (np.random.random() - 0.5)
     
     return submodular_w, modular_w
 
@@ -174,19 +174,20 @@ class LogQ(torch.autograd.Function):
         return minus_log_likelihood
 
     @staticmethod
-    def backward(ctx, grad):
+    def backward(ctx, grad_output):
         y, y_gt = ctx.saved_tensors
         grad_y = None
 
         assert(ctx.needs_input_grad[1] == False) 
 
         if ctx.needs_input_grad[0]:
-            grad_y = torch.zeros(y.size(), dtype=torch.float64)
+            grad_y = torch.zeros_like(y)
             for i in range(len(y)):
                 if y[i] <= 0.0 == y_gt[i] <= 0.0:
                     grad_y[i] = torch.exp(y[i]) / (1.0 + torch.exp(y[i]))
                 else:
                     grad_y[i] = -torch.exp(-y[i]) / (1.0 + torch.exp(-y[i]))
+        grad_y = grad_output * grad_y
         return grad_y, None
 
 if __name__ == "__main__":

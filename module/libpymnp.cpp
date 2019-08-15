@@ -90,7 +90,7 @@ extern "C"
         PlusModular<double, Deep<double>> problem(n, std::move(deep), std::move(m_weights));
 
         Vector<double> y(p_y, n);
-        auto A_star = mnp(problem, y, 1e-5, 1e-10);
+        auto A_star = mnp(problem, y, 1e-10, 1e-10);
         return problem.eval(A_star);
     }
 }
