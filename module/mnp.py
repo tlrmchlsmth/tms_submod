@@ -1,3 +1,4 @@
+import math
 import cffi
 import numpy as np
 import torch
@@ -8,6 +9,8 @@ from torch.autograd import Variable
 ffi = cffi.FFI()
 ffi.cdef("double mnp_bernoulli();")
 ffi.cdef("double mnp_deep_contig_w(int64_t n, double* contiguous_s_weights, double* m_weights, int64_t* layer_sizes, int64_t n_layers, double* y);")
+ffi.cdef("double dsf_eval(int64_t n, double* contiguous_s_weights, double* m_weights, int64_t* layer_sizes, int64_t n_layers, bool* A);")
+ffi.cdef("double watts_strogatz_graph_cut_yprime(int64_t n, int64_t k, double beta, double* y);")
 C = ffi.dlopen("./build/libpymnp.dylib")
     
 def mnp_deep_contig_w(n, layer_sizes, submodular_w, modular_w):
@@ -19,6 +22,23 @@ def mnp_deep_contig_w(n, layer_sizes, submodular_w, modular_w):
     p_y   = ffi.cast("double *", ffi.from_buffer(y))
     F_A_star = C.mnp_deep_contig_w(ffi.cast("int64_t", n), p_s_w, p_m_w, p_l, ffi.cast("int64_t", len(layer_sizes)), p_y)
     return F_A_star, y
+
+def dsf_eval(n, layer_sizes, submodular_w, modular_w, A):
+    p_s_w = ffi.cast("double *", ffi.from_buffer(submodular_w))
+    p_m_w = ffi.cast("double *", ffi.from_buffer(modular_w))
+    p_l   = ffi.cast("int64_t *", ffi.from_buffer(layer_sizes))
+    p_A   = ffi.cast("bool *", ffi.from_buffer(A))
+
+    F_A = C.dsf_eval(ffi.cast("int64_t", n), p_s_w, p_m_w, p_l, ffi.cast("int64_t", len(layer_sizes)), p_A)
+    return F_A
+
+
+def watts_strogatz_graph_cut_yprime(n, k, beta):
+    y = np.zeros(n, dtype=np.float64)
+    p_y   = ffi.cast("double *", ffi.from_buffer(y))
+    F_A_star = C.watts_strogatz_graph_cut_yprime(ffi.cast("int64_t", n), ffi.cast("int64_t", k), ffi.cast("double", beta), p_y)
+    return F_A_star, y
+
 
 def mnp_bernoulli():
     return C.mnp_bernoulli()
@@ -83,7 +103,7 @@ def eval_dsf(layers, x):
     y = x;
     for W in layers:
         y = torch.mv(W, y)
-        y = torch.sigmoid(y)
+        y = 2.0 * torch.sigmoid(y) - torch.ones_like(y)
     return y
 
 
@@ -120,7 +140,7 @@ class DeepSubmodular(torch.autograd.Function):
         grad_weights_submodular = torch.zeros_like(weights_submodular)
         dFAold_dW = torch.zeros_like(weights_submodular)
         x = torch.zeros(n, dtype=torch.float64)
-        dummy_optimizer = torch.optim.SGD(layers, lr=0.05)
+        dummy_optimizer = torch.optim.SGD(layers, lr=0.0)
         for i in range(n):
             with torch.enable_grad():
                 dummy_optimizer.zero_grad()
@@ -159,53 +179,15 @@ def gen_deep_submodular_bernoulli(n, layers, p=0.2):
     
     return submodular_w, modular_w
 
-class LogQ(torch.autograd.Function):
+class LogQ(nn.Module):
+    def __init__(self, A_gt):
+        super(LogQ, self).__init__()
+        self.A_gt = A_gt
+        self.Ac_gt = torch.ones_like(A_gt, dtype=torch.float64) - A_gt
 
-    @staticmethod
-    def forward(ctx, y, y_gt):
-        minus_log_likelihood = 0.0
-        ctx.save_for_backward(y, y_gt)
-
-        for i in range(len(y)):
-            if y[i] <= 0.0 == y_gt[i] <= 0.0:
-                minus_log_likelihood += torch.log(1 + torch.exp(y[i]))
-            else:
-                minus_log_likelihood += torch.log(1 + torch.exp(-y[i]))
-        return minus_log_likelihood
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        y, y_gt = ctx.saved_tensors
-        grad_y = None
-
-        assert(ctx.needs_input_grad[1] == False) 
-
-        if ctx.needs_input_grad[0]:
-            grad_y = torch.zeros_like(y)
-            for i in range(len(y)):
-                if y[i] <= 0.0 == y_gt[i] <= 0.0:
-                    grad_y[i] = torch.exp(y[i]) / (1.0 + torch.exp(y[i]))
-                else:
-                    grad_y[i] = -torch.exp(-y[i]) / (1.0 + torch.exp(-y[i]))
-        grad_y = grad_output * grad_y
-        return grad_y, None
+    def forward(self, y):
+        part1 = torch.log(1.0 + torch.exp(y))
+        part2 = torch.log(1.0 + torch.exp(-y))
+        return part1.dot(self.A_gt) + part2.dot(self.Ac_gt)
 
 if __name__ == "__main__":
-    #Check Gradient
-    n = 10
-    layer_sizes = np.ones(3, dtype=np.int64)
-    layer_sizes *= 3
-
-    deep_mnp = DeepSubmodular.apply
-
-    loss_fn = LogQ.apply
-
-    s_input, m_input = gen_deep_submodular_bernoulli(n, layer_sizes, p=0.2)
-    s_input += 0.5
-
-    s_input = torch.tensor(s_input, requires_grad=True)
-    m_input = torch.tensor(m_input, requires_grad=True)
-
-
-    test = torch.autograd.gradcheck(deep_mnp, (s_input, m_input, n, layer_sizes), eps=1e-6, atol=1e-4)
-    print(test)
