@@ -32,13 +32,12 @@ def dsf_eval(n, layer_sizes, submodular_w, modular_w, A):
     F_A = C.dsf_eval(ffi.cast("int64_t", n), p_s_w, p_m_w, p_l, ffi.cast("int64_t", len(layer_sizes)), p_A)
     return F_A
 
-
+#Creates a random Watts-Strogatz graph cut problem and minimizes it
 def watts_strogatz_graph_cut_yprime(n, k, beta):
     y = np.zeros(n, dtype=np.float64)
     p_y   = ffi.cast("double *", ffi.from_buffer(y))
     F_A_star = C.watts_strogatz_graph_cut_yprime(ffi.cast("int64_t", n), ffi.cast("int64_t", k), ffi.cast("double", beta), p_y)
     return F_A_star, y
-
 
 def mnp_bernoulli():
     return C.mnp_bernoulli()
@@ -73,43 +72,44 @@ def mnp():
     F_A_star, y  = mnp_deep_contig_w(n, layers, submodular_w, modular_w)
     return F_A_star
 
-def assemble_dsf(n, layer_sizes, sweights):
-    layers = []
-    offset = 0
-    layer_n = n 
-    for i in range(len(layer_sizes)):
-        #Determine m and n
-        layer_m = layer_sizes[i]
-       
-        #Append layer
-        layer_W = sweights[offset:offset + layer_m * layer_n].reshape(layer_m, layer_n)
-        layer_W = Variable(layer_W, requires_grad = True)
-        layers.append(layer_W)
+class DSF:
+    def __init__(self, n, layer_sizes, sweights): 
+        self.layers = []
+        self.n_weights_total = sweights.shape
 
-        offset += layer_m * layer_n
-        layer_n = layer_m
-    return layers
+        offset = 0
+        layer_n = n 
+        for i in range(len(layer_sizes)):
+            #Determine m and n
+            layer_m = layer_sizes[i]
+           
+            #Append layer
+            layer_W = sweights[offset:offset + layer_m * layer_n].reshape(layer_m, layer_n)
+            layer_W = Variable(layer_W, requires_grad = True)
+            self.layers.append(layer_W)
 
-def disassemble_dsf_grads(layers, n_weights):
-    offset = 0
-    sgrad = torch.zeros(n_weights, dtype=torch.float64)
-    for layer in layers:
-        m, n = layer.shape
-        sgrad[offset:offset + m*n] = layer.grad.detach().reshape(m*n)
-        offset += m * n
-    return sgrad 
+            offset += layer_m * layer_n
+            layer_n = layer_m
 
-def eval_dsf(layers, x):
-    y = x;
-    for W in layers:
-        y = torch.mv(W, y)
-        y = 2.0 * torch.sigmoid(y) - torch.ones_like(y)
-    return y
-
+    def linearized_gradient(self):
+        offset = 0
+        sgrad = torch.zeros(self.n_weights_total, dtype=torch.float64)
+        for layer in self.layers:
+            m, n = layer.shape
+            sgrad[offset:offset + m*n] = layer.grad.detach().reshape(m*n)
+            offset += m * n
+        return sgrad 
+    
+    def eval(self, x):
+        y = x;
+        for W in self.layers:
+            y = torch.mv(W, y)
+            y = 2.0 * torch.sigmoid(y) - torch.ones_like(y)
+        return y
 
 class DeepSubmodular(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, s_weights, m_weights, n, layer_sizes=10*np.ones(3)):
+    def forward(ctx, s_weights, m_weights, n, layer_sizes):
         F_A_star, y_prime = mnp_deep_contig_w(n, layer_sizes,
                 s_weights.detach().numpy(), m_weights.detach().numpy())
         y_prime = torch.tensor(y_prime)
@@ -126,12 +126,14 @@ class DeepSubmodular(torch.autograd.Function):
         layer_sizes = ctx.layer_sizes
 
         #Create the DSF layers
-        layers = assemble_dsf(n, layer_sizes, weights_submodular)
-        
+        F = DSF(n, layer_sizes, weights_submodular)
+
         #Get groups to form Delta y
         grad_x = torch.zeros(n, dtype=torch.float64)
         values = np.unique(yprime.detach().numpy())
-        groups = [(yprime.detach().numpy() == v).reshape(yprime.size()) for v in values] #TODO: this really is terrible inefficient
+
+        #TODO: Don't explicitly form the groups matrix
+        groups = [(yprime.detach().numpy() == v).reshape(yprime.size()) for v in values] 
         for group in groups:
             grad_x.numpy()[group] = np.mean(grad_output.numpy()[group])
 
@@ -140,17 +142,17 @@ class DeepSubmodular(torch.autograd.Function):
         grad_weights_submodular = torch.zeros_like(weights_submodular)
         dFAold_dW = torch.zeros_like(weights_submodular)
         x = torch.zeros(n, dtype=torch.float64)
-        dummy_optimizer = torch.optim.SGD(layers, lr=0.0)
+        dummy_optimizer = torch.optim.SGD(F.layers, lr=0.0)
         for i in range(n):
             with torch.enable_grad():
                 dummy_optimizer.zero_grad()
 
                 x[sigma[i]] = 1.0
-                y = eval_dsf(layers, x)
+                y = F.eval(x)
                 fa = torch.sum(y)
                 fa.backward()
                 
-                dFA_dW = disassemble_dsf_grads(layers, weights_submodular.shape)
+                dFA_dW = F.linearized_gradient()
                 grad_gain = dFA_dW - dFAold_dW
                 dFAold_dW = dFA_dW
 
@@ -175,7 +177,7 @@ def gen_deep_submodular_bernoulli(n, layers, p=0.2):
 
     modular_w = np.zeros(n, dtype=np.float64)
     for i in range(n):
-        modular_w[i] = 2.0 * (np.random.random() - 0.5)
+        modular_w[i] = 0.5 * (np.random.random() - 0.5)
     
     return submodular_w, modular_w
 
@@ -189,5 +191,3 @@ class LogQ(nn.Module):
         part1 = torch.log(1.0 + torch.exp(y))
         part2 = torch.log(1.0 + torch.exp(-y))
         return part1.dot(self.A_gt) + part2.dot(self.Ac_gt)
-
-if __name__ == "__main__":
