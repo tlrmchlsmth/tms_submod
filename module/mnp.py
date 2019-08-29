@@ -132,18 +132,24 @@ class DeepSubmodular(torch.autograd.Function):
 
         #Create the DSF layers
         F = DSF(n, layer_sizes, weights_submodular)
-
-        #Get groups to form Delta y
-        grad_x = torch.zeros(n, dtype=torch.float64)
-        values = np.unique(yprime.detach().numpy())
-
-        sigma = yprime.argsort(descending=False)
         
-        #TODO: Don't explicitly form the groups matrix
-        #TODO: The groups matrix just straight up doesn't work
-        groups = [(yprime.detach().numpy() == v).reshape(yprime.size()) for v in values] 
-        for group in groups:
-            grad_x[group] = np.mean(grad_output.numpy()[group])
+        #Sort yprime
+        sigma = yprime.argsort(descending=False)
+
+        #Grad_x will hold the group mean
+        grad_x = torch.zeros(n, dtype=torch.float64)
+        i = 0
+        while i < n:
+            k = 0 #Number of elements in current group
+            group_sum = 0.0
+            while i+k < n and yprime[sigma[i+k]] == yprime[sigma[i]]:
+                group_sum += grad_output[sigma[i+k]]
+                k += 1
+            
+            group_mean = group_sum / float(k)
+            for j in range(k):
+                grad_x[sigma[i+j]] = group_mean
+            i += k
 
         #Get the gradient of each F(A + sigma_i) - F(A)
         grad_weights_submodular = torch.zeros_like(weights_submodular)
@@ -159,8 +165,7 @@ class DeepSubmodular(torch.autograd.Function):
                 grad_gain = dFA_dW - dFAold_dW
                 dFAold_dW = dFA_dW
                 
-                #grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain
-                grad_weights_submodular += grad_output[sigma[i]].item() * grad_gain
+                grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain
                 F.zero_grads()
 
         grad_weights_modular = grad_x
