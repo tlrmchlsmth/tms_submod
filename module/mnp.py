@@ -75,6 +75,7 @@ def mnp():
 class DSF:
     def __init__(self, n, layer_sizes, sweights): 
         self.layers = []
+        self.n = n
         self.n_weights_total = sweights.shape
 
         offset = 0
@@ -100,12 +101,16 @@ class DSF:
             offset += m * n
         return sgrad 
     
-    def eval(self, x):
-        y = x;
+    def eval(self, A):
+        y = A;
         for W in self.layers:
             y = torch.mv(W, y)
             y = 2.0 * torch.sigmoid(y) - torch.ones_like(y)
-        return y
+        return torch.sum(y)
+
+    def zero_grads(self):
+        for W in self.layers:
+            W.grad.zero_()
 
 class DeepSubmodular(torch.autograd.Function):
     @staticmethod
@@ -132,31 +137,31 @@ class DeepSubmodular(torch.autograd.Function):
         grad_x = torch.zeros(n, dtype=torch.float64)
         values = np.unique(yprime.detach().numpy())
 
+        sigma = yprime.argsort(descending=False)
+        
         #TODO: Don't explicitly form the groups matrix
+        #TODO: The groups matrix just straight up doesn't work
         groups = [(yprime.detach().numpy() == v).reshape(yprime.size()) for v in values] 
         for group in groups:
-            grad_x.numpy()[group] = np.mean(grad_output.numpy()[group])
+            grad_x[group] = np.mean(grad_output.numpy()[group])
 
         #Get the gradient of each F(A + sigma_i) - F(A)
-        sigma = yprime.argsort(descending=True)
         grad_weights_submodular = torch.zeros_like(weights_submodular)
         dFAold_dW = torch.zeros_like(weights_submodular)
         x = torch.zeros(n, dtype=torch.float64)
-        dummy_optimizer = torch.optim.SGD(F.layers, lr=0.0)
         for i in range(n):
             with torch.enable_grad():
-                dummy_optimizer.zero_grad()
-
                 x[sigma[i]] = 1.0
-                y = F.eval(x)
-                fa = torch.sum(y)
+                fa = F.eval(x)
                 fa.backward()
-                
+
                 dFA_dW = F.linearized_gradient()
                 grad_gain = dFA_dW - dFAold_dW
                 dFAold_dW = dFA_dW
-
-                grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain
+                
+                #grad_weights_submodular += grad_x[sigma[i]].item() * grad_gain
+                grad_weights_submodular += grad_output[sigma[i]].item() * grad_gain
+                F.zero_grads()
 
         grad_weights_modular = grad_x
 
@@ -191,3 +196,24 @@ class LogQ(nn.Module):
         part1 = torch.log(1.0 + torch.exp(y))
         part2 = torch.log(1.0 + torch.exp(-y))
         return part1.dot(self.A_gt) + part2.dot(self.Ac_gt)
+
+if __name__ == "__main__":
+    #Check DSF eval forward pass
+    n = 3
+    layer_sizes = np.ones(1, dtype=np.int64)
+    layer_sizes *= 3
+
+    n_sub_weights = n * np.prod(layer_sizes)
+    s_weights = torch.zeros(n_sub_weights, dtype=torch.float64)
+    s_weights.uniform_(0.0, 1.0)
+    m_weights = torch.zeros(n, dtype=torch.float64)
+
+    A = torch.zeros(n, dtype=torch.float64)
+    for i in range(n):
+        A[i] = 1.0 if np.random.random() < 0.3 else 0.0
+
+    Ab = A.numpy() > 0.0
+
+    print(dsf_eval(n, layer_sizes, s_weights.numpy(), m_weights.numpy(), Ab))
+    f = DSF(n, layer_sizes, s_weights)
+    print(f.eval(A))
