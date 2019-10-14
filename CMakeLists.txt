@@ -35,9 +35,6 @@ set(SOURCE_FILES
     test/validate.cpp
     test/bench.cpp
     #
-    fujishige/wrapper.cpp
-    fujishige/fw.c
-    #
     main.cpp
 )
 

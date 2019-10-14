@@ -20,8 +20,6 @@
 #include "minimizers/away_steps.h"
 #include "minimizers/pairwise.h"
 
-#include "fujishige/wrapper.h"
-
 #include "perf/perf.h"
 #include "test/validate.h"
 #include "test/bench.h"
@@ -353,66 +351,6 @@ void frank_wolfe_mincut_err_vs_time()
 }
 
 extern int number_extreme_point;
-
-void test_versus_fujishige()
-{
-    int64_t start = 100;
-    int64_t end = 10000;
-    int64_t inc = 100;
-    int64_t n_reps = 10;
-
-    std::cout << "===========================================================" << std::endl;
-    std::cout << "Benchmarking min cut" << std::endl;
-    std::cout << "===========================================================" << std::endl;
-
-    std::cout << std::setw(fw) << "n"; 
-    std::cout << std::setw(2*fw) << "F cycles"; 
-    std::cout << std::setw(2*fw) << "T cycles"; 
-    std::cout << std::setw(fw) << "|A|"; 
-    std::cout << std::setw(2*fw) << "F MNP F(A)"; 
-    std::cout << std::setw(2*fw) << "T MNP F(A)"; 
-    std::cout << std::setw(2*fw) << "F"; 
-    std::cout << std::setw(2*fw) << "T"; 
-    std::cout << std::endl;
-
-    for(int64_t i = start; i <= end; i += inc) {
-        int64_t n = i;
-
-        for(int64_t r = 0; r < n_reps; r++) {
-            //Initialize min norm point problem
-            MinCut<double> problem(n);
-            problem.WattsStrogatz(16, 0.25);
-
-            //Fujishige FW
-            number_extreme_point = 0;
-            cycles_count_start();
-            auto fw_A = run_isotani_and_fujishige(problem);
-            double fw_seconds = (double) cycles_count_stop().time;
-            double fw_fa = problem.eval(fw_A);
-            std::cout << std::setw(2*fw) << number_extreme_point;
-
-            //MNP
-            PerfLog::get().set_total("ITERATIONS", 0);
-            cycles_count_start();
-            auto mnp_A = mnp(problem, 1e-10, 1e-10);
-            double mnp_seconds = (double) cycles_count_stop().time;
-            double mnp_fa = problem.eval(mnp_A);
-            std::cout << std::setw(2*fw) << PerfLog::get().get_total("ITERATIONS"); 
-
-            int64_t cardinality = 0;
-            for(int i = 0; i < n; i++) {
-                if(mnp_A[i]) cardinality++;
-            }
-            std::cout << std::setw(fw) << n;
-            std::cout << std::setw(fw) << cardinality;
-            std::cout << std::setw(2*fw) << fw_fa;
-            std::cout << std::setw(2*fw) << mnp_fa;
-            std::cout << std::setw(2*fw) << fw_seconds;
-            std::cout << std::setw(2*fw) << mnp_seconds;
-            std::cout << std::endl;
-        }
-    }
-}
 
 #include "minimizers/mnp_fw.h"
 template<class DT>
